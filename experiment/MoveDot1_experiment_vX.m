@@ -8,8 +8,8 @@ format shortG
 %% Values for MEG, EyeTracker, PracticeTrials, Debugging etc.
 Conf.MEG =0;
 Conf.trackeye = 0;
-Conf.practice = 1;
-Conf.debug = 0;
+Conf.practice = 0;
+Conf.debug = 1;
 Conf.trialAmountPractice = 5;%16;
 Conf.practiceDemoIndex = 10;
 
@@ -63,6 +63,9 @@ Conf.display.dist = viewing_distance_mm;
 rootdir = '.';
 
 savedir = [rootdir '/output_files'];
+if ~exist(savedir, 'dir')
+    mkdir(savedir);
+end
 Inputdir = [rootdir '/input_files'];
 
 Dat = load(fullfile(Inputdir, NameFile));
@@ -2010,6 +2013,62 @@ for i = 1:nCond
     end
     fprintf('Condition %d Correct: %0.3f\n', i, CorrectFix);
 end
+
+
+    % Save after each block (e.g., after block 1) before continuing
+    if blockIndex < numBlocks
+        CatchOutputPartial = struct(...
+            'Subject_num', [], ...
+            'iRun', [], ...
+            'Condition', [], ...
+            'PathDuration', [], ...
+            'Start', [], ...
+            'End', [], ...
+            'Type', [], ...
+            'Lagtime', [],...
+            'Congruence', [], ...
+            'Correctness', [], ...
+            'Reaction_Time', [], ...
+            'VideoNr', [], ...
+            'Response', []);
+
+        counter = 1;
+        for iBlock = 1:blockIndex
+            for iSeq = 1:nSeq
+                for iCatch = 1:output(iBlock, iSeq).numcatch
+                    CatchOutputPartial(counter).Subject_num = output(iBlock, iSeq).subject_num;
+                    CatchOutputPartial(counter).iRun = output(iBlock, iSeq).run_num;
+                    CatchOutputPartial(counter).block_cond = output(iBlock, iSeq).block_cond;
+                    CatchOutputPartial(counter).Condition = output(iBlock, iSeq).condition;
+                    CatchOutputPartial(counter).PathDuration = output(iBlock, iSeq).PathDuration;
+                    CatchOutputPartial(counter).Task = Conf.Task;
+                    CatchOutputPartial(counter).Start =  output(iBlock, iSeq).startcatch(iCatch);
+                    CatchOutputPartial(counter).End = output(iBlock, iSeq).endcatch(iCatch);
+                    CatchOutputPartial(counter).Type = output(iBlock, iSeq).catch_type(iCatch);
+                    CatchOutputPartial(counter).Lagtime = output(iBlock, iSeq).lagtime(iCatch);
+                    CatchOutputPartial(counter).Congruence = output(iBlock, iSeq).congruence(iCatch);
+                    CatchOutputPartial(counter).Correctness = output(iBlock, iSeq).correct_response(iCatch);
+                    CatchOutputPartial(counter).Reaction_Time = output(iBlock, iSeq).RT(iCatch);
+                    CatchOutputPartial(counter).VideoNr = output(iBlock, iSeq).video_nr;
+                    CatchOutputPartial(counter).Response = output(iBlock, iSeq).response;
+                    counter = counter +1;
+                end
+            end
+        end
+
+        blockSuffix = sprintf('%s_SUB%02d_RUN%02d_firstBlock', Conf.experiment_name, iSub, iRun);
+        blockPath = fullfile(savedir, blockSuffix);
+        if exist(blockPath, 'file') == 2
+            disp('First-block file already exists. Not overwriting.');
+        else
+            save(blockPath, 'CatchOutputPartial', 'Catch', 'output', 'Conf');
+            disp(['First-block variables saved to file: ', blockPath]);
+        end
+
+        DrawFormattedText(window, sprintf('End of block %d.\n\nPress space to continue to the next block.', blockIndex), 'center', 'center', Conf.black);
+        Screen('Flip', window);
+        KbStrokeWait;
+    end
 
 end %block loop
 

@@ -22,6 +22,14 @@ userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, 
 viewingDistance = userDoubles(1);
 subjectID = userDoubles(2);
 
+% Ensure output folders exist before saving
+if ~exist(Config.inputDirectory, 'dir')
+    mkdir(Config.inputDirectory);
+end
+if ~exist(Config.outputDirectory, 'dir')
+    mkdir(Config.outputDirectory);
+end
+
 %get monitor pixels and millis
 monitorIndex = max(Screen('Screens'));
 monitorPixelSize = Screen('Rect', monitorIndex);

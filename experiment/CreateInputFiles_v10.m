@@ -27,7 +27,10 @@ Catch.PlacingNewPos = 2;
 %% Loading trials
 %savedir = 'C:\Users\annik\Desktop\uni\Rovereto\Corsi\AAA_Tirocinio\code\MovImage\InputFiles';
 %savedir = 'InputFiles/'; % '\\cimec-storage5\morwur\Projects\MARISA\InputFiles';
-savedir = '.\input_files';
+savedir = fullfile('.', 'input_files'); % avoid creating ".\input_files" on Unix
+if ~exist(savedir, 'dir')
+    mkdir(savedir);
+end
 
 Dat = load (fullfile(savedir, Filename));
 
