@@ -6,11 +6,13 @@ sca;
 format shortG
 
 %% Values for MEG, EyeTracker, PracticeTrials, Debugging etc.
-Conf.MEG =0;
-Conf.trackeye = 0;
+Conf.MEG =1;
+Conf.trackeye = 1;
 Conf.practice = 0;
-Conf.debug = 1;
-Conf.trialAmountPractice = 5;%16;
+Conf.debug = 0;
+Conf.testingMode = 1; %set to 1 to run a shortened block for quick tests
+Conf.testingModeTrialNum = 8; %number of trials per block when testingMode is on
+Conf.trialAmountPractice = 15;%16;
 Conf.practiceDemoIndex = 10;
 
 Conf.experiment_name = 'MoveDot1'; %% Experiment Data
@@ -144,7 +146,7 @@ elseif Conf.debug == true
 end
 
 if Conf.MEG==1
-    screenNumber = 1; %in the lab, we use the left screen for the stimulus computer
+    screenNumber = 2; %in the lab, we use the left screen for the stimulus computer
 else
     screens = Screen('Screens');
     screenNumber = max(screens); %for the laptop
@@ -156,6 +158,17 @@ Conf.screenSize = Screen('Rect', screenNumber); %shows the Pixel Number
 
 Conf.ppd = pi * (Conf.screenSize(3)-Conf.screenSize(1)) / atan(Conf.mon_width/Conf.display.dist/2) / 360; % pixels per degree %% transforming pixelsize into visual angles
 Conf.mpd =  2*Conf.display.dist*tan(deg2rad(1)/2); % millimeters per degree angle
+
+% Eye-tracker fixation control and replay settings
+Conf.fixWindowDeg = 10; % radius in degrees
+Conf.fixWindowPx = Conf.fixWindowDeg * Conf.ppd;
+Conf.fixBreakToleranceFrames = 5; % frames outside fixation window before flagging
+Conf.fixationWarningDuration = 2; % seconds for on-screen warning
+Conf.replayLimit = 1; % set to Inf for unlimited replays
+Conf.allowInfiniteReplays = 0; % set to 1 to ignore replayLimit
+Conf.triggerGazeBreak = 150;
+Conf.triggerReplayStart = 151;
+Conf.enableFixationAbort = 1; % set to 0 to disable gaze-based abort/replay logic for testing
 
 
 %% Transforming from Visual Angle into Pixel
@@ -178,9 +191,10 @@ Conf.qstMarkSizeFactor = 1.5;
 Conf.jitterCatches = 1;
 
 Conf.DotColor1 = [0 255 0]; %Color of Dot1
-Conf.DotColor2 = [255 0 0]; %Color of Dot2
+Conf.DotColor2 = [242 223 0]; %Color of Dot2
 
 Conf.showFixCrossBetweenTrials = 1;
+Conf.hideDotsInOcclusion = 0; %set to 1 to hide dots during occlusion catches, 0 keeps old draw behavior
 
 Conf.blockConditions = [1, 2]; %1: GREEN, 2: RED
 Conf.block1Msg = ['New Block \n\n Pay attention to the GREEN dot \n\n'];
@@ -286,7 +300,7 @@ end
 % clear condMatrix
 
 %AH: this one something related to datapix
-TriggerValues = [1:16, 17, 21:36, 41:56, 60, 99, 101, 113, 201, 202];
+TriggerValues = [1:16, 17, 21:36, 41:56, 60, 99, 101, 113, 150, 151, 201, 202];
 
 
 %% Set up Eye Link
@@ -738,7 +752,14 @@ output = struct(...
     'SequenceEndTime', [], ...
     'CatchStartTime', [], ...
     'CatchEndTime', [], ...
-     'XYPositionPerFrame', [] );
+    'XYPositionPerFrame', [], ...
+    'original_trial_num', [], ...
+    'is_replay', [], ...
+    'replay_of_trial', [], ...
+    'replay_instance', [], ...
+    'fixation_break', [], ...
+    'fixation_break_frame', [], ...
+    'fixation_break_time', [] );
 
 %% Starting Experiment
 
@@ -817,7 +838,23 @@ WaitSecs(5);
 
  StartTimeX = GetSecs;
 
-for iTrial = 1:nSeq
+maxReplaysPerTrial = Inf;
+if ~Conf.allowInfiniteReplays
+    maxReplaysPerTrial = Conf.replayLimit;
+end
+trialSchedule = 1:nSeq;
+if Conf.testingMode
+    trialSchedule = trialSchedule(1:min(numel(trialSchedule), Conf.testingModeTrialNum));
+end
+isReplaySchedule = false(1, numel(trialSchedule));
+replayInstanceSchedule = zeros(1, numel(trialSchedule));
+replayCounts = zeros(1, nSeq);
+
+iTrial = 1;
+while iTrial <= numel(trialSchedule)
+    condIdx = trialSchedule(iTrial);
+    isReplayTrial = isReplaySchedule(iTrial);
+    replayInstance = replayInstanceSchedule(iTrial);
     %AH: first was the else clause by itself above this
     Screen('FillRect', window, marginColor, Conf.marginRect);
     Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
@@ -830,7 +867,21 @@ for iTrial = 1:nSeq
     end
     
     ITIstart = Screen('Flip', window);
-    iSeq = condMatrixShuffled(3,iTrial); %iSeq is the random video number
+    iSeq = condMatrixShuffled(3,condIdx); %iSeq is the random video number
+    
+    % Ensure output struct exists for appended replays
+    if iTrial > size(output,2)
+        output(blockIndex, iTrial) = output(1,1);
+    end
+    output(blockIndex, iTrial).subject_num = iSub;
+    output(blockIndex, iTrial).run_num = iRun;
+    output(blockIndex, iTrial).original_trial_num = condIdx;
+    output(blockIndex, iTrial).is_replay = isReplayTrial;
+    output(blockIndex, iTrial).replay_of_trial = condIdx;
+    output(blockIndex, iTrial).replay_instance = replayInstance;
+    output(blockIndex, iTrial).fixation_break = false;
+    output(blockIndex, iTrial).fixation_break_frame = NaN;
+    output(blockIndex, iTrial).fixation_break_time = NaN;
     
     %Fill output File
     output(blockIndex, iTrial).numcatch  = length(TrialStruct(iRun, iSeq).Start);
@@ -847,10 +898,10 @@ for iTrial = 1:nSeq
     %AH:
     output(blockIndex, iTrial).block_cond = blockCondition;
     output(blockIndex, iTrial).ITI = ITI(iSeq);
-    output(blockIndex, iTrial).sequence = condMatrixShuffled(2, iSeq);
-    output(blockIndex, iTrial).condition = condMatrixShuffled(1, iSeq);
-    output(blockIndex, iTrial).PathDuration = condMatrixShuffled(4, iSeq);
-    output(blockIndex, iTrial).video_nr = condMatrixShuffled(3, iSeq);
+    output(blockIndex, iTrial).sequence = condMatrixShuffled(2, condIdx);
+    output(blockIndex, iTrial).condition = condMatrixShuffled(1, condIdx);
+    output(blockIndex, iTrial).PathDuration = condMatrixShuffled(4, condIdx);
+    output(blockIndex, iTrial).video_nr = condMatrixShuffled(3, condIdx);
     
 
 
@@ -874,17 +925,20 @@ for iTrial = 1:nSeq
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         %transfer image to host
         [width, height] = Screen('WindowSize', screenNumber);
-        imgfile= 'fixation.bmp';
-        transferimginfo=imfinfo(imgfile);
-        
-        %fprintf('img file name is %s\n',transferimginfo.Filename);
-        
-        % image file should be 24bit or 32bit bitmap
-        % parameters of ImageTransfer:
-        % imagePath, xPosition, yPosition, width, height, trackerXPosition, trackerYPosition, xferoptions
-        transferStatus =  Eyelink('ImageTransfer',transferimginfo.Filename,0,0,transferimginfo.Width,transferimginfo.Height,width/2-transferimginfo.Width/2 ,height/2-transferimginfo.Height/2,1);
-        if transferStatus ~= 0
-            fprintf('*****Image transfer Failed*****-------\n');
+        imgfile = fullfile(rootdir, 'fixation.bmp');
+        transferStatus = 0;
+        if exist(imgfile, 'file') == 2
+            transferimginfo = imfinfo(imgfile);
+            
+            % image file should be 24bit or 32bit bitmap
+            % parameters of ImageTransfer:
+            % imagePath, xPosition, yPosition, width, height, trackerXPosition, trackerYPosition, xferoptions
+            transferStatus =  Eyelink('ImageTransfer',transferimginfo.Filename,0,0,transferimginfo.Width,transferimginfo.Height,width/2-transferimginfo.Width/2 ,height/2-transferimginfo.Height/2,1);
+            if transferStatus ~= 0
+                fprintf('*****Image transfer Failed*****-------\n');
+            end
+        else
+            fprintf('Warning: fixation.bmp not found, skipping EyeLink ImageTransfer.\n');
         end
         
         % WaitSecs(0.1); %AH:not needed?
@@ -896,6 +950,22 @@ for iTrial = 1:nSeq
         %%
         WaitSecs(elk.wait);
         
+        if isReplayTrial
+            Eyelink('Message', sprintf('REPLAY_START orig %d instance %d', condIdx, replayInstance));
+        end
+        
+    end
+
+    if Conf.MEG && isReplayTrial
+        Datapixx('StopDoutSchedule');
+        triggerPulse = [1 0] .* Conf.triggerReplayStart;
+        Datapixx('WriteDoutBuffer', triggerPulse);
+        Datapixx('SetDoutSchedule', 0, 100, 2);
+        Datapixx('StartDoutSchedule');
+        Datapixx('RegWr');
+        if ~ ismember(triggerPulse(1),TriggerValues)
+            disp(sprintf('Replay start trigger %d not in TriggerValues',triggerPulse(1)));
+        end
     end
     
     
@@ -903,6 +973,9 @@ for iTrial = 1:nSeq
     respTime = 0; %better to initialize now
     responseStart = 0;
     XYPosition = [];
+    gazeOutsideCounter = 0;
+    gazeBreakTriggered = false;
+    gazeBreakFrame = NaN;
     
     
     
@@ -989,6 +1062,62 @@ for iTrial = 1:nSeq
             end
         end
         
+        % Gaze break detection (EyeLink)
+        if Conf.trackeye && Conf.enableFixationAbort && ~gazeBreakTriggered
+            sample = Eyelink('NewestFloatSample');
+            if ~isempty(sample) && isstruct(sample)
+                % prefer left eye; fall back to right
+                gazeX = sample.gx(1); gazeY = sample.gy(1); pupilA = sample.pa(1);
+                if isnan(gazeX) || isnan(gazeY) || pupilA <= 0
+                    gazeX = sample.gx(2); gazeY = sample.gy(2); pupilA = sample.pa(2);
+                end
+                if ~(isnan(gazeX) || isnan(gazeY) || pupilA <= 0)
+                    distFromFix = sqrt((gazeX - xCenter)^2 + (gazeY - yCenter)^2);
+                    if distFromFix > Conf.fixWindowPx
+                        gazeOutsideCounter = gazeOutsideCounter + 1;
+                    else
+                        gazeOutsideCounter = 0;
+                    end
+                    if gazeOutsideCounter >= Conf.fixBreakToleranceFrames
+                        gazeBreakTriggered = true;
+                        gazeBreakFrame = iframe;
+                        gazeBreakTime = GetSecs;
+                        output(blockIndex, iTrial).fixation_break = true;
+                        output(blockIndex, iTrial).fixation_break_frame = gazeBreakFrame;
+                        output(blockIndex, iTrial).fixation_break_time = gazeBreakTime - StartTimeX;
+                        Eyelink('Message', sprintf('GAZE_BREAK frame %d', gazeBreakFrame));
+                        if Conf.MEG
+                            Datapixx('StopDoutSchedule');
+                            triggerPulse = [1 0] .* Conf.triggerGazeBreak;
+                            Datapixx('WriteDoutBuffer', triggerPulse);
+                            Datapixx('SetDoutSchedule', 0, 100, 2);
+                            Datapixx('StartDoutSchedule');
+                            Datapixx('RegWr');
+                            if ~ ismember(triggerPulse(1),TriggerValues)
+                                disp(sprintf('Gaze-break trigger %d not in TriggerValues',triggerPulse(1)));
+                            end
+                        end
+                        if replayCounts(condIdx) < maxReplaysPerTrial
+                            replayCounts(condIdx) = replayCounts(condIdx) + 1;
+                            trialSchedule(end+1) = condIdx;
+                            isReplaySchedule(end+1) = true;
+                            replayInstanceSchedule(end+1) = replayCounts(condIdx);
+                        end
+                    end
+                end
+            end
+        end
+
+        if gazeBreakTriggered
+            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('TextSize', window, Conf.Textsize);
+            Screen('TextFont',window, Conf.Text);
+            DrawFormattedText(window, 'Please keep your fixation on the cross.', 'center', 'center', Conf.black);
+            Screen('Flip', window);
+            WaitSecs(Conf.fixationWarningDuration);
+            break
+        end
+        
         %Background
         Screen('FillRect', window, marginColor, Conf.marginRect);
         Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
@@ -1022,7 +1151,7 @@ for iTrial = 1:nSeq
                     %Datapixx triggering
                     Datapixx('StopDoutSchedule');
                     Datapixx('WriteDoutBuffer', triggerPulse);
-                    Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
+                    Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx because the actual flip in the projector happens after the entire screen has been drawn by the GPU)
                     Datapixx('StartDoutSchedule');
                     %disp(sprintf('catch trial start, trigger %d',triggerPulse(1)));
                     if ~ ismember(triggerPulse(1),TriggerValues)
@@ -1286,11 +1415,11 @@ for iTrial = 1:nSeq
                 
             elseif TrialStruct(iRun,iSeq).Type(catchcount) == 2 %oclusion
                 
-                if catchframe < Conf.refrate*Catch.OcclDuration %Dot disappears
+            if catchframe < Conf.refrate*Catch.OcclDuration %Dot disappears
 
-                    Screen('FillRect', window, marginColor, Conf.marginRect);
-                    Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
-                    
+                Screen('FillRect', window, marginColor, Conf.marginRect);
+                Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+                
                     %Draw dot in red during occlusion:
                     %Screen('DrawDots', window, currentStim(iframe,:), Conf.sizeDotInPixel, [200, 0, 0 ], [0 0], 1); % the last two variables are the 'center' and 'dot form'
                     
@@ -1311,22 +1440,26 @@ for iTrial = 1:nSeq
                     %AH: second point
                     spacial_NewPos(3) = TrialStruct(iRun, iSeq).SimulatedPath{catchcount}(sp, 3) *Conf.ppd  + Conf.rectCoords(1);
                     spacial_NewPos(4) = TrialStruct(iRun, iSeq).SimulatedPath{catchcount}(sp, 4) *Conf.ppd + Conf.rectCoords(2);
-
-                    if blockCondition == 1
-                        Screen('DrawDots', window,  spacial_NewPos(1:2), Conf.sizeDotInPixel, Conf.DotColor1, [0 0], 1); % the last two variables are the 'center' and 'dot form'
-                        
-                        % AH: draw dot 2 normally not jitery
-                        Screen('DrawDots', window, currentStim(iframe,3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
+                    if ~Conf.hideDotsInOcclusion
+                        if blockCondition == 1
+                            Screen('DrawDots', window,  spacial_NewPos(1:2), Conf.sizeDotInPixel, Conf.DotColor1, [0 0], 1); % the last two variables are the 'center' and 'dot form'
                             
-                    % AH: draw second dot
-                    elseif blockCondition == 2
-                        Screen('DrawDots', window, spacial_NewPos(3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
+                            % AH: draw dot 2 normally not jitery
+                            Screen('DrawDots', window, currentStim(iframe,3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
+                                
+                        % AH: draw second dot
+                        elseif blockCondition == 2
+                            Screen('DrawDots', window, spacial_NewPos(3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
 
-                        % AH: draw dot 1 normally not jitery
-                        Screen('DrawDots', window, currentStim(iframe,1:2), Conf.sizeDotInPixel, Conf.DotColor1, [0 0], 1);
+                            % AH: draw dot 1 normally not jitery
+                            Screen('DrawDots', window, currentStim(iframe,1:2), Conf.sizeDotInPixel, Conf.DotColor1, [0 0], 1);
+                        end
+
+                        XYPosition(framecounter, :) = spacial_NewPos;
+                    else
+                        % hide dots during occlusion; still step through simulated path
+                        XYPosition(framecounter, :) = NaN;
                     end
-
-                    XYPosition(framecounter, :) = spacial_NewPos;
 
                     % XYPosition(framecounter, :) = NaN;
 
@@ -1743,8 +1876,8 @@ for iTrial = 1:nSeq
 
                     % should be a value between 1 and 80: 1-40 = attend
                     % red, 41-80: attend green
-                    stimulus =  condMatrixShuffled(2, iTrial);
-                    if condMatrixShuffled(1, iTrial)==40
+                    stimulus =  condMatrixShuffled(2, condIdx);
+                    if condMatrixShuffled(1, condIdx)==40
                         stimulus = stimulus+20;
                     end
                     if blockCondition==2
@@ -1970,6 +2103,38 @@ for iTrial = 1:nSeq
             
         end
 
+        if Conf.debug
+            if catchtype == 1
+                catchLabel = 'fixation';
+            else
+                catchLabel = 'occlusion';
+            end
+            onsetMs = (output(blockIndex, iTrial).startcatch(i) / Conf.refrate) * 1000;
+            rtVal = output(blockIndex, iTrial).RT(i);
+            if isnan(rtVal)
+                rtText = 'n/a';
+            else
+                rtText = sprintf('%.0f ms', rtVal * 1000);
+            end
+            if response == 1
+                respText = 'left';
+            elseif response == 2
+                respText = 'right';
+            elseif response == 0
+                respText = 'missed';
+            else
+                respText = sprintf('code %d', response);
+            end
+            correctness = output(blockIndex, iTrial).correct_response(i);
+            if isnan(correctness)
+                corrText = 'missed';
+            else
+                corrText = num2str(correctness);
+            end
+            fprintf('[debug] Block %d Trial %d %s catch %d: onset %.0f ms | response %s @ %s | correct=%s\n', ...
+                blockIndex, iTrial, catchLabel, i, onsetMs, respText, rtText, corrText);
+        end
+
         if catchtype == 1
             CompletedFixVideosPerCond(currentCond) = CompletedFixVideosPerCond(currentCond) + 1;
         elseif catchtype == 2
@@ -1980,6 +2145,7 @@ for iTrial = 1:nSeq
 EndTime = GetSecs;
 output(blockIndex, iTrial).SequenceEndTime = EndTime- StartTimeX;
     
+iTrial = iTrial + 1;
 end %end of iTrial
 
 
@@ -2034,7 +2200,7 @@ end
 
         counter = 1;
         for iBlock = 1:blockIndex
-            for iSeq = 1:nSeq
+            for iSeq = 1:size(output, 2)
                 for iCatch = 1:output(iBlock, iSeq).numcatch
                     CatchOutputPartial(counter).Subject_num = output(iBlock, iSeq).subject_num;
                     CatchOutputPartial(counter).iRun = output(iBlock, iSeq).run_num;
@@ -2141,7 +2307,7 @@ CatchOutput = struct(...
 counter = 1;
 
 for iBlock = 1:numBlocks    
-for iSeq = 1:nSeq
+for iSeq = 1:size(output, 2)
     for iCatch = 1:output(iBlock, iSeq).numcatch
         CatchOutput(counter).Subject_num = output(iBlock, iSeq).subject_num;
         CatchOutput(counter).iRun = output(iBlock, iSeq).run_num;%AH: was block_num
