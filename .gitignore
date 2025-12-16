@@ -1,3 +1,5 @@
 .DS_Store
 experiment/input_files/
 experiment/output_files/
+.venv/
+data/

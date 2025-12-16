@@ -5,12 +5,12 @@ clc;
 sca;
 format shortG
 
-%% Values for MEG, EyeTracker, PracticeTrials, Debugging etc.
-Conf.MEG =1;
+%% Values for MEG, EyeTracker, Practic eTrials, Debugging etc.
+Conf.MEG = 1;
 Conf.trackeye = 1;
 Conf.practice = 0;
-Conf.debug = 0;
-Conf.testingMode = 1; %set to 1 to run a shortened block for quick tests
+Conf.debug = 1;   
+Conf.testingMode = 0; %set to 1 to run a shortened block for quick tests
 Conf.testingModeTrialNum = 8; %number of trials per block when testingMode is on
 Conf.trialAmountPractice = 15;%16;
 Conf.practiceDemoIndex = 10;
@@ -58,6 +58,10 @@ NameFile = sprintf('MovDot_Sub%02d',iSub); %'MovDot_Pilot_Sub1';
 
 % Assign the entered values to the configuration variables
 Conf.display.dist = viewing_distance_mm;
+
+% Seed RNG for reproducibility (use subject number)
+rng(iSub);
+debugTriggerLog = []; % collect trigger values in debug mode
 
 
 %% Load the stimulus structure
@@ -217,22 +221,34 @@ Conf.RadiusIn = Conf.lineWidthPix /1.5; %the small oval within Fixation Cross
 
 % Get screen info
 Screen('BlendFunction', window, 'GL_SRC_ALPHA', 'GL_ONE_MINUS_SRC_ALPHA');
-[xCenter, yCenter] = RectCenter(windowRect);% get screen center
-
 Conf.black = BlackIndex(screenNumber); %black color
 Conf.white = WhiteIndex(screenNumber); %white color
 
+[screenXpixels, screenYpixels] = Screen('WindowSize', window);%get screen size Pixels --> for EyeTracker
+
+% Constrain the presentation to a centered strip (e.g., 1440 px wide) and add side bars
+Conf.presentationWidthPx = min(1440, screenXpixels);
+Conf.sideBarWidthPx = floor((screenXpixels - Conf.presentationWidthPx) / 2);
+Conf.presentationRect = [Conf.sideBarWidthPx 0 screenXpixels - Conf.sideBarWidthPx screenYpixels];
+if Conf.sideBarWidthPx > 0
+    Conf.sideBarRects = [0 0 Conf.sideBarWidthPx screenYpixels;...
+                         screenXpixels - Conf.sideBarWidthPx 0 screenXpixels screenYpixels]';
+else
+    Conf.sideBarRects = zeros(4,0);
+end
+
+% Re-center stimuli on the presentation strip
+[xCenter, yCenter] = RectCenter(Conf.presentationRect);
 Conf.rectCoords  = [xCenter-Conf.rectSize(1)/2 yCenter-Conf.rectSize(2)/2 xCenter+Conf.rectSize(1)/2 yCenter+Conf.rectSize(2)/2];
 %AH: settings
 Conf.marginRect = Conf.rectCoords + [-10 -10 10 10];
+Conf.fillRects = [Conf.rectCoords' Conf.sideBarRects]; % draw central rect + side bars together
 
 if ~Conf.MEG
     [minsmooth,maxsmooth] = Screen('DrawDots', window,[0 0]);
     Conf.sizeDotInPixel = min(max(Conf.sizeDotInPixel, minsmooth), maxsmooth);
     clearvars minsmooth maxsmooth %to clean up workspace
 end
-
-[screenXpixels, screenYpixels] = Screen('WindowSize', window);%get screen size Pixels --> for EyeTracker
 
 
 %Starting Experiment
@@ -300,7 +316,8 @@ end
 % clear condMatrix
 
 %AH: this one something related to datapix
-TriggerValues = [1:16, 17, 21:36, 41:56, 60, 99, 101, 113, 150, 151, 201, 202];
+%DG: allowed trigger values
+TriggerValues = [1:81, 100, 101, 102, 103, 150, 151, 201];
 
 
 %% Set up Eye Link
@@ -424,7 +441,7 @@ if Conf.practice == true
         status = Datapixx('GetDinStatus');
         
         while status.newLogFrames == 0  %1
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window,...
@@ -449,7 +466,7 @@ if Conf.practice == true
         
         while status.newLogFrames == 0 %2
             
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window,...
@@ -479,7 +496,7 @@ if Conf.practice == true
         
         while status.newLogFrames == 0 %3
             
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window,...
@@ -516,7 +533,7 @@ if Conf.practice == true
         
         while status.newLogFrames == 0 %4
             
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window,...
@@ -549,7 +566,7 @@ if Conf.practice == true
         
         while status.newLogFrames == 0 %5
             
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window,...
@@ -573,7 +590,7 @@ if Conf.practice == true
         Datapixx('RegWrRd');
         status = Datapixx('GetDinStatus');
         
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -586,7 +603,7 @@ if Conf.practice == true
         
     else %if not within MEG
         %1
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -597,7 +614,7 @@ if Conf.practice == true
         KbStrokeWait;
         
         %2
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -611,7 +628,7 @@ if Conf.practice == true
         KbStrokeWait;
         
         %3
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -633,7 +650,7 @@ if Conf.practice == true
         if Catch.CatchRatioFix > 0
 
         %4
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -652,7 +669,7 @@ if Conf.practice == true
         end
 
         %5
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -663,7 +680,7 @@ if Conf.practice == true
         KbStrokeWait;
         
         % 6
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -678,7 +695,7 @@ else %no Instructions needed if not a practice trial
     %Screen('DrawTexture', window, emptyTex);
     
     if Conf.MEG
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -689,7 +706,7 @@ else %no Instructions needed if not a practice trial
         KbStrokeWait;
         
     else
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         Screen('TextSize', window, Conf.Textsize);
         Screen('TextFont',window, Conf.Text);
         DrawFormattedText(window,...
@@ -759,7 +776,8 @@ output = struct(...
     'replay_instance', [], ...
     'fixation_break', [], ...
     'fixation_break_frame', [], ...
-    'fixation_break_time', [] );
+    'fixation_break_time', [], ...
+    'false_alarm', [] );
 
 %% Starting Experiment
 
@@ -823,12 +841,12 @@ ITI = 0.5 + .04 * rand(1, length(condMatrixShuffled));%Random ITI  %AH: length(c
 %AH: new block
 if blockCondition == 1
     Screen('FillRect', window, Conf.DotColor1, Conf.marginRect);
-    Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+    Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
     DrawFormattedText(window, Conf.block1Msg, 'center', 'center', Conf.DotColor1);
     marginColor = Conf.DotColor1;
 else
     Screen('FillRect', window, Conf.DotColor2, Conf.marginRect);
-    Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+    Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
     DrawFormattedText(window, Conf.block2Msg, 'center', 'center', Conf.DotColor2);
     marginColor = Conf.DotColor2;
 end 
@@ -857,7 +875,7 @@ while iTrial <= numel(trialSchedule)
     replayInstance = replayInstanceSchedule(iTrial);
     %AH: first was the else clause by itself above this
     Screen('FillRect', window, marginColor, Conf.marginRect);
-    Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+    Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
     if Conf.showFixCrossBetweenTrials == 1
         Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
         Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
@@ -882,6 +900,7 @@ while iTrial <= numel(trialSchedule)
     output(blockIndex, iTrial).fixation_break = false;
     output(blockIndex, iTrial).fixation_break_frame = NaN;
     output(blockIndex, iTrial).fixation_break_time = NaN;
+    output(blockIndex, iTrial).false_alarm = false;
     
     %Fill output File
     output(blockIndex, iTrial).numcatch  = length(TrialStruct(iRun, iSeq).Start);
@@ -963,6 +982,10 @@ while iTrial <= numel(trialSchedule)
         Datapixx('SetDoutSchedule', 0, 100, 2);
         Datapixx('StartDoutSchedule');
         Datapixx('RegWr');
+        if Conf.debug
+            debugTriggerLog(end+1) = triggerPulse(1);
+            fprintf('Trigger: %d\n', triggerPulse(1));
+        end
         if ~ ismember(triggerPulse(1),TriggerValues)
             disp(sprintf('Replay start trigger %d not in TriggerValues',triggerPulse(1)));
         end
@@ -983,7 +1006,7 @@ while iTrial <= numel(trialSchedule)
 
     %AH: first was the else clause by itself above this
     Screen('FillRect', window, marginColor, Conf.marginRect);
-    Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+    Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
     if Conf.showFixCrossBetweenTrials == 1
         Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
         Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
@@ -1051,6 +1074,10 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('SetDoutSchedule', 0, 100, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
                     Datapixx('StartDoutSchedule');
                     Datapixx('RegWr');
+                    if Conf.debug
+                        debugTriggerLog(end+1) = triggerPulse(1);
+                        fprintf('Trigger: %d\n', triggerPulse(1));
+                    end
                     % disp(sprintf('button press, trigger %d',triggerPulse(1)));
                     if ~ ismember(triggerPulse(1),TriggerValues)
                         disp(sprintf('1XXXXXXXXX %d, vpix output: %d, mask: %d',triggerPulse(1),data(end),responseButtonsMask));
@@ -1066,17 +1093,16 @@ while iTrial <= numel(trialSchedule)
         if Conf.trackeye && Conf.enableFixationAbort && ~gazeBreakTriggered
             sample = Eyelink('NewestFloatSample');
             if ~isempty(sample) && isstruct(sample)
-                % prefer left eye; fall back to right
-                gazeX = sample.gx(1); gazeY = sample.gy(1); pupilA = sample.pa(1);
-                if isnan(gazeX) || isnan(gazeY) || pupilA <= 0
-                    gazeX = sample.gx(2); gazeY = sample.gy(2); pupilA = sample.pa(2);
-                end
-                if ~(isnan(gazeX) || isnan(gazeY) || pupilA <= 0)
-                    distFromFix = sqrt((gazeX - xCenter)^2 + (gazeY - yCenter)^2);
-                    if distFromFix > Conf.fixWindowPx
-                        gazeOutsideCounter = gazeOutsideCounter + 1;
-                    else
+                gazeX = sample.gx; gazeY = sample.gy; pupilA = sample.pa;
+                validEyes = (~isnan(gazeX)) & (~isnan(gazeY)) & (pupilA > 0);
+                if any(validEyes)
+                    % Accept fixation if at least one valid eye stays within the window
+                    distFromFixEyes = sqrt((gazeX - xCenter).^2 + (gazeY - yCenter).^2);
+                    eyeWithinWindow = distFromFixEyes(validEyes) <= Conf.fixWindowPx;
+                    if any(eyeWithinWindow)
                         gazeOutsideCounter = 0;
+                    else
+                        gazeOutsideCounter = gazeOutsideCounter + 1;
                     end
                     if gazeOutsideCounter >= Conf.fixBreakToleranceFrames
                         gazeBreakTriggered = true;
@@ -1093,6 +1119,10 @@ while iTrial <= numel(trialSchedule)
                             Datapixx('SetDoutSchedule', 0, 100, 2);
                             Datapixx('StartDoutSchedule');
                             Datapixx('RegWr');
+                            if Conf.debug
+                                debugTriggerLog(end+1) = triggerPulse(1);
+                                fprintf('Trigger: %d\n', triggerPulse(1));
+                            end
                             if ~ ismember(triggerPulse(1),TriggerValues)
                                 disp(sprintf('Gaze-break trigger %d not in TriggerValues',triggerPulse(1)));
                             end
@@ -1109,7 +1139,7 @@ while iTrial <= numel(trialSchedule)
         end
 
         if gazeBreakTriggered
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
             DrawFormattedText(window, 'Please keep your fixation on the cross.', 'center', 'center', Conf.black);
@@ -1120,7 +1150,7 @@ while iTrial <= numel(trialSchedule)
         
         %Background
         Screen('FillRect', window, marginColor, Conf.marginRect);
-        Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+        Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         
         if Conf.MEG
             %photo diode
@@ -1153,6 +1183,10 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx because the actual flip in the projector happens after the entire screen has been drawn by the GPU)
                     Datapixx('StartDoutSchedule');
+                    if Conf.debug
+                        debugTriggerLog(end+1) = triggerPulse(1);
+                        fprintf('Trigger: %d\n', triggerPulse(1));
+                    end
                     %disp(sprintf('catch trial start, trigger %d',triggerPulse(1)));
                     if ~ ismember(triggerPulse(1),TriggerValues)
                         disp(sprintf('2XXXXXXXXX %d',triggerPulse(1)))
@@ -1346,6 +1380,10 @@ while iTrial <= numel(trialSchedule)
                                 Datapixx('WriteDoutBuffer', triggerPulse);
                                 Datapixx('SetDoutSchedule', 0, 100, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
                                 Datapixx('StartDoutSchedule');
+                                if Conf.debug
+                                    debugTriggerLog(end+1) = triggerPulse(1);
+                                    fprintf('Trigger: %d\n', triggerPulse(1));
+                                end
                                 %disp(sprintf('missed, trigger %d',triggerPulse(1)));
                                 if ~ ismember(triggerPulse(1),TriggerValues)
                                     disp(sprintf('3XXXXXXXXX %d',triggerPulse(1)))
@@ -1397,6 +1435,10 @@ while iTrial <= numel(trialSchedule)
                         Datapixx('WriteDoutBuffer', triggerPulse);
                         Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                         Datapixx('StartDoutSchedule');
+                        if Conf.debug
+                            debugTriggerLog(end+1) = triggerPulse(1);
+                            fprintf('Trigger: %d\n', triggerPulse(1));
+                        end
                         %disp(sprintf('catch trial end, trigger %d',triggerPulse(1)));
                         if ~ ismember(triggerPulse(1),TriggerValues)
                             disp(sprintf('4XXXXXXXXX %d',triggerPulse(1)))
@@ -1418,7 +1460,7 @@ while iTrial <= numel(trialSchedule)
             if catchframe < Conf.refrate*Catch.OcclDuration %Dot disappears
 
                 Screen('FillRect', window, marginColor, Conf.marginRect);
-                Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+                Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
                 
                     %Draw dot in red during occlusion:
                     %Screen('DrawDots', window, currentStim(iframe,:), Conf.sizeDotInPixel, [200, 0, 0 ], [0 0], 1); % the last two variables are the 'center' and 'dot form'
@@ -1845,6 +1887,10 @@ while iTrial <= numel(trialSchedule)
                         Datapixx('WriteDoutBuffer', triggerPulse);
                         Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                         Datapixx('StartDoutSchedule');
+                        if Conf.debug
+                            debugTriggerLog(end+1) = triggerPulse(1);
+                            fprintf('Trigger: %d\n', triggerPulse(1));
+                        end
                         %disp(sprintf('last catch trial frame, trigger %d',triggerPulse(1)));
                         if ~ ismember(triggerPulse(1),TriggerValues)
                             disp(sprintf('6XXXXXXXXX %d',triggerPulse(1)))
@@ -1870,6 +1916,19 @@ while iTrial <= numel(trialSchedule)
             Screen('DrawDots', window, currentStim(iframe,3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
             XYPosition(framecounter, :) = currentStim(iframe,:);
             
+            if output(blockIndex, iTrial).numcatch == 0 && ~output(blockIndex, iTrial).false_alarm
+                if Conf.MEG
+                    if response == 1 || response == 2
+                        output(blockIndex, iTrial).false_alarm = true;
+                    end
+                else
+                    [keyIsDownFA, ~, keyCodeFA] = KbCheck;
+                    if keyIsDownFA && keyCodeFA(Key.spaceKey) == 0 && (keyCodeFA(Key.LeftKey) || keyCodeFA(Key.RightKey))
+                        output(blockIndex, iTrial).false_alarm = true;
+                    end
+                end
+            end
+            
             
             if Conf.MEG %Triggering
                 if iframe == 1 %First Frame
@@ -1877,7 +1936,7 @@ while iTrial <= numel(trialSchedule)
                     % should be a value between 1 and 80: 1-40 = attend
                     % red, 41-80: attend green
                     stimulus =  condMatrixShuffled(2, condIdx);
-                    if condMatrixShuffled(1, condIdx)==40
+                    if condMatrixShuffled(1, condIdx)==45
                         stimulus = stimulus+20;
                     end
                     if blockCondition==2
@@ -1895,6 +1954,10 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx) %$$ change trigger to video_nr
                     Datapixx('StartDoutSchedule');
+                    if Conf.debug
+                        debugTriggerLog(end+1) = triggerPulse(1);
+                        fprintf('Trigger: %d\n', triggerPulse(1));
+                    end
                     
                     % Eyelink triggering
                     Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
@@ -1924,6 +1987,10 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                     Datapixx('StartDoutSchedule');
+                    if Conf.debug
+                        debugTriggerLog(end+1) = triggerPulse(1);
+                        fprintf('Trigger: %d\n', triggerPulse(1));
+                    end
                     
                     % Eyelink triggering
                     Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
@@ -1973,7 +2040,7 @@ while iTrial <= numel(trialSchedule)
             % mark thing it remains and we want missed to be
             % as text size
             Screen('FillRect', window, marginColor, Conf.marginRect);
-            Screen('FillRect', window, Conf.RectColor, Conf.rectCoords);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
 
@@ -1985,6 +2052,24 @@ while iTrial <= numel(trialSchedule)
                 Datapixx('RegWrVideoSync');
             end
             
+            vbl = Screen('Flip', window);
+            flipTime(framecounter) = vbl;
+
+            WaitSecs(0.3);
+ 
+        elseif output(blockIndex, iTrial).false_alarm && iframe == size(currentStim,1)
+
+            Screen('FillRect', window, marginColor, Conf.marginRect);
+            Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
+            Screen('TextSize', window, Conf.Textsize);
+            Screen('TextFont',window, Conf.Text);
+
+            DrawFormattedText(window,  'Wrong',  'center', 'center', Conf.colors(2,:));
+
+            if Conf.MEG
+                Datapixx('RegWrVideoSync');
+            end
+
             vbl = Screen('Flip', window);
             flipTime(framecounter) = vbl;
 
@@ -2345,4 +2430,11 @@ else
     % File does not exist, proceed with saving
     save(filePath, 'CatchOutput', 'Catch', 'output', 'Conf');
     disp(['Variables saved to file: ', filePath]);
+end
+
+if Conf.debug
+    debugTriggerTable = table(debugTriggerLog(:), 'VariableNames', {'trigger'});
+    debugTriggerFile = fullfile(savedir, sprintf('debug_actual_triggers_sub%02d_run%02d.csv', iSub, iRun));
+    writetable(debugTriggerTable, debugTriggerFile);
+    disp(['Debug trigger log saved to file: ', debugTriggerFile]);
 end

@@ -22,6 +22,9 @@ userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, 
 viewingDistance = userDoubles(1);
 subjectID = userDoubles(2);
 
+% Seed RNG for reproducibility (per subject)
+rng(subjectID);
+
 % Ensure output folders exist before saving
 if ~exist(Config.inputDirectory, 'dir')
     mkdir(Config.inputDirectory);

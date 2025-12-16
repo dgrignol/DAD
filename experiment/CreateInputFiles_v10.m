@@ -17,6 +17,10 @@ Practice = input('Is this a practice ? [1/0]');
 %else
  %   iSub = 2;
 %end
+
+% Seed RNG for reproducibility (per subject)
+rng(iSub);
+
 Filename = sprintf('MovDot_Sub%02d', iSub); % 'xyRange_v7 - 42P'; %Name of XY Position File
 
 % 0 = random angle; 1 = 90° angle, 2 = radius based on distance between
