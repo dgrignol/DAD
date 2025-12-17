@@ -174,6 +174,9 @@ def main() -> None:
     times = (np.arange(start_idx, stop_idx) + raw.first_samp) / raw.info["sfreq"]
     fig_trig, ax = plt.subplots(figsize=(10, 3))
     ax.step(times, trig_data, where="post", linewidth=1)
+    # Y ticks every 5 units for clearer trigger levels
+    ymin, ymax = ax.get_ylim()
+    ax.set_yticks(np.arange(0, max(5, ymax + 1), 5))
     ax.set(
         xlim=(args.trigger_start, args.trigger_stop),
         xlabel="Time (s)",

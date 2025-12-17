@@ -20,7 +20,7 @@ if Conf.practice
     Conf.experiment_name = 'practice';
 end
 
-desiredFrameRate = 60; % independent of screen resolution
+desiredFrameRate = 120; % independent of screen resolution
 Conf.Task  = 1;
 
 
@@ -202,7 +202,7 @@ Conf.hideDotsInOcclusion = 0; %set to 1 to hide dots during occlusion catches, 0
 
 Conf.blockConditions = [1, 2]; %1: GREEN, 2: RED
 Conf.block1Msg = ['New Block \n\n Pay attention to the GREEN dot \n\n'];
-Conf.block2Msg = ['New Block \n\n Pay attention to the RED dot \n\n'];
+Conf.block2Msg = ['New Block \n\n Pay attention to the YELLOW dot \n\n'];
 Conf.blockMsgColor = 100;
 
 %% Fixation Cross / Bullseye Fixation Cross
@@ -979,7 +979,7 @@ while iTrial <= numel(trialSchedule)
         Datapixx('StopDoutSchedule');
         triggerPulse = [1 0] .* Conf.triggerReplayStart;
         Datapixx('WriteDoutBuffer', triggerPulse);
-        Datapixx('SetDoutSchedule', 0, 100, 2);
+        Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);
         Datapixx('StartDoutSchedule');
         Datapixx('RegWr');
         if Conf.debug
@@ -1071,7 +1071,7 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('StopDoutSchedule');
                     triggerPulse = [1 0] .* (response+200);
                     Datapixx('WriteDoutBuffer', triggerPulse);
-                    Datapixx('SetDoutSchedule', 0, 100, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
+                    Datapixx('SetDoutSchedule', 0, 1000, 2);		% No need for programmatic delay here, no wait for projector to fire trigger as we want the response exactly when it happens
                     Datapixx('StartDoutSchedule');
                     Datapixx('RegWr');
                     if Conf.debug
@@ -1116,7 +1116,7 @@ while iTrial <= numel(trialSchedule)
                             Datapixx('StopDoutSchedule');
                             triggerPulse = [1 0] .* Conf.triggerGazeBreak;
                             Datapixx('WriteDoutBuffer', triggerPulse);
-                            Datapixx('SetDoutSchedule', 0, 100, 2);
+                            Datapixx('SetDoutSchedule', 0, 1000, 2);
                             Datapixx('StartDoutSchedule');
                             Datapixx('RegWr');
                             if Conf.debug
@@ -1365,7 +1365,7 @@ while iTrial <= numel(trialSchedule)
                         Screen('TextSize', window, Conf.Textsize);
                         Screen('TextFont',window, Conf.Text);
 
-                        DrawFormattedText(window,  'Missed',  'center', 'center', Conf.colors(2,:));
+                        DrawFormattedText(window,  'Missed',  'center', 'center', Conf.white);
                         
                         if v == 0 %the first frame of missed response, send a trigger
                             output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 0];
@@ -1378,7 +1378,7 @@ while iTrial <= numel(trialSchedule)
                                 Datapixx('StopDoutSchedule');
                                 triggerPulse = [1 0] .* 113;
                                 Datapixx('WriteDoutBuffer', triggerPulse);
-                                Datapixx('SetDoutSchedule', 0, 100, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
+                                Datapixx('SetDoutSchedule', 0, 1000, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
                                 Datapixx('StartDoutSchedule');
                                 if Conf.debug
                                     debugTriggerLog(end+1) = triggerPulse(1);
@@ -1408,11 +1408,12 @@ while iTrial <= numel(trialSchedule)
                         Screen('TextSize', window, Conf.Textsize);
                         Screen('TextFont',window, Conf.Text);
 
-                        DrawFormattedText(window,  'Missed',  'center', 'center', Conf.colors(2,:));
+                        DrawFormattedText(window,  'Missed',  'center', 'center', Conf.white);
                     else
-                        Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
-                        Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
-                        Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
+                        % DG: we show "Correct"                        
+                        Screen('TextSize', window, Conf.Textsize);
+                        Screen('TextFont',window, Conf.Text);
+                        DrawFormattedText(window,  'Correct',  'center', 'center', Conf.white);
                     end
                     
                     
@@ -1770,11 +1771,11 @@ while iTrial <= numel(trialSchedule)
                                 
                             end
                             
-                        else %if not practice trial, show no Feedback
-                            Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
-                            Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
-                            Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
                         end
+                        %DG: we still show feedback here even if not practice
+                        Screen('TextSize', window, Conf.Textsize);
+                        Screen('TextFont',window, Conf.Text);
+                        DrawFormattedText(window,  'Correct',  'center', 'center', Conf.white);
                         
                         
                     elseif s == 0
@@ -1832,16 +1833,16 @@ while iTrial <= numel(trialSchedule)
                                 Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix,  Conf.colors(1,:), [xCenter yCenter], 2);
                                 Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
                                 
-                            else
-                                Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
-                                Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix,  Conf.colors(2,:), [xCenter yCenter], 2);
-                                Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
                             end
+
+                            Screen('TextSize', window, Conf.Textsize);
+                            Screen('TextFont',window, Conf.Text);
+                            DrawFormattedText(window,  'Correct',  'center', 'center', Conf.white);
                             
-                        else %if not practice trial, show no Feedback
-                            Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
-                            Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
-                            Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
+                        else %if not practice trial, show no Feedback %DG: we still show feedback here even if not practice
+                            Screen('TextSize', window, Conf.Textsize);
+                            Screen('TextFont',window, Conf.Text);
+                            DrawFormattedText(window,  'Correct',  'center', 'center', Conf.white);
                         end
                         
                         
@@ -2044,7 +2045,7 @@ while iTrial <= numel(trialSchedule)
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
 
-            DrawFormattedText(window,  'Missed',  'center', 'center', Conf.colors(2,:));
+            DrawFormattedText(window,  'Missed',  'center', 'center', Conf.white);
                     
             %Now send all instructions to the Datapixx box, as close as possible to the actual screen flip in PTB
         
@@ -2064,7 +2065,7 @@ while iTrial <= numel(trialSchedule)
             Screen('TextSize', window, Conf.Textsize);
             Screen('TextFont',window, Conf.Text);
 
-            DrawFormattedText(window,  'Wrong',  'center', 'center', Conf.colors(2,:));
+            DrawFormattedText(window,  'Wrong',  'center', 'center', Conf.white);
 
             if Conf.MEG
                 Datapixx('RegWrVideoSync');
