@@ -7,6 +7,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import mne
+import numpy as np
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -141,14 +142,36 @@ def main() -> None:
             f"Available channels: {', '.join(raw.ch_names)}"
         )
     # Snapshot of the trigger/stim channel over a specified window.
-    start_idx, stop_idx = raw.time_as_index([args.trigger_start, args.trigger_stop])
+    first_time = float(raw.times[0])
+    last_time = float(raw.times[-1])
+    req_start = max(args.trigger_start, first_time)
+    req_stop = min(args.trigger_stop, last_time)
+    if req_start >= req_stop:
+        raise ValueError(
+            f"Requested trigger window ({args.trigger_start}-{args.trigger_stop}s) "
+            f"is outside data range ({first_time:.3f}-{last_time:.3f}s)."
+        )
+    # time_as_index returns absolute samples (incl. first_samp) on older MNE.
+    start_idx, stop_idx = raw.time_as_index([req_start, req_stop])
+    start_idx -= raw.first_samp
+    stop_idx -= raw.first_samp
+    if start_idx < 0 or stop_idx <= start_idx:
+        raise ValueError(
+            f"Computed trigger window indices invalid: start={start_idx}, stop={stop_idx}"
+        )
+    # Use the raw samples directly (do not drop annotated segments) so times
+    # stay aligned with detected events.
     trig_data = raw.get_data(
         picks=[args.trigger_channel],
         start=start_idx,
         stop=stop_idx,
-        reject_by_annotation="omit",
+        reject_by_annotation="omit",  # match find_events behaviour
     )[0]
-    times = raw.times[start_idx:stop_idx]
+    # Build the time axis directly from sample indices so it matches the
+    # event detector (which also operates on sample indices).
+    # Event times from mne.find_events are based on absolute sample numbers,
+    # i.e., they include raw.first_samp. Mirror that here so the plot aligns.
+    times = (np.arange(start_idx, stop_idx) + raw.first_samp) / raw.info["sfreq"]
     fig_trig, ax = plt.subplots(figsize=(10, 3))
     ax.step(times, trig_data, where="post", linewidth=1)
     ax.set(
