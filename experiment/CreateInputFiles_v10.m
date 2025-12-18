@@ -69,7 +69,7 @@ Catch.FixTotalDuration = Catch.FixDuration + Catch.FixResponseDuration+ Catch.Fi
 %AH: change the durations
 
 %Occlusion Catch Trial
-Catch.OcclDuration = 0.2; %duration of disappearing
+Catch.OcclDuration = 0.27; %duration of disappearing
 Catch.OcclVideoDuration = 0.3;%0.7; % video afterwards
 Catch.OcclResponseDuration = 0.5;%1; %how long to respond
 Catch.OcclWaitingDuration = 0.2;%0.5; %how long until trial ends

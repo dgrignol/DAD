@@ -35,12 +35,12 @@ end
 %% Input Data
 
 % Create a dialog window for user input
-prompt = {'Subject Number:', 'Real Block Number:', 'Viewing Distance (mm):'};
+prompt = {'Subject Number:', 'Run Number:', 'Viewing Distance (mm):'};
 dlgtitle = 'User Input';
 dims = [1 50]; % dimensions of the input boxes
 
 % Set default values for subject number and practice run
-definput = {'20', '1', '1000'}; % default values
+definput = {'0', '0', '1000'}; % default values
 
 user_input = inputdlg(prompt, dlgtitle, dims, definput);
 

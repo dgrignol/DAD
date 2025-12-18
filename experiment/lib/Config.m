@@ -3,7 +3,7 @@ classdef Config
     
         %general
         trialsPerCondition = 20;  %nSeq in their code
-        trialDuration = 2;       %in seconds
+        trialDuration = 2.67;       %in seconds
         trialRepetetion = 2;
         %general - pc settings
         frameFrequency = 60;    %frames per senconds
@@ -21,7 +21,7 @@ classdef Config
         %dot settings
         dotRectSize = [10, 10]; %[14, 14]                 %rect size where the dot can move in visual degrees
         dotWidth = 0.51442;%Config.dotRectSize(1)/28;    %in degrees
-        dotSpeedDegPerSec = 4.973;                                              %visual angle degrees per second
+        dotSpeedDegPerSec = 3.73;                                              %visual angle degrees per second
         dotSpeedDegPerFrame = Config.dotSpeedDegPerSec / Config.frameFrequency; %visual angle degrees per frame
         %their code computes the dot speed pixels per frame but not used
         dotRectColor = [10 10 10];
@@ -53,18 +53,18 @@ classdef Config
 
         %dot settings - likelihood
         %was before 'pathDuration', 1.0, ... 'directionVariance', [0, 10, 20, 30]
-        likelihood = struct('pathDuration', 2.0, ...    %in seconds
+        likelihood = struct('pathDuration', 2.6667, ...    %in seconds
             'directionVariance', [0, 45], ...   %represents the predictability
             'directionChange', 30); %not used in this type
 
         %dot settings - path_duration
         % was before [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.5, 3.2]
-        path_duration = struct('pathDuration', [2], ...    %in seconds
+        path_duration = struct('pathDuration', [2.6667], ...    %in seconds
             'directionVariance', 0, ...   %represents the predictability
             'directionChange', 30); %not used in this type
 
         %dot settings - path_duration_norm
-        path_duration_norm = struct('pathDuration', [0.1, 0.5, 0.9, 1.2], ...    %in seconds
+        path_duration_norm = struct('pathDuration', [0.1333, 0.6667, 1.2000, 1.6000], ...    %in seconds
             'directionVariance', 0, ...   %represents the predictability
             'directionChange', 100); 
 
