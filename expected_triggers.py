@@ -25,6 +25,7 @@ def build_cond_matrix(xy_seqs: np.ndarray) -> np.ndarray:
     n_seq = xy_seqs.size
     cond_matrix = np.zeros((4, n_seq), dtype=float)
     # xy_seqs(:) in MATLAB uses column-major order; mirror that with order='F'
+    # so the condMatrix aligns with MoveDot1_experiment_vX.m.
     for idx, obj in enumerate(xy_seqs.ravel(order="F")):
         cond_matrix[0, idx] = obj.condition
         cond_matrix[1, idx] = obj.sequence
@@ -47,9 +48,12 @@ def block_events(
 
     Times are relative to the block start (StartTimeX in the MATLAB code).
     """
+    # ITI jitter matches the experiment: 0.5 + 0.04 * rand.
     iti = 0.5 + 0.04 * rng.random(len(trial_order))  # matches MATLAB rand usage
+    # TrialOrder is 1-based in MATLAB; convert to 0-based indexing for NumPy.
     cond_shuffled = cond_matrix[:, trial_order - 1]  # convert order to 0-based
 
+    # Accumulate time from block start to each trigger event.
     t = 0.0  # seconds from block start
     events: List[Tuple[float, int]] = []
 
@@ -57,7 +61,9 @@ def block_events(
         i_seq = int(cond_shuffled[2, trial_idx])  # original iSeq (1-based)
         ts = trial_struct[i_seq - 1]  # trial info for this sequence
 
-        # Trial-level trigger for first frame
+        # Trial-level trigger for first frame, following the experiment's mapping:
+        # - Non-catch trials use sequence + condition/block offsets.
+        # - Catch trials always use 102.
         num_catch = np.atleast_1d(ts.Start).size
         if num_catch > 0:
             stim_trigger = 102
@@ -68,11 +74,11 @@ def block_events(
             if block_cond == 2:
                 stim_trigger += 40
 
-        # Apply ITI, then emit first-frame trigger
+        # Apply ITI, then emit first-frame trigger at the new trial onset.
         t += iti[trial_idx]
         events.append((t, int(stim_trigger)))
 
-        # Catch triggers (if any)
+        # Catch triggers (if any): each catch adds a 100 (start) and 101 (end).
         if num_catch > 0:
             starts = np.atleast_1d(ts.Start)
             ends = np.atleast_1d(ts.End)
@@ -83,10 +89,10 @@ def block_events(
         else:
             last_trigger = 81
 
-        # Last frame of the video
+        # Last frame of the video: 81 for no-catch, 103 for catch trials.
         events.append((t + (n_frames - 1) / fps, last_trigger))
 
-        # Advance to next trial
+        # Advance to next trial (full video duration).
         t += n_frames / fps
 
     return events
@@ -98,6 +104,7 @@ def write_csv(path: Path, events: Iterable[Tuple[float, int]]) -> None:
     with path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["trigger", "time_s"])
+        # Sort by time to keep rows ordered even if events were added out of order.
         for time_s, trigger in sorted(((t, tr) for t, tr in events)):
             writer.writerow([trigger, f"{time_s:.6f}"])
 
@@ -127,11 +134,19 @@ def main() -> None:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("derivatives/triggers"),
-        help="Where to write CSVs (one per block).",
+        default=None,
+        help=(
+            "Where to write CSVs (one per block). Defaults to "
+            "derivatives/triggers/subXX."
+        ),
     )
     args = parser.parse_args()
 
+    output_dir = args.output_dir
+    if output_dir is None:
+        output_dir = Path("derivatives/triggers") / f"sub{args.subject:02d}"
+
+    # Resolve file paths and load stimulus + trial-structure MATLAB files.
     run_idx = args.run - 1  # convert to 0-based
 
     stim_path = args.input_dir / f"MovDot_Sub{args.subject:02d}.mat"
@@ -145,14 +160,17 @@ def main() -> None:
     fps = int(cfg.fps)
     n_frames = xy_seqs.flat[0].xy.shape[0]
 
+    # Trial structure arrays follow the MATLAB layout for this subject/run.
     block_order = trial_mat["BlockOrder"]
     trial_order = trial_mat["TrialOrder"]
     trial_struct = trial_mat["TrialStruct"][run_idx]
 
+    # Match experiment ITI randomness: default seed is subject ID.
     seed_value = args.seed if args.seed is not None else args.subject
     rng = np.random.default_rng(seed_value)
     cond_matrix = build_cond_matrix(xy_seqs)
 
+    # Emit a CSV per block (BlockOrder controls which dot is attended).
     num_blocks = block_order.shape[1]
     for block_idx in range(num_blocks):
         block_cond = int(block_order[run_idx, block_idx])
@@ -166,7 +184,7 @@ def main() -> None:
             rng,
         )
 
-        out_path = args.output_dir / (
+        out_path = output_dir / (
             f"expected_triggers_sub{args.subject:02d}"
             f"_run{args.run:02d}_block{block_idx + 1}.csv"
         )

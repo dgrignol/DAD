@@ -91,6 +91,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _spawn_detached_child() -> None:
+    # Relaunch this script as a detached process so the caller returns immediately.
     child_env = os.environ.copy()
     child_env["PLOT_TRIGGER_CHAN_CHILD"] = "1"
     child_args = [sys.executable, str(Path(__file__).resolve())]
@@ -102,6 +103,7 @@ def _spawn_detached_child() -> None:
 
 
 def _parse_float(value: str) -> float:
+    # Accept "NaN" values from HTML tables while still parsing normal floats.
     value = value.strip()
     if value.lower() == "nan":
         return float("nan")
@@ -109,6 +111,7 @@ def _parse_float(value: str) -> float:
 
 
 def _extract_trigger_rows(report_path: Path):
+    # Parse the HTML report and extract rows from the trigger table.
     html = report_path.read_text(encoding="utf-8", errors="ignore")
     table_html = None
     for match in re.finditer(r"<table>.*?</table>", html, flags=re.DOTALL | re.IGNORECASE):
@@ -131,7 +134,26 @@ def _extract_trigger_rows(report_path: Path):
     return rows
 
 
+def _resolve_report_path(report_path: Path) -> Path:
+    if report_path.exists():
+        return report_path
+    match = re.match(r"sub(\d{2})", report_path.stem, flags=re.IGNORECASE)
+    if not match:
+        return report_path
+    sub_id = match.group(1)
+    candidates = []
+    if report_path.parent == Path("."):
+        candidates.append(Path("reports") / f"sub{sub_id}" / report_path.name)
+    if report_path.parent == Path("reports"):
+        candidates.append(report_path.parent / f"sub{sub_id}" / report_path.name)
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return report_path
+
+
 def _missing_triggers_from_report(report_path: Path):
+    # Identify missing expected triggers by looking for NaN start/end rows.
     rows = _extract_trigger_rows(report_path)
     records = []
     for cells in rows:
@@ -152,6 +174,7 @@ def _missing_triggers_from_report(report_path: Path):
     for idx, (trig_val, start, end) in enumerate(records):
         if not (math.isnan(start) or math.isnan(end)):
             continue
+        # Use the midpoint between the nearest known neighbors as a marker.
         prev_end = None
         for j in range(idx - 1, -1, -1):
             prev_end = records[j][2]
@@ -177,6 +200,7 @@ def main() -> None:
         _spawn_detached_child()
         return
 
+    # Resolve the raw data path (subject/run can override the default).
     fif_path = args.fif.expanduser()
     default_fif = Path("data/dRSA_Att_test00.fif")
     if args.subject is not None and fif_path == default_fif:
@@ -186,6 +210,7 @@ def main() -> None:
     if not fif_path.exists():
         raise FileNotFoundError(f"FIF file not found: {fif_path}")
 
+    # Load the raw file and pull out the requested trigger channel.
     raw = mne.io.read_raw_fif(fif_path, preload=args.preload)
 
     if args.trigger_channel not in raw.ch_names:
@@ -199,14 +224,16 @@ def main() -> None:
     if data.size == 0:
         raise ValueError("No samples found in the trigger channel.")
 
+    # Determine the x-axis origin. "absolute" aligns with raw.first_samp.
     time_origin = args.time_origin
     if time_origin is None:
         time_origin = "absolute" if args.plot_missing is not None else "raw"
     time_offset = raw.first_samp / sfreq if time_origin == "absolute" else 0.0
 
+    # Optionally extract missing triggers from a report HTML.
     missing_points = []
     if args.plot_missing is not None:
-        report_path = args.plot_missing.expanduser()
+        report_path = _resolve_report_path(args.plot_missing.expanduser())
         if not report_path.exists():
             raise FileNotFoundError(f"Report not found: {report_path}")
         missing_points = _missing_triggers_from_report(report_path)
@@ -217,6 +244,7 @@ def main() -> None:
     if time_origin == "raw" and missing_times.size:
         missing_times = missing_times - (raw.first_samp / sfreq)
 
+    # Clip missing points to the actual data range.
     data_duration = (data.size - 1) / sfreq
     data_start = time_offset
     data_end = time_offset + data_duration
@@ -225,6 +253,7 @@ def main() -> None:
         missing_times = missing_times[in_range]
         missing_values = missing_values[in_range]
 
+    # Determine the initial window and its bounds.
     window_samples = max(1, int(round(args.duration * sfreq)))
     window_samples = min(window_samples, data.size)
     max_start_idx = max(0, data.size - window_samples)
@@ -240,6 +269,7 @@ def main() -> None:
         ymax = max(ymax, float(np.max(missing_values)))
     y_pad = max(1.0, 0.05 * (ymax - ymin)) if ymax > ymin else 1.0
 
+    # Render the initial window and optional missing-trigger markers.
     fig, ax = plt.subplots()
     plt.subplots_adjust(bottom=0.2)
     line, = ax.plot(
@@ -275,6 +305,7 @@ def main() -> None:
     ax.set_xlim(start_time, start_time + window_duration)
     ax.set_ylim(ymin - y_pad, ymax + y_pad)
 
+    # Add a slider for horizontal scrolling.
     if max_start_idx > 0:
         slider_ax = fig.add_axes([0.12, 0.07, 0.78, 0.04])
         slider = Slider(
@@ -286,6 +317,7 @@ def main() -> None:
         )
 
         def update(val):
+            # Update the plot window when the slider moves.
             new_start = float(slider.val)
             new_start_idx = int(round((new_start - time_offset) * sfreq))
             new_start_idx = max(0, min(new_start_idx, max_start_idx))
@@ -314,6 +346,7 @@ def main() -> None:
             fig.canvas.draw_idle()
 
         def on_scroll(event):
+            # Mouse-wheel scroll nudges the window by 10% of its duration.
             if event.inaxes is None:
                 return
             step = 0.1 * window_samples / sfreq

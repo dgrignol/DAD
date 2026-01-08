@@ -1,6 +1,6 @@
 # 8 Jan 2025 15:45
 
-## Experiment code and documentation
+## Changes made to the experiment code and documentation
 
 ### `experiment/MoveDot1_experiment_vX.m`
 - Delay the `desiredFrameRate` assignment until stimulus FPS is loaded, then set

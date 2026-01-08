@@ -9,6 +9,8 @@ from mne.utils.config import _get_stim_channel
 
 
 def _merge_samples(min_duration: float, sfreq: float) -> int:
+    # Convert the minimum duration into a sample-count merge threshold
+    # compatible with MNE's internal "merge" semantics.
     min_samples = min_duration * sfreq
     if min_samples > 0:
         merge = int(min_samples // 1)
@@ -25,6 +27,7 @@ def _find_stim_steps_1d(
     pad_stop: int | None = 0,
     merge: int = 0,
 ) -> np.ndarray:
+    # Detect step changes in a 1D stim channel, preserving sample indices.
     data = np.asarray(data)
     if data.size == 0:
         return np.empty((0, 3), dtype=np.int64)
@@ -46,6 +49,7 @@ def _find_stim_steps_1d(
             steps = np.append(steps, [[last_idx, v, pad_stop]], axis=0)
 
     if merge != 0 and steps.size:
+        # Merge steps closer than the merge threshold, emulating MNE behavior.
         diff = np.diff(steps[:, 0])
         idx_merge = diff <= abs(merge)
         if np.any(idx_merge):
@@ -65,6 +69,7 @@ def _find_stim_steps_1d(
 
 
 def _mask_steps(steps: np.ndarray, mask: int | None, mask_type: str) -> np.ndarray:
+    # Apply bitmask filtering to the pre/post step values.
     if steps.size == 0 or mask is None:
         return steps
     if mask_type == "not_and":
@@ -81,6 +86,7 @@ def _mask_steps(steps: np.ndarray, mask: int | None, mask_type: str) -> np.ndarr
 
 
 def _as_structured(arr: np.ndarray) -> np.ndarray:
+    # Use a structured view to enable fast row-wise comparisons via np.isin.
     if arr.size == 0:
         return arr
     return np.ascontiguousarray(arr).view(
@@ -102,6 +108,7 @@ def find_events_with_overlaps(
     verbose=None,
 ):
     """Return find_events output plus overlap steps (non-zero to non-zero)."""
+    # Start with standard MNE event detection.
     events = mne.find_events(
         raw,
         stim_channel=stim_channel,
@@ -118,6 +125,7 @@ def find_events_with_overlaps(
     if output != "step":
         return events
 
+    # For step output, augment with overlapping non-zero steps.
     stim_channels = _get_stim_channel(stim_channel, raw.info)
     picks = mne.pick_channels(raw.info["ch_names"], include=stim_channels, ordered=False)
     if len(picks) == 0:
@@ -130,6 +138,7 @@ def find_events_with_overlaps(
     for channel_data in data:
         if channel_data.size == 0:
             continue
+        # Normalize to signed int, optionally unsigned-cast, and remove negatives.
         data_int = channel_data.astype(np.int64, copy=False)
         if uint_cast:
             data_int = data_int.astype(np.uint16).astype(np.int64)
@@ -141,6 +150,7 @@ def find_events_with_overlaps(
         steps = _mask_steps(steps, mask, mask_type)
         if steps.size == 0:
             continue
+        # Keep only transitions where both the pre- and post- values are non-zero.
         non_zero = (steps[:, 1] != 0) & (steps[:, 2] != 0)
         steps = steps[non_zero]
         if steps.size:
@@ -149,6 +159,7 @@ def find_events_with_overlaps(
     if not extra_steps:
         return events
 
+    # Remove steps already present in the base event set.
     extra_steps = np.vstack(extra_steps)
     if events.size:
         existing = _as_structured(events)
@@ -159,6 +170,7 @@ def find_events_with_overlaps(
     if extra_steps.size == 0:
         return events
 
+    # Combine, unique, and sort by sample index for a stable event table.
     combined = (
         np.vstack([events, extra_steps]) if events.size else extra_steps.copy()
     )
