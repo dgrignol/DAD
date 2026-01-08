@@ -4,6 +4,7 @@
 import math
 import argparse
 import re
+from bisect import bisect_right
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -343,6 +344,95 @@ def main() -> None:
         rows.sort(key=lambda x: x[1])
         all_allowed = all(r[3] == 1 for r in rows) if rows else False
 
+        record_end_time = (raw.first_samp + raw.n_times - 1) / sfreq
+
+        def compute_catch_stats(records):
+            trial_start_trigs = set(range(1, 81)) | {102}
+            catch_trig = 100
+            response_trig = 201
+            gaze_break_trig = 150
+            replay_trig = 151
+
+            events_by_time = []
+            for trig, start, _, _ in records:
+                if np.isnan(start):
+                    continue
+                events_by_time.append((float(start), trig))
+            events_by_time.sort(key=lambda x: x[0])
+
+            trial_start_times = [t for t, trig in events_by_time if trig in trial_start_trigs]
+            catch_times = [t for t, trig in events_by_time if trig == catch_trig]
+            response_times = [t for t, trig in events_by_time if trig == response_trig]
+            gaze_break_times = [t for t, trig in events_by_time if trig == gaze_break_trig]
+            replay_times = [t for t, trig in events_by_time if trig == replay_trig]
+
+            catch_windows = []
+            for catch_time in catch_times:
+                end_time = record_end_time
+                if trial_start_times:
+                    idx = bisect_right(trial_start_times, catch_time)
+                    if idx < len(trial_start_times):
+                        end_time = trial_start_times[idx]
+                if end_time > catch_time:
+                    catch_windows.append((catch_time, end_time))
+
+            def in_any_window(timestamp, windows):
+                for start, end in windows:
+                    if start <= timestamp < end:
+                        return True
+                return False
+
+            valid_catch_windows = []
+            discarded_catch_windows = []
+            for start, end in catch_windows:
+                if any(start <= t < end for t in gaze_break_times):
+                    discarded_catch_windows.append((start, end))
+                else:
+                    valid_catch_windows.append((start, end))
+
+            hits = sum(
+                1
+                for start, end in valid_catch_windows
+                if any(start <= t < end for t in response_times)
+            )
+            total_catches = len(valid_catch_windows)
+            misses = total_catches - hits
+            false_alarms = sum(
+                1
+                for t in response_times
+                if not in_any_window(t, valid_catch_windows)
+                and not in_any_window(t, discarded_catch_windows)
+            )
+
+            non_catch_intervals = []
+            for idx in range(len(trial_start_times) - 1):
+                start = trial_start_times[idx]
+                end = trial_start_times[idx + 1]
+                if any(start <= ct < end for ct in catch_times):
+                    continue
+                non_catch_intervals.append((start, end))
+
+            correct_rejections = sum(
+                1
+                for start, end in non_catch_intervals
+                if not any(start <= t < end for t in response_times)
+            )
+            accuracy = hits / total_catches if total_catches else float("nan")
+
+            return {
+                "total_catches": total_catches,
+                "hits": hits,
+                "misses": misses,
+                "false_alarms": false_alarms,
+                "correct_rejections": correct_rejections,
+                "accuracy": accuracy,
+                "catch_count": len(catch_times),
+                "response_count": len(response_times),
+                "trial_start_count": len(trial_start_times),
+                "discarded_catch_windows": len(discarded_catch_windows),
+                "replay_count": len(replay_times),
+            }
+
         def align_records(records):
             """Align actual records to expected_seq; insert missing expected as synthetic rows."""
             combined_rows = []
@@ -401,6 +491,7 @@ def main() -> None:
         combined_rows, matches_primary, expected_idx_list = (
             align_records(rows) if expected_seq else (rows, [float("nan")] * len(rows), [None] * len(rows))
         )
+        catch_stats = compute_catch_stats(rows)
 
         def load_trigger_list_from_csv(path: Path):
             trigs = []
@@ -588,6 +679,65 @@ def main() -> None:
                     + "</p>"
                 )
 
+        catch_summary_html = ""
+        catch_fig = None
+        if rows:
+            accuracy = catch_stats["accuracy"]
+            if math.isnan(accuracy):
+                accuracy_pct = 0.0
+                accuracy_label = "n/a"
+                accuracy_text = "Accuracy n/a (no catch trials detected)"
+            else:
+                accuracy_pct = accuracy * 100.0
+                accuracy_label = f"{accuracy_pct:.1f}%"
+                accuracy_text = f"Accuracy {accuracy_pct:.1f} %"
+
+            catch_summary_html = (
+                "<div style='margin-top:8px;'>"
+                f"<p><strong>{accuracy_text}</strong></p>"
+                f"<p>HIT: {catch_stats['hits']} out of {catch_stats['total_catches']}</p>"
+                f"<p>MISS: {catch_stats['misses']}</p>"
+                f"<p>FALSE ALARM: {catch_stats['false_alarms']}</p>"
+                f"<p>CORRECT REJECTION: {catch_stats['correct_rejections']}</p>"
+                f"<p>DISCARDED CATCH WINDOWS (gaze break): {catch_stats['discarded_catch_windows']}</p>"
+                f"<p>REPLAYS (151): {catch_stats['replay_count']}</p>"
+                "<p><strong>LEGEND:</strong><br>"
+                "HIT -> responses (201) in between glitch start (100) and the subsequent trial start (1-80/102);<br>"
+                "MISS -> periods in between glitch start (100) and the subsequent trial start (1-80/102) without a response (201).<br>"
+                "FALSE ALARM -> responses outside a glitch start (100) and the subsequent trial start (1-80/102) period.<br>"
+                "CORRECT REJECTION -> no response outside a glitch start (100) and the subsequent trial start (1-80/102) period.<br>"
+                "NOTE -> if a gaze break (150) occurs between glitch start (100) and the subsequent trial start "
+                "(1-80/102), that catch window is excluded from HIT/MISS/total glitches, and any responses "
+                "within it are excluded from FALSE ALARM and CORRECT REJECTION counts."
+                "</p>"
+                "</div>"
+            )
+
+            fig, axes = plt.subplots(1, 2, figsize=(7, 2.5))
+            axes[0].barh([0], [accuracy_pct], color="#4caf50")
+            axes[0].set_xlim(0, 100)
+            axes[0].set_yticks([0])
+            axes[0].set_yticklabels(["Accuracy"])
+            axes[0].set_xlabel("Percent")
+            axes[0].set_title("Catch accuracy")
+            label_x = min(accuracy_pct + 2, 98)
+            axes[0].text(label_x, 0, accuracy_label, va="center")
+
+            false_alarms = catch_stats["false_alarms"]
+            max_fa = max(1, false_alarms)
+            axes[1].barh([0], [false_alarms], color="#f4a261")
+            axes[1].set_xlim(0, max_fa)
+            axes[1].set_yticks([0])
+            axes[1].set_yticklabels(["False alarms"])
+            axes[1].set_xlabel("Count")
+            axes[1].set_title("False alarms")
+            fa_label_x = false_alarms + max_fa * 0.02
+            if fa_label_x > max_fa:
+                fa_label_x = max_fa * 0.98
+            axes[1].text(fa_label_x, 0, str(false_alarms), va="center")
+            fig.tight_layout()
+            catch_fig = fig
+
         status_html = (
             "<p style='color:green;font-weight:bold;'>Check passed: all triggers allowed.</p>"
             if all_allowed
@@ -597,7 +747,10 @@ def main() -> None:
         )
 
         html = (
-            build_html_table(combined_rows, match_columns) + status_html + missing_summary_html
+            build_html_table(combined_rows, match_columns)
+            + status_html
+            + missing_summary_html
+            + catch_summary_html
             if rows
             else f"<p>Events detected on {args.trigger_channel}, but no complete on/off pairs.</p>"
             )
@@ -607,6 +760,12 @@ def main() -> None:
             title="Detected triggers",
             section="Triggers",
         )
+        if catch_fig is not None:
+            report.add_figure(
+                fig=catch_fig,
+                title="Catch accuracy summary",
+                section="Triggers",
+            )
     else:
         report.add_html(
             html=f"<p>No events detected on {args.trigger_channel}.</p>",
