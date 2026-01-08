@@ -20,7 +20,7 @@ if Conf.practice
     Conf.experiment_name = 'practice';
 end
 
-desiredFrameRate = 120; % independent of screen resolution
+desiredFrameRate = []; % set after loading stimulus fps
 Conf.Task  = 1;
 
 
@@ -72,6 +72,24 @@ savedir = [rootdir '/output_files'];
 if ~exist(savedir, 'dir')
     mkdir(savedir);
 end
+
+% Safety check: avoid overwriting real experiment output (ignore practice_ files)
+if ~Conf.practice
+    outBaseName = sprintf('%s_SUB%02d_RUN%02d', Conf.experiment_name, iSub, iRun);
+    outMain = fullfile(savedir, outBaseName);
+    outFirstBlock = fullfile(savedir, [outBaseName '_firstBlock']);
+
+    filesToCheck = {outMain, [outMain '.mat'], outFirstBlock, [outFirstBlock '.mat']};
+    fileExists = cellfun(@(p) exist(p, 'file') == 2, filesToCheck);
+    if any(fileExists)
+        existingFiles = filesToCheck(fileExists);
+        existingList = sprintf(' - %s\n', existingFiles{:});
+        error(['Output files already exist for this subject/run (SUB%02d RUN%02d).\n' ...
+            'Refusing to overwrite:\n%s\n' ...
+            'Choose a different run number or move/rename the existing file(s).'], ...
+            iSub, iRun, existingList);
+    end
+end
 Inputdir = [rootdir '/input_files'];
 
 Dat = load(fullfile(Inputdir, NameFile));
@@ -109,7 +127,29 @@ Conf.CrossColorChange = [50 50 250]; %[190 230 230]; %Color when Fixation Cross 
 
 %AH: here also from config
 
-Conf.refrate = Dat.Cfg.fps; %set to 60 because Marisa's Laptop can't handle more, also annika laptop
+Conf.refrate = Dat.Cfg.fps; %use fps from input files
+desiredFrameRate = Conf.refrate;
+
+% Precompute catch phase durations in whole frames to avoid fractional-frame comparisons.
+fix_end = round(Catch.FixDuration * Conf.refrate);
+fix_resp_end = round((Catch.FixDuration + Catch.FixResponseDuration) * Conf.refrate);
+fix_wait_end = round((Catch.FixDuration + Catch.FixResponseDuration + Catch.FixWaitingDuration) * Conf.refrate);
+fix_frames = struct(...
+    'fix', fix_end, ...
+    'resp', fix_resp_end - fix_end, ...
+    'wait', fix_wait_end - fix_resp_end);
+fix_total_frames = fix_wait_end;
+
+occl_end = round(Catch.OcclDuration * Conf.refrate);
+occl_video_end = round((Catch.OcclDuration + Catch.OcclVideoDuration) * Conf.refrate);
+occl_resp_end = round((Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration) * Conf.refrate);
+occl_wait_end = round((Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration + Catch.OcclWaitingDuration) * Conf.refrate);
+occl_frames = struct(...
+    'occl', occl_end, ...
+    'video', occl_video_end - occl_end, ...
+    'resp', occl_resp_end - occl_video_end, ...
+    'wait', occl_wait_end - occl_resp_end);
+occl_total_frames = occl_wait_end;
 Conf.rectSize_visualangle   = Dat.Cfg.rectSize;
 
 Conf.display.rect = []; %full screen if we are not debugging
@@ -218,6 +258,17 @@ Conf.RadiusIn = Conf.lineWidthPix /1.5; %the small oval within Fixation Cross
 
 %% Open the experiment windowcenter
 [window, windowRect] = Screen('OpenWindow', screenNumber, Conf.background, Conf.display.rect);
+
+% Sanity check for refresh rate mismatches.
+ifi = Screen('GetFlipInterval', window);
+actualFrameRate = 1 / ifi;
+if ~isempty(desiredFrameRate)
+    hzDiff = abs(actualFrameRate - desiredFrameRate);
+    if hzDiff > max(1, 0.05 * desiredFrameRate)
+        fprintf('WARNING: Refresh rate %.2f Hz does not match expected %.2f Hz.\n', ...
+            actualFrameRate, desiredFrameRate);
+    end
+end
 
 % Get screen info
 Screen('BlendFunction', window, 'GL_SRC_ALPHA', 'GL_ONE_MINUS_SRC_ALPHA');
@@ -352,7 +403,7 @@ if Conf.trackeye
     Eyelink('Openfile', elk.edfFile);									% Open the file to the eye-tracker
     
     % Writing a short preamble to the file helps if the name became not that informative ;-)
-    Eyelink('command', sprintf('add_file_preamble_text ''Marisa Birk Project MovImage: subject %d ; block %d ; practice %d ; time %s''', iSub, iRun, Conf.practice, datestr(now, 'YYYYmmddhhMM')));
+    Eyelink('command', sprintf('add_file_preamble_text ''Damiano Attention Dot Project: subject %d ; block %d ; practice %d ; time %s''', iSub, iRun, Conf.practice, datestr(now, 'YYYYmmddhhMM')));
     
     % Setting the eye-tracker so as to record GAZE of  LEFT and RIGHT eyes, together with pupil AREA
     Eyelink('Command', 'link_sample_data = LEFT,RIGHT,GAZE,AREA');
@@ -1204,7 +1255,7 @@ while iTrial <= numel(trialSchedule)
             
             
             if TrialStruct(iRun,iSeq).Type(catchcount) == 1 %fixation
-                if catchframe < Catch.FixDuration*Conf.refrate                 %Fixation Cross Color Change
+                if catchframe < fix_frames.fix                 %Fixation Cross Color Change
                     
                     Screen('DrawDots', window, currentStim(iframe,1:2), Conf.sizeDotInPixel, Conf.DotColor1, [0 0], 1); % the last two variables are the 'center' and 'dot form'
                     % AH: draw second dot
@@ -1275,7 +1326,7 @@ while iTrial <= numel(trialSchedule)
                     
                     
                     %Response Period of Fixation Cross
-                elseif (Catch.FixDuration*Conf.refrate) <= catchframe && catchframe < ((Catch.FixDuration + Catch.FixResponseDuration)*Conf.refrate)
+                elseif fix_frames.fix <= catchframe && catchframe < (fix_frames.fix + fix_frames.resp)
                     Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
                     Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
                     Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
@@ -1342,7 +1393,7 @@ while iTrial <= numel(trialSchedule)
                     end
                     
                     % Waiting Period of Fixation Cross
-                elseif ((Catch.FixDuration + Catch.FixResponseDuration)*Conf.refrate) <= catchframe && catchframe < ((Catch.FixDuration + Catch.FixResponseDuration + Catch.FixWaitingDuration)*Conf.refrate)
+                elseif (fix_frames.fix + fix_frames.resp) <= catchframe && catchframe < fix_total_frames
                     %Fixation Cross
                     % Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusOut, yCenter - Conf.RadiusOut, xCenter+Conf.RadiusOut, yCenter+ Conf.RadiusOut]) %Conf.RadiusOut*2
                     % Screen('DrawLines', window, Conf.allCoords, Conf.lineWidthPix, Conf.CrossColor, [xCenter yCenter], 2);
@@ -1397,7 +1448,7 @@ while iTrial <= numel(trialSchedule)
                         Screen('FillOval', window, Conf.ColorOval, [xCenter - Conf.RadiusIn, yCenter - Conf.RadiusIn, xCenter+Conf.RadiusIn, yCenter+ Conf.RadiusIn], Conf.RadiusIn*2 )
                     end
                     
-                elseif  catchframe == ((Catch.FixDuration + Catch.FixResponseDuration  + Catch.FixWaitingDuration)*Conf.refrate) %last Catch Trial frame
+                elseif catchframe == fix_total_frames %last Catch Trial frame
                     
                     XYPosition(framecounter, :) = NaN;
                     
@@ -1458,7 +1509,7 @@ while iTrial <= numel(trialSchedule)
                 
             elseif TrialStruct(iRun,iSeq).Type(catchcount) == 2 %oclusion
                 
-            if catchframe < Conf.refrate*Catch.OcclDuration %Dot disappears
+            if catchframe < occl_frames.occl %Dot disappears
 
                 Screen('FillRect', window, marginColor, Conf.marginRect);
                 Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
@@ -1512,8 +1563,8 @@ while iTrial <= numel(trialSchedule)
                     
                     
                     %Video
-                elseif  Conf.refrate*Catch.OcclDuration <= catchframe && catchframe < (Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration ))
-                    if catchframe == Conf.refrate*Catch.OcclDuration
+                elseif occl_frames.occl <= catchframe && catchframe < (occl_frames.occl + occl_frames.video)
+                    if catchframe == occl_frames.occl
                         %responseStart = GetSecs;
                         FrozenFrame = iframe;
                     end
@@ -1663,7 +1714,7 @@ while iTrial <= numel(trialSchedule)
                     end
                     
                     %Response
-                elseif (Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration )) <= catchframe && catchframe < (Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration ))
+                elseif (occl_frames.occl + occl_frames.video) <= catchframe && catchframe < (occl_frames.occl + occl_frames.video + occl_frames.resp)
                     
                     if Conf.showQstMarkOnOcclusion == 0 %AH: this is marisas case
                         % DrawFormattedText(window,  '?',  'center', 'center', Conf.normalQstMarkColor);
@@ -1750,7 +1801,7 @@ while iTrial <= numel(trialSchedule)
                     
                     
                     %Waiting
-                elseif (Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration )) <= catchframe && catchframe < (Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration + Catch.OcclWaitingDuration ))
+                elseif (occl_frames.occl + occl_frames.video + occl_frames.resp) <= catchframe && catchframe < occl_total_frames
                     %DrawFormattedText(window,  'Waiting',  'center', yCenter/3, Conf.white);
                     
                     % XYPosition(framecounter, :) = NaN;
@@ -1822,7 +1873,7 @@ while iTrial <= numel(trialSchedule)
                     Screen('DrawDots', window, currentStim(iframe,3:4), Conf.sizeDotInPixel, Conf.DotColor2, [0 0], 1);
                     XYPosition(framecounter, :) = currentStim(iframe,:);
                     
-                elseif catchframe ==  Conf.refrate*(Catch.OcclDuration + Catch.OcclVideoDuration + Catch.OcclResponseDuration + Catch.OcclWaitingDuration ) %last Catch Trial frame
+                elseif catchframe == occl_total_frames %last Catch Trial frame
                     
                     % XYPosition(framecounter, :) = NaN;
                     
@@ -2097,7 +2148,7 @@ while iTrial <= numel(trialSchedule)
         end
         
         
-        if catchframe == Conf.refrate*Catch.OcclDuration && TrialStruct(iRun,iSeq).Type(catchcount) == 2
+        if catchframe == occl_frames.occl && TrialStruct(iRun,iSeq).Type(catchcount) == 2
             if Conf.MEG
                 Datapixx('SetMarker');
                 Datapixx('RegWrRd');

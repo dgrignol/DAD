@@ -3,11 +3,14 @@
 
 import math
 import argparse
+import re
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 import mne
 import numpy as np
+
+from trigger_events import find_events_with_overlaps
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,7 +21,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--fif",
         type=Path,
         default=Path("data/dRSA_Att_test00.fif"),
-        help="Path to the raw FIF file to inspect (overridden by --subject).",
+        help=(
+            "Path to the raw FIF file to inspect "
+            "(overridden by --subject/--run when using the default)."
+        ),
     )
     parser.add_argument(
         "--out",
@@ -92,14 +98,18 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "One or more CSV paths. First is the output for detected triggers. "
             "Additional paths (if any) are existing actual trigger CSVs to compare, "
-            "each adding a separate match column."
+            "each adding a separate match column. When omitted and --subject is set, "
+            "outputs default to per-block filenames (if expected trigger files exist)."
         ),
     )
     parser.add_argument(
         "--subject",
         type=int,
         default=None,
-        help="Subject number used to locate expected trigger files (e.g., 99).",
+        help=(
+            "Subject number used to locate expected trigger files and the default FIF path "
+            "(e.g., 99)."
+        ),
     )
     parser.add_argument(
         "--run",
@@ -115,8 +125,11 @@ def main() -> None:
     args = build_parser().parse_args()
 
     fif_path = args.fif.expanduser()
-    if args.subject is not None and fif_path == Path("data/dRSA_Att_test00.fif"):
-        fif_path = Path(f"data/raw_sub{args.subject:02d}.fif")
+    default_fif = Path("data/dRSA_Att_test00.fif")
+    if args.subject is not None and fif_path == default_fif:
+        fif_path = Path(
+            f"data/sub{args.subject:02d}/MEG/sub{args.subject:02d}_run{args.run:02d}.fif"
+        )
     if not fif_path.exists():
         raise FileNotFoundError(f"FIF file not found: {fif_path}")
 
@@ -193,7 +206,7 @@ def main() -> None:
 
     # Detect trigger events and summarize in the report.
     min_dur = args.event_min_duration if args.event_min_duration > 0 else 0.0
-    events = mne.find_events(
+    events = find_events_with_overlaps(
         raw,
         stim_channel=args.trigger_channel,
         output="step",
@@ -205,33 +218,20 @@ def main() -> None:
         sfreq = raw.info["sfreq"]
         allowed_triggers = set(range(1, 82)) | {100, 101, 102, 103, 150, 151, 201}
         match_triggers = allowed_triggers - {150, 151}
-        pending = {}
-        rows = []
-        for sample, prev, new in events:
-            if prev == 0 and new > 0:
-                pending[new] = sample  # rising edge
-            elif prev > 0 and new == 0 and prev in pending:
-                start_sample = pending.pop(prev)
-                start = start_sample / sfreq
-                end = sample / sfreq
-                trig_val = int(prev)
-                allowed = 1 if trig_val in allowed_triggers else 0
-                rows.append((trig_val, start, end, allowed))
-
-        rows.sort(key=lambda x: x[1])
-        all_allowed = all(r[3] == 1 for r in rows) if rows else False
 
         # Load expected trigger order for comparison (if subject provided).
         expected_seq = []
+        expected_seq_blocks = []
+        block_ranges = []
         if args.subject is not None:
             expected_dir = Path("derivatives/triggers")
-            for block_idx in (1, 2):
-                exp_path = expected_dir / (
-                    f"expected_triggers_sub{args.subject:02d}_run{args.run:02d}_block{block_idx}.csv"
-                )
-                if not exp_path.exists():
-                    continue
-                with exp_path.open() as f:
+            pattern = (
+                f"expected_triggers_sub{args.subject:02d}_run{args.run:02d}_block*.csv"
+            )
+
+            def load_block_seq(path: Path):
+                seq = []
+                with path.open() as f:
                     next(f, None)  # skip header
                     for line in f:
                         try:
@@ -239,7 +239,109 @@ def main() -> None:
                         except ValueError:
                             continue
                         if trig_val in match_triggers:
-                            expected_seq.append(trig_val)
+                            seq.append(trig_val)
+                return seq
+
+            block_entries = []
+            for exp_path in expected_dir.glob(pattern):
+                match = re.search(r"_block(\d+)$", exp_path.stem)
+                if not match:
+                    continue
+                block_idx = int(match.group(1))
+                seq = load_block_seq(exp_path)
+                if seq:
+                    block_entries.append((block_idx, seq))
+
+            block_entries.sort(key=lambda x: x[0])
+            expected_seq_blocks = block_entries
+            for block_idx, seq in expected_seq_blocks:
+                start_idx = len(expected_seq)
+                expected_seq.extend(seq)
+                end_idx = len(expected_seq) - 1
+                block_ranges.append((block_idx, start_idx, end_idx))
+
+        def resolve_overlap(prev_val, new_val, expected_idx):
+            if not expected_seq:
+                return "new"
+            prev_val = int(prev_val)
+            new_val = int(new_val)
+            if prev_val not in match_triggers or new_val not in match_triggers:
+                return "both"
+            if expected_idx >= len(expected_seq):
+                return "new"
+            next_expected = expected_seq[expected_idx]
+            if next_expected == prev_val:
+                if (
+                    expected_idx + 1 < len(expected_seq)
+                    and expected_seq[expected_idx + 1] == new_val
+                ):
+                    return "both"
+                return "prev"
+            if next_expected == new_val:
+                return "new"
+            try:
+                prev_idx = expected_seq.index(prev_val, expected_idx)
+            except ValueError:
+                prev_idx = None
+            try:
+                new_idx = expected_seq.index(new_val, expected_idx)
+            except ValueError:
+                new_idx = None
+            if prev_idx is None and new_idx is None:
+                return "new"
+            if prev_idx is None:
+                return "new"
+            if new_idx is None:
+                return "prev"
+            return "prev" if prev_idx < new_idx else "new"
+
+        def advance_expected_idx(trig_val, expected_idx):
+            if trig_val not in match_triggers or expected_idx >= len(expected_seq):
+                return expected_idx
+            try:
+                found_idx = expected_seq.index(trig_val, expected_idx)
+            except ValueError:
+                return expected_idx
+            return found_idx + 1
+
+        active_val = None
+        active_start = None
+        expected_idx = 0
+        rows = []
+        for sample, prev, new in events:
+            if prev == 0 and new > 0:
+                active_val = int(new)
+                active_start = sample
+            elif prev > 0 and new > 0:
+                choice = resolve_overlap(prev, new, expected_idx)
+                if choice in ("prev", "both"):
+                    if active_val is not None and active_start is not None and int(prev) == active_val:
+                        start = active_start / sfreq
+                        end = sample / sfreq
+                        trig_val = int(prev)
+                        allowed = 1 if trig_val in allowed_triggers else 0
+                        rows.append((trig_val, start, end, allowed))
+                        expected_idx = advance_expected_idx(trig_val, expected_idx)
+                if choice in ("new", "both"):
+                    active_val = int(new)
+                    active_start = sample
+                else:
+                    active_val = None
+                    active_start = None
+            elif prev > 0 and new == 0:
+                if active_val is None or active_start is None or int(prev) != active_val:
+                    continue
+                start = active_start / sfreq
+                end = sample / sfreq
+                trig_val = int(prev)
+                allowed = 1 if trig_val in allowed_triggers else 0
+                rows.append((trig_val, start, end, allowed))
+                expected_idx = advance_expected_idx(trig_val, expected_idx)
+                active_val = None
+                active_start = None
+
+        rows.sort(key=lambda x: x[1])
+        all_allowed = all(r[3] == 1 for r in rows) if rows else False
 
         def align_records(records):
             """Align actual records to expected_seq; insert missing expected as synthetic rows."""
@@ -346,24 +448,85 @@ def main() -> None:
                 label = label.split("_")[-1]
             match_columns.append((f"match {label}", compute_matches_for_rows(actual_trigs)))
 
-        # Save trigger table to CSV (first path is output).
-        csv_path = trigger_csv_paths[0]
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
+        default_output = Path("derivatives/triggers/actual_triggers_sub99.csv")
+        use_auto_output = (
+            args.subject is not None
+            and trigger_csv_paths
+            and trigger_csv_paths[0] == default_output
+        )
+        if use_auto_output:
+            if expected_seq_blocks:
+                output_paths = {
+                    block_idx: Path(
+                        f"derivatives/triggers/actual_triggers_sub{args.subject:02d}"
+                        f"_run{args.run:02d}_block{block_idx}.csv"
+                    )
+                    for block_idx, _ in expected_seq_blocks
+                }
+                split_by_block = True
+            else:
+                output_paths = {
+                    None: Path(
+                        f"derivatives/triggers/actual_triggers_sub{args.subject:02d}"
+                        f"_run{args.run:02d}.csv"
+                    )
+                }
+                split_by_block = False
+        else:
+            output_paths = {None: trigger_csv_paths[0]}
+            split_by_block = False
+
         header_cols = ["trigger", "start_s", "end_s", "allowed"] + [col for col, _ in match_columns]
-        with csv_path.open("w", encoding="utf-8") as f:
-            f.write(",".join(header_cols) + "\n")
-            for row_idx, (trig, start, end, allowed) in enumerate(combined_rows):
-                start_str = "NaN" if isinstance(start, float) and math.isnan(start) else f"{start:.6f}"
-                end_str = "NaN" if isinstance(end, float) and math.isnan(end) else f"{end:.6f}"
-                match_vals = []
-                for _, match_list in match_columns:
-                    val = match_list[row_idx]
-                    if isinstance(val, float) and math.isnan(val):
-                        match_vals.append("NaN")
-                    else:
-                        match_vals.append(str(val))
-                f.write(f"{trig},{start_str},{end_str},{allowed}," + ",".join(match_vals) + "\n")
-        print(f"Saved detected triggers CSV to {csv_path}")
+
+        def write_trigger_csv(path: Path, row_indices):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("w", encoding="utf-8") as f:
+                f.write(",".join(header_cols) + "\n")
+                for row_idx in row_indices:
+                    trig, start, end, allowed = combined_rows[row_idx]
+                    start_str = (
+                        "NaN"
+                        if isinstance(start, float) and math.isnan(start)
+                        else f"{start:.6f}"
+                    )
+                    end_str = (
+                        "NaN"
+                        if isinstance(end, float) and math.isnan(end)
+                        else f"{end:.6f}"
+                    )
+                    match_vals = []
+                    for _, match_list in match_columns:
+                        val = match_list[row_idx]
+                        if isinstance(val, float) and math.isnan(val):
+                            match_vals.append("NaN")
+                        else:
+                            match_vals.append(str(val))
+                    f.write(
+                        f"{trig},{start_str},{end_str},{allowed}," + ",".join(match_vals) + "\n"
+                    )
+
+        if split_by_block:
+            block_indices = [block_idx for block_idx, _ in expected_seq_blocks]
+            block_rows_map = {block_idx: [] for block_idx in block_indices}
+            current_block = block_indices[0] if block_indices else None
+
+            for row_idx, exp_idx in enumerate(expected_idx_list):
+                if exp_idx is not None:
+                    for block_idx, start_idx, end_idx in block_ranges:
+                        if start_idx <= exp_idx <= end_idx:
+                            current_block = block_idx
+                            break
+                if current_block is not None:
+                    block_rows_map[current_block].append(row_idx)
+
+            for block_idx in block_indices:
+                csv_path = output_paths[block_idx]
+                write_trigger_csv(csv_path, block_rows_map[block_idx])
+                print(f"Saved detected triggers CSV to {csv_path}")
+        else:
+            csv_path = output_paths[None]
+            write_trigger_csv(csv_path, range(len(combined_rows)))
+            print(f"Saved detected triggers CSV to {csv_path}")
 
         def build_html_table(records, match_cols):
             header = (
@@ -403,6 +566,28 @@ def main() -> None:
                 f"<table>{header}{body}</table>"
             )
 
+        missing_summary_html = ""
+        if expected_seq:
+            total_counts = {}
+            for trig_val in expected_seq:
+                total_counts[trig_val] = total_counts.get(trig_val, 0) + 1
+            missing_counts = {}
+            for (trig, _, _, _), match_val in zip(combined_rows, matches_primary):
+                if match_val == "MISSING":
+                    missing_counts[trig] = missing_counts.get(trig, 0) + 1
+            if missing_counts:
+                parts = []
+                for trig in sorted(missing_counts):
+                    missing = missing_counts[trig]
+                    total = total_counts.get(trig, 0)
+                    parts.append(f"{trig} -> {missing} missing out of {total}")
+                missing_summary_html = (
+                    "<p style='margin-top:4px;'>"
+                    "<strong>Missing triggers:</strong> "
+                    + "; ".join(parts)
+                    + "</p>"
+                )
+
         status_html = (
             "<p style='color:green;font-weight:bold;'>Check passed: all triggers allowed.</p>"
             if all_allowed
@@ -412,7 +597,7 @@ def main() -> None:
         )
 
         html = (
-            build_html_table(combined_rows, match_columns) + status_html
+            build_html_table(combined_rows, match_columns) + status_html + missing_summary_html
             if rows
             else f"<p>Events detected on {args.trigger_channel}, but no complete on/off pairs.</p>"
             )

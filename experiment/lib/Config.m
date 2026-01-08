@@ -6,7 +6,7 @@ classdef Config
         trialDuration = 2.67;       %in seconds
         trialRepetetion = 2;
         %general - pc settings
-        frameFrequency = 60;    %frames per senconds
+        frameFrequency = 120;   %frames per senconds
         %in their code they define the inter frame interval, which is not used
         framesPerTrial = round(Config.trialDuration*Config.frameFrequency);
 
