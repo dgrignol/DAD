@@ -1,14 +1,43 @@
 #!/usr/bin/env python3
 """
-Generate an MNE HTML report to inspect a FIF recording.
+Generate an MNE HTML report to inspect MoveDot1 FIF recordings.
 
 This report includes:
-- A raw-data overview and sensor layout.
-- A trigger-channel snapshot over a requested time window.
-- A trigger table extracted from the stim channel, optionally aligned against
+- Raw-data overviews and sensor layouts.
+- Trigger-channel snapshots over a requested time window.
+- Trigger tables extracted from the stim channel, optionally aligned against
   expected trigger sequences to highlight missing/extra events.
+
+Multi-run behavior:
+- When --subject is provided and --fif is left at its default, the script scans
+  all run FIF files in data/subXX/MEG and uses expected trigger blocks from
+  derivatives/triggers/subXX. Each run becomes a separate report section and
+  contributes rows to a unified detected-trigger CSV with trial/trial_exp,
+  run, and block columns.
+
+Outputs:
+- HTML report (single run or multi-run).
+- Unified detected-trigger CSV (stacked runs) with trial/trial_exp, run, and block
+  columns: derivatives/triggers/subXX/actual_triggers_subXX.csv
+
+Trial numbering:
+- "trial" increments on detected trial-start triggers (1-80 or 102) and skips
+  missing expected rows (NaN start/end).
+- "trial_exp" increments on expected trial-start triggers (including missing
+  expected rows) when expected triggers are available.
+
+Examples:
+    # All runs for subject 04, default output path + unified CSV:
+    ./inspect_fif_report.py --subject 4
+
+    # Single run via explicit FIF:
+    ./inspect_fif_report.py --subject 4 --run 2 --fif data/sub04/MEG/sub04_run02.fif
+
+    # Save report without opening a browser:
+    ./inspect_fif_report.py --subject 4 --no-browser --out reports/sub04_report.html
 """
 
+import csv
 import math
 import argparse
 import re
@@ -24,15 +53,15 @@ from trigger_events import find_events_with_overlaps
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Load a FIF file with MNE and generate an HTML report."
+        description="Load one or more FIF files with MNE and generate an HTML report."
     )
     parser.add_argument(
         "--fif",
         type=Path,
         default=Path("data/dRSA_Att_test00.fif"),
         help=(
-            "Path to the raw FIF file to inspect "
-            "(overridden by --subject/--run when using the default)."
+            "Path to the raw FIF file to inspect. If --subject is set and this stays "
+            "at the default, all runs in data/subXX/MEG are processed."
         ),
     )
     parser.add_argument(
@@ -41,7 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Where to write the HTML report. Defaults to "
-            "reports/subXX/subXX_runYY_report.html when --subject is set, "
+            "reports/subXX/subXX_report.html when --subject is set (all runs), "
+            "reports/subXX/subXX_runYY_report.html for a single run, "
             "otherwise reports/dRSA_Att_test00_report.html."
         ),
     )
@@ -109,11 +139,13 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=None,
         help=(
-            "One or more CSV paths. First is the output for detected triggers. "
-            "Additional paths (if any) are existing actual trigger CSVs to compare, "
-            "each adding a separate match column. When omitted, defaults to "
-            "derivatives/triggers/subXX/actual_triggers_subXX.csv when --subject is set, "
-            "and routes to per-block filenames if expected trigger files exist."
+            "One or more CSV paths. First is the unified output for detected triggers "
+            "(stacked runs with trial/trial_exp, run, and block columns). Additional "
+            "paths (if any) are "
+            "existing actual-trigger CSVs to compare, each adding a separate match "
+            "column. When omitted, defaults to derivatives/triggers/subXX/"
+            "actual_triggers_subXX.csv when --subject is set, otherwise "
+            "derivatives/triggers/actual_triggers_sub99.csv."
         ),
     )
     parser.add_argument(
@@ -121,125 +153,203 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=(
-            "Subject number used to locate expected trigger files and the default FIF path "
-            "(e.g., 99)."
+            "Subject number used to locate expected trigger files under "
+            "derivatives/triggers/subXX; when paired with the default --fif, "
+            "all runs for the subject are processed."
         ),
     )
     parser.add_argument(
         "--run",
         type=int,
         default=1,
-        help="Run number for expected triggers (default: 1).",
+        help=(
+            "Run number for expected triggers when inspecting a single run "
+            "(default: 1; ignored when scanning all runs)."
+        ),
     )
     parser.set_defaults(open_browser=True)
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    trigger_base_dir = Path("derivatives/triggers")
-    trigger_subject_dir = (
-        trigger_base_dir / f"sub{args.subject:02d}" if args.subject is not None else None
-    )
+def _parse_run_id_from_name(path: Path) -> int | None:
+    """Extract a run number from a FIF filename like sub04_run02.fif."""
+    match = re.search(r"_run(\d+)", path.stem)
+    if not match:
+        return None
+    return int(match.group(1))
 
-    # Resolve the raw data path, allowing subject/run to override the default.
-    fif_path = args.fif.expanduser()
-    default_fif = Path("data/dRSA_Att_test00.fif")
-    if args.subject is not None and fif_path == default_fif:
-        fif_path = Path(
-            f"data/sub{args.subject:02d}/MEG/sub{args.subject:02d}_run{args.run:02d}.fif"
-        )
-    if not fif_path.exists():
-        raise FileNotFoundError(f"FIF file not found: {fif_path}")
 
-    if args.out is None:
-        if args.subject is not None:
-            out_path = (
-                Path("reports")
-                / f"sub{args.subject:02d}"
-                / f"sub{args.subject:02d}_run{args.run:02d}_report.html"
+def _discover_subject_runs(subject: int) -> list[tuple[int, Path]]:
+    """
+    Discover all run FIF files for a subject.
+
+    Returns a sorted list of (run_id, fif_path) tuples.
+    """
+    meg_dir = Path("data") / f"sub{subject:02d}" / "MEG"
+    if not meg_dir.exists():
+        raise FileNotFoundError(f"MEG directory not found: {meg_dir}")
+
+    fif_paths = sorted(meg_dir.glob(f"sub{subject:02d}_run*.fif*"))
+    if not fif_paths:
+        raise FileNotFoundError(f"No run FIF files found in: {meg_dir}")
+
+    run_map = {}
+    for path in fif_paths:
+        run_id = _parse_run_id_from_name(path)
+        if run_id is None:
+            raise ValueError(f"Could not parse run number from FIF name: {path}")
+        if run_id in run_map:
+            raise ValueError(
+                f"Multiple FIF files found for run {run_id:02d}: {run_map[run_id]} and {path}"
             )
-        else:
-            out_path = Path("reports/dRSA_Att_test00_report.html")
-    else:
-        out_path = args.out.expanduser()
+        run_map[run_id] = path
 
-    # Load the raw data. Preloading is optional and depends on CLI flag.
-    raw = mne.io.read_raw_fif(fif_path, preload=args.preload)
+    return sorted(run_map.items())
 
-    # Start building an MNE HTML report with a raw overview and PSD.
-    report = mne.Report(title=f"Raw overview: {fif_path.name}")
-    report.add_raw(raw=raw, title="Raw data", psd=True, butterfly=False)
 
-    # Add a sensor layout snapshot for quick channel topology checks.
-    fig_sensors = raw.plot_sensors(kind="topomap", show=False)
-    report.add_figure(
-        fig=fig_sensors,
-        title="Sensor layout",
-        section="Sensors",
-    )
+def _resolve_run_path(path: Path, run_id: int | None) -> Path:
+    """Return a run-specific path by replacing or appending _runXX in the name."""
+    if run_id is None:
+        return path
+    name = path.name
+    if re.search(r"_run\d+", name):
+        name = re.sub(r"_run\d+", f"_run{run_id:02d}", name)
+        return path.with_name(name)
+    if path.suffix:
+        return path.with_name(f"{path.stem}_run{run_id:02d}{path.suffix}")
+    return path.with_name(f"{path.name}_run{run_id:02d}")
 
-    if args.trigger_start >= args.trigger_stop:
-        raise ValueError("trigger-start must be less than trigger-stop.")
-    if args.trigger_channel not in raw.ch_names:
-        raise ValueError(
-            f"Channel {args.trigger_channel!r} not found in data. "
-            f"Available channels: {', '.join(raw.ch_names)}"
+
+def _resolve_run_paths(
+    paths: list[Path],
+    run_id: int | None,
+    *,
+    skip_first: bool,
+) -> list[Path]:
+    """Apply run-specific naming to a list of paths when needed."""
+    if run_id is None:
+        return list(paths)
+    resolved = []
+    for idx, path in enumerate(paths):
+        if skip_first and idx == 0:
+            resolved.append(path)
+            continue
+        resolved.append(_resolve_run_path(path, run_id))
+    return resolved
+
+
+def _format_match_label(path: Path) -> str:
+    """Create a stable match-column label from a CSV path."""
+    label = path.stem
+    label = re.sub(r"_run\d+$", "", label)
+    label = re.sub(r"_block\d+$", "", label)
+    if "_" in label:
+        label = label.split("_")[-1]
+    return label
+
+
+def _parse_csv_int(value: str) -> int | None:
+    """Parse an integer CSV cell, treating empty/NaN as missing."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value or value.lower() == "nan":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _parse_csv_float(value: str) -> float | None:
+    """Parse a float CSV cell, treating empty/NaN as missing."""
+    if value is None:
+        return None
+    value = value.strip()
+    if not value or value.lower() == "nan":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _assign_blocks(
+    expected_idx_list: list[int | None],
+    block_ranges: list[tuple[int, int, int]],
+) -> list[int | None]:
+    """
+    Map each combined row to a block index using expected-index ranges.
+
+    Rows without an expected index inherit the most recent block to keep
+    non-matchable triggers grouped with their surrounding block.
+    """
+    if not block_ranges:
+        return [None] * len(expected_idx_list)
+    current_block = block_ranges[0][0]
+    block_by_row: list[int | None] = []
+    for exp_idx in expected_idx_list:
+        if exp_idx is not None:
+            for block_idx, start_idx, end_idx in block_ranges:
+                if start_idx <= exp_idx <= end_idx:
+                    current_block = block_idx
+                    break
+        block_by_row.append(current_block)
+    return block_by_row
+
+
+def _write_unified_csv(path: Path, header: list[str], rows: list[list[str]]) -> None:
+    """Write the unified detected-trigger CSV with a fixed header."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(rows)
+
+
+def _validate_expected_triggers(
+    subject: int,
+    run_entries: list[tuple[int, Path]],
+    expected_dir: Path,
+) -> None:
+    """Ensure every run has expected trigger block files available."""
+    missing_runs = []
+    for run_id, _ in run_entries:
+        pattern = (
+            f"expected_triggers_sub{subject:02d}_run{run_id:02d}_block*.csv"
         )
-    # Snapshot of the trigger/stim channel over a specified window.
-    # Clamp the window to the available time span to avoid out-of-range indexing.
-    first_time = float(raw.times[0])
-    last_time = float(raw.times[-1])
-    req_start = max(args.trigger_start, first_time)
-    req_stop = min(args.trigger_stop, last_time)
-    if req_start >= req_stop:
-        raise ValueError(
-            f"Requested trigger window ({args.trigger_start}-{args.trigger_stop}s) "
-            f"is outside data range ({first_time:.3f}-{last_time:.3f}s)."
+        if not list(expected_dir.glob(pattern)):
+            missing_runs.append(run_id)
+    if missing_runs:
+        missing_str = ", ".join(f"{run_id:02d}" for run_id in missing_runs)
+        raise FileNotFoundError(
+            "Missing expected trigger files for run(s): "
+            f"{missing_str} in {expected_dir}"
         )
-    # time_as_index returns absolute samples (incl. first_samp) on older MNE.
-    # Convert to relative indices for get_data(start/stop).
-    start_idx, stop_idx = raw.time_as_index([req_start, req_stop])
-    start_idx -= raw.first_samp
-    stop_idx -= raw.first_samp
-    if start_idx < 0 or stop_idx <= start_idx:
-        raise ValueError(
-            f"Computed trigger window indices invalid: start={start_idx}, stop={stop_idx}"
-        )
-    # Use the raw samples directly (do not drop annotated segments) so times
-    # stay aligned with detected events.
-    trig_data = raw.get_data(
-        picks=[args.trigger_channel],
-        start=start_idx,
-        stop=stop_idx,
-        reject_by_annotation="omit",  # match find_events behaviour
-    )[0]
-    # Build the time axis directly from sample indices so it matches the
-    # event detector (which also operates on sample indices).
-    # Event times from mne.find_events are based on absolute sample numbers,
-    # i.e., they include raw.first_samp. Mirror that here so the plot aligns.
-    times = (np.arange(start_idx, stop_idx) + raw.first_samp) / raw.info["sfreq"]
-    fig_trig, ax = plt.subplots(figsize=(10, 3))
-    ax.step(times, trig_data, where="post", linewidth=1)
-    # Y ticks every 5 units for clearer trigger levels
-    ymin, ymax = ax.get_ylim()
-    ax.set_yticks(np.arange(0, max(5, ymax + 1), 5))
-    ax.set(
-        xlim=(args.trigger_start, args.trigger_stop),
-        xlabel="Time (s)",
-        ylabel="Amplitude",
-        title=f"{args.trigger_channel} from {args.trigger_start:.1f}s to {args.trigger_stop:.1f}s",
-    )
-    ax.grid(True, alpha=0.3)
-    fig_trig.tight_layout()
-    report.add_figure(
-        fig=fig_trig,
-        title=f"Trigger channel ({args.trigger_channel})",
-        section="Triggers",
-    )
 
-    # Detect trigger events and summarize in the report.
-    # We use a custom wrapper that includes non-zero-to-non-zero overlaps.
+
+def _process_trigger_events(
+    *,
+    args: argparse.Namespace,
+    raw: mne.io.BaseRaw,
+    report: mne.Report,
+    run_id: int | None,
+    trigger_base_dir: Path,
+    trigger_subject_dir: Path | None,
+    use_subject_runs: bool,
+    triggers_section: str,
+    csv_rows: list[list[str]],
+    extra_csv_paths: list[Path],
+    extra_match_labels: list[str],
+) -> None:
+    """
+    Detect triggers for one run, append unified CSV rows, and add HTML/figures.
+
+    Expected triggers follow the MoveDot1 mapping documented in
+    experiment/trigger_codes.md. Trial counters are derived from trial-start
+    codes (1-80 for non-catch trials, 102 for catch trials).
+    """
+    # Detect trigger events and summarize them in the report.
     min_dur = args.event_min_duration if args.event_min_duration > 0 else 0.0
     events = find_events_with_overlaps(
         raw,
@@ -254,6 +364,8 @@ def main() -> None:
         # Allowed/expected trigger ranges for this experiment.
         allowed_triggers = set(range(1, 82)) | {100, 101, 102, 103, 150, 151, 201}
         match_triggers = allowed_triggers - {150, 151}
+        # Trial-start triggers per experiment/trigger_codes.md.
+        trial_start_trigs = set(range(1, 81)) | {102}
 
         # Load expected trigger order for comparison (if subject provided).
         # This creates a single flattened expected sequence plus block index ranges.
@@ -261,8 +373,10 @@ def main() -> None:
         expected_seq_blocks = []
         block_ranges = []
         if args.subject is not None:
+            if run_id is None:
+                raise ValueError("Run number required to load expected triggers.")
             pattern = (
-                f"expected_triggers_sub{args.subject:02d}_run{args.run:02d}_block*.csv"
+                f"expected_triggers_sub{args.subject:02d}_run{run_id:02d}_block*.csv"
             )
 
             def load_block_seq(path: Path):
@@ -283,7 +397,8 @@ def main() -> None:
             expected_dirs = []
             if trigger_subject_dir is not None:
                 expected_dirs.append(trigger_subject_dir)
-            expected_dirs.append(trigger_base_dir)
+            if not use_subject_runs:
+                expected_dirs.append(trigger_base_dir)
 
             for expected_dir in expected_dirs:
                 block_entries = []
@@ -365,7 +480,11 @@ def main() -> None:
             elif prev > 0 and new > 0:
                 choice = resolve_overlap(prev, new, expected_idx)
                 if choice in ("prev", "both"):
-                    if active_val is not None and active_start is not None and int(prev) == active_val:
+                    if (
+                        active_val is not None
+                        and active_start is not None
+                        and int(prev) == active_val
+                    ):
                         start = active_start / sfreq
                         end = sample / sfreq
                         trig_val = int(prev)
@@ -398,7 +517,12 @@ def main() -> None:
 
         # Compute catch-trial summary stats (hits, misses, false alarms, etc.).
         def compute_catch_stats(records):
-            trial_start_trigs = set(range(1, 81)) | {102}
+            """
+            Compute catch-trial accuracy stats for one run.
+
+            Catch windows are 100 -> next trial start (1-80/102). Gaze breaks (150)
+            inside a catch window exclude that window and any responses within it.
+            """
             catch_trig = 100
             response_trig = 201
             gaze_break_trig = 150
@@ -540,24 +664,85 @@ def main() -> None:
 
             return combined_rows, matches, expected_indices
 
+        def compute_trial_columns(records, expected_idx_list):
+            """
+            Compute per-row trial counters for actual and expected sequences.
+
+            "trial" increments on detected trial starts (1-80/102) and skips
+            missing expected rows; "trial_exp" increments on expected trial
+            starts (including missing expected rows).
+            """
+            trial = 0
+            trial_exp = 0
+            trial_vals = []
+            trial_exp_vals = []
+            has_expected = bool(expected_seq)
+            for (trig, start, end, _), exp_idx in zip(records, expected_idx_list):
+                # Missing expected rows are represented by NaN start/end timestamps.
+                missing = (
+                    start is None
+                    or end is None
+                    or (isinstance(start, float) and math.isnan(start))
+                    or (isinstance(end, float) and math.isnan(end))
+                )
+                if trig in trial_start_trigs and not missing:
+                    trial += 1
+                trial_vals.append(trial)
+                if not has_expected:
+                    trial_exp_vals.append(None)
+                    continue
+                if exp_idx is not None and exp_idx < len(expected_seq):
+                    if expected_seq[exp_idx] in trial_start_trigs:
+                        # Count expected trial starts even when the row is missing.
+                        trial_exp += 1
+                trial_exp_vals.append(trial_exp)
+            return trial_vals, trial_exp_vals
+
         combined_rows, matches_primary, expected_idx_list = (
-            align_records(rows) if expected_seq else (rows, [float("nan")] * len(rows), [None] * len(rows))
+            align_records(rows)
+            if expected_seq
+            else (rows, [float("nan")] * len(rows), [None] * len(rows))
+        )
+        # Compute per-row trial counters for the CSV/table outputs.
+        trial_numbers, trial_exp_numbers = compute_trial_columns(
+            combined_rows, expected_idx_list
         )
         catch_stats = compute_catch_stats(rows)
 
-        # Helper: read a trigger list from a CSV (first column).
-        def load_trigger_list_from_csv(path: Path):
+        # Load triggers from existing CSVs to build extra match columns.
+        def load_trigger_list_from_csv(path: Path, run_id: int | None):
             trigs = []
             try:
-                with path.open() as f:
-                    next(f, None)
-                    for line in f:
-                        try:
-                            val = int(line.split(",")[0].strip())
-                        except ValueError:
+                with path.open(newline="") as f:
+                    reader = csv.DictReader(f)
+                    if not reader.fieldnames:
+                        return trigs
+                    fieldnames = [name.strip() for name in reader.fieldnames if name]
+                    field_map = {name.lower(): name for name in fieldnames}
+                    trig_key = field_map.get("trigger")
+                    run_key = field_map.get("run")
+                    start_key = field_map.get("start_s")
+                    end_key = field_map.get("end_s")
+                    if trig_key is None:
+                        return trigs
+
+                    for row in reader:
+                        # Skip rows from other runs when the CSV includes run labels.
+                        if run_id is not None and run_key is not None:
+                            run_val = _parse_csv_int(row.get(run_key, ""))
+                            if run_val is None or run_val != run_id:
+                                continue
+                        # Skip missing rows (NaN start/end) to avoid false matches.
+                        if start_key and end_key:
+                            start_val = _parse_csv_float(row.get(start_key, ""))
+                            end_val = _parse_csv_float(row.get(end_key, ""))
+                            if start_val is None or end_val is None:
+                                continue
+                        trig_val = _parse_csv_int(row.get(trig_key, ""))
+                        if trig_val is None:
                             continue
-                        if val in match_triggers:
-                            trigs.append(val)
+                        if trig_val in match_triggers:
+                            trigs.append(trig_val)
             except FileNotFoundError:
                 pass
             return trigs
@@ -584,122 +769,56 @@ def main() -> None:
 
         # Prepare match columns: primary detection + any additional files.
         match_columns = [("match", matches_primary)]
-        if args.trigger_csv is None:
-            if trigger_subject_dir is not None:
-                trigger_csv_paths = [
-                    trigger_subject_dir
-                    / f"actual_triggers_sub{args.subject:02d}.csv"
-                ]
-            else:
-                trigger_csv_paths = [
-                    Path("derivatives/triggers/actual_triggers_sub99.csv")
-                ]
-        else:
-            trigger_csv_paths = [p.expanduser() for p in args.trigger_csv]
-        extra_paths = trigger_csv_paths[1:]
-        for extra_path in extra_paths:
-            actual_trigs = load_trigger_list_from_csv(extra_path)
-            label = extra_path.stem
-            if "_" in label:
-                label = label.split("_")[-1]
+        extra_paths = _resolve_run_paths(extra_csv_paths, run_id, skip_first=False)
+        for extra_path, label in zip(extra_paths, extra_match_labels):
+            actual_trigs = load_trigger_list_from_csv(extra_path, run_id)
             match_columns.append((f"match {label}", compute_matches_for_rows(actual_trigs)))
 
-        # Decide output filenames:
-        # - default: one CSV (or per-block if expected triggers exist)
-        # - override: user-provided path
-        default_output = (
-            trigger_subject_dir / f"actual_triggers_sub{args.subject:02d}.csv"
-            if trigger_subject_dir is not None
-            else Path("derivatives/triggers/actual_triggers_sub99.csv")
-        )
-        use_auto_output = (
-            args.subject is not None
-            and trigger_csv_paths
-            and trigger_csv_paths[0] == default_output
-        )
-        if use_auto_output:
-            if expected_seq_blocks:
-                output_paths = {
-                    block_idx: trigger_subject_dir
-                    / (
-                        f"actual_triggers_sub{args.subject:02d}"
-                        f"_run{args.run:02d}_block{block_idx}.csv"
-                    )
-                    for block_idx, _ in expected_seq_blocks
-                }
-                split_by_block = True
-            else:
-                output_paths = {
-                    None: trigger_subject_dir
-                    / (
-                        f"actual_triggers_sub{args.subject:02d}"
-                        f"_run{args.run:02d}.csv"
-                    )
-                }
-                split_by_block = False
-        else:
-            output_paths = {None: trigger_csv_paths[0]}
-            split_by_block = False
-
-        # CSV header includes trigger timing plus one or more match columns.
-        header_cols = ["trigger", "start_s", "end_s", "allowed"] + [col for col, _ in match_columns]
-
-        # Write a subset of rows (by index) to a CSV with fixed formatting.
-        def write_trigger_csv(path: Path, row_indices):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("w", encoding="utf-8") as f:
-                f.write(",".join(header_cols) + "\n")
-                for row_idx in row_indices:
-                    trig, start, end, allowed = combined_rows[row_idx]
-                    start_str = (
-                        "NaN"
-                        if isinstance(start, float) and math.isnan(start)
-                        else f"{start:.6f}"
-                    )
-                    end_str = (
-                        "NaN"
-                        if isinstance(end, float) and math.isnan(end)
-                        else f"{end:.6f}"
-                    )
-                    match_vals = []
-                    for _, match_list in match_columns:
-                        val = match_list[row_idx]
-                        if isinstance(val, float) and math.isnan(val):
-                            match_vals.append("NaN")
-                        else:
-                            match_vals.append(str(val))
-                    f.write(
-                    f"{trig},{start_str},{end_str},{allowed}," + ",".join(match_vals) + "\n"
-                    )
-
-        # If expected blocks exist, write one CSV per block; otherwise, single output.
-        if split_by_block:
-            block_indices = [block_idx for block_idx, _ in expected_seq_blocks]
-            block_rows_map = {block_idx: [] for block_idx in block_indices}
-            current_block = block_indices[0] if block_indices else None
-
-            for row_idx, exp_idx in enumerate(expected_idx_list):
-                if exp_idx is not None:
-                    for block_idx, start_idx, end_idx in block_ranges:
-                        if start_idx <= exp_idx <= end_idx:
-                            current_block = block_idx
-                            break
-                if current_block is not None:
-                    block_rows_map[current_block].append(row_idx)
-
-            for block_idx in block_indices:
-                csv_path = output_paths[block_idx]
-                write_trigger_csv(csv_path, block_rows_map[block_idx])
-                print(f"Saved detected triggers CSV to {csv_path}")
-        else:
-            csv_path = output_paths[None]
-            write_trigger_csv(csv_path, range(len(combined_rows)))
-            print(f"Saved detected triggers CSV to {csv_path}")
+        # Assign block indices and append rows to the unified CSV accumulator.
+        block_by_row = _assign_blocks(expected_idx_list, block_ranges)
+        run_str = str(run_id) if run_id is not None else "NaN"
+        for row_idx, (trig, start, end, allowed) in enumerate(combined_rows):
+            block_val = block_by_row[row_idx]
+            block_str = str(block_val) if block_val is not None else "NaN"
+            trial_val = trial_numbers[row_idx]
+            trial_exp_val = trial_exp_numbers[row_idx]
+            trial_str = str(trial_val)
+            trial_exp_str = "NaN" if trial_exp_val is None else str(trial_exp_val)
+            start_str = (
+                "NaN"
+                if isinstance(start, float) and math.isnan(start)
+                else f"{start:.6f}"
+            )
+            end_str = (
+                "NaN"
+                if isinstance(end, float) and math.isnan(end)
+                else f"{end:.6f}"
+            )
+            match_vals = []
+            for _, match_list in match_columns:
+                val = match_list[row_idx]
+                if isinstance(val, float) and math.isnan(val):
+                    match_vals.append("NaN")
+                else:
+                    match_vals.append(str(val))
+            csv_rows.append(
+                [
+                    trial_str,
+                    trial_exp_str,
+                    run_str,
+                    block_str,
+                    str(trig),
+                    start_str,
+                    end_str,
+                    str(allowed),
+                ]
+                + match_vals
+            )
 
         # Build an HTML table with per-row status and match indicators.
-        def build_html_table(records, match_cols):
+        def build_html_table(records, match_cols, trial_vals, trial_exp_vals):
             header = (
-                "<tr><th>Trigger</th><th>Start (s)</th>"
+                "<tr><th>Trial</th><th>Trial_exp</th><th>Trigger</th><th>Start (s)</th>"
                 "<th>End (s)</th><th>Allowed (0/1)</th>"
             )
             for col_name, _ in match_cols:
@@ -716,10 +835,22 @@ def main() -> None:
 
             body_parts = []
             for row_idx, (trig, start, end, allowed) in enumerate(records):
-                start_str = "NaN" if isinstance(start, float) and math.isnan(start) else f"{start:.3f}"
-                end_str = "NaN" if isinstance(end, float) and math.isnan(end) else f"{end:.3f}"
+                trial_str = str(trial_vals[row_idx])
+                trial_exp_val = trial_exp_vals[row_idx]
+                trial_exp_str = "NaN" if trial_exp_val is None else str(trial_exp_val)
+                start_str = (
+                    "NaN"
+                    if isinstance(start, float) and math.isnan(start)
+                    else f"{start:.3f}"
+                )
+                end_str = (
+                    "NaN"
+                    if isinstance(end, float) and math.isnan(end)
+                    else f"{end:.3f}"
+                )
                 row_html = (
-                    f"<tr><td>{trig}</td><td>{start_str}</td>"
+                    f"<tr><td>{trial_str}</td><td>{trial_exp_str}</td><td>{trig}</td>"
+                    f"<td>{start_str}</td>"
                     f"<td>{end_str}</td>"
                     f"<td style='background:{'#c8f7c5' if allowed else '#f8c5c5'};"
                     f"text-align:center;'>{allowed}</td>"
@@ -828,31 +959,231 @@ def main() -> None:
         )
 
         html = (
-            build_html_table(combined_rows, match_columns)
+            build_html_table(
+                combined_rows, match_columns, trial_numbers, trial_exp_numbers
+            )
             + status_html
             + missing_summary_html
             + catch_summary_html
             if rows
             else f"<p>Events detected on {args.trigger_channel}, but no complete on/off pairs.</p>"
-            )
+        )
 
         report.add_html(
             html=html,
             title="Detected triggers",
-            section="Triggers",
+            section=triggers_section,
         )
         if catch_fig is not None:
             report.add_figure(
                 fig=catch_fig,
                 title="Catch accuracy summary",
-                section="Triggers",
+                section=triggers_section,
             )
     else:
         report.add_html(
             html=f"<p>No events detected on {args.trigger_channel}.</p>",
             title="Detected triggers",
-            section="Triggers",
+            section=triggers_section,
         )
+
+
+def main() -> None:
+    """Generate the HTML report and trigger CSV outputs."""
+    args = build_parser().parse_args()
+    trigger_base_dir = Path("derivatives/triggers")
+    trigger_subject_dir = (
+        trigger_base_dir / f"sub{args.subject:02d}" if args.subject is not None else None
+    )
+    # Resolve unified CSV output and any extra CSVs used for match columns.
+    default_trigger_csv = (
+        trigger_subject_dir / f"actual_triggers_sub{args.subject:02d}.csv"
+        if trigger_subject_dir is not None and args.subject is not None
+        else Path("derivatives/triggers/actual_triggers_sub99.csv")
+    )
+    if args.trigger_csv is None:
+        output_csv_path = default_trigger_csv
+        extra_csv_paths = []
+    else:
+        output_csv_path = args.trigger_csv[0].expanduser()
+        extra_csv_paths = [p.expanduser() for p in args.trigger_csv[1:]]
+    extra_match_labels = [_format_match_label(path) for path in extra_csv_paths]
+    # Include trial counters first so CSVs align with the report table order.
+    csv_header = (
+        [
+            "trial",
+            "trial_exp",
+            "run",
+            "block",
+            "trigger",
+            "start_s",
+            "end_s",
+            "allowed",
+            "match",
+        ]
+        + [f"match {label}" for label in extra_match_labels]
+    )
+    csv_rows: list[list[str]] = []
+
+    # Resolve which runs to process and validate expected trigger coverage.
+    default_fif = Path("data/dRSA_Att_test00.fif")
+    fif_path = args.fif.expanduser()
+    use_subject_runs = args.subject is not None and fif_path == default_fif
+    if use_subject_runs:
+        run_entries = _discover_subject_runs(args.subject)
+        if trigger_subject_dir is None or not trigger_subject_dir.exists():
+            raise FileNotFoundError(
+                f"Expected trigger directory not found: {trigger_subject_dir}"
+            )
+        _validate_expected_triggers(args.subject, run_entries, trigger_subject_dir)
+    else:
+        if not fif_path.exists():
+            raise FileNotFoundError(f"FIF file not found: {fif_path}")
+        run_id = _parse_run_id_from_name(fif_path)
+        if run_id is None and args.subject is not None:
+            run_id = args.run
+        run_entries = [(run_id, fif_path)]
+
+    # Choose a default output path that matches single-run or multi-run usage.
+    if args.out is None:
+        if args.subject is not None:
+            if use_subject_runs:
+                out_path = (
+                    Path("reports")
+                    / f"sub{args.subject:02d}"
+                    / f"sub{args.subject:02d}_report.html"
+                )
+            else:
+                run_id = run_entries[0][0] if run_entries else args.run
+                out_path = (
+                    Path("reports")
+                    / f"sub{args.subject:02d}"
+                    / f"sub{args.subject:02d}_run{run_id:02d}_report.html"
+                )
+        else:
+            out_path = Path("reports/dRSA_Att_test00_report.html")
+    else:
+        out_path = args.out.expanduser()
+
+    if args.trigger_start >= args.trigger_stop:
+        raise ValueError("trigger-start must be less than trigger-stop.")
+
+    # Initialize the report once, then append per-run sections.
+    report_title = (
+        f"Raw overview: sub{args.subject:02d} ({len(run_entries)} runs)"
+        if use_subject_runs
+        else f"Raw overview: {run_entries[0][1].name}"
+    )
+    report = mne.Report(title=report_title)
+
+    browse_raw_target = None
+
+    for run_id, fif_path in run_entries:
+        # Load the raw data for this run; preloading is optional.
+        raw = mne.io.read_raw_fif(fif_path, preload=args.preload)
+        if browse_raw_target is None:
+            browse_raw_target = (raw, fif_path)
+
+        # Build per-run titles/sections so multi-run reports stay readable.
+        run_label = f"Run {run_id:02d}" if run_id is not None else "Recording"
+        title_suffix = f" ({run_label})" if use_subject_runs else ""
+        sensors_section = run_label if use_subject_runs else "Sensors"
+        triggers_section = run_label if use_subject_runs else "Triggers"
+
+        # Start with raw data + PSD overview for this run.
+        report.add_raw(
+            raw=raw,
+            title=f"Raw data{title_suffix}",
+            psd=True,
+            butterfly=False,
+        )
+
+        # Add a sensor layout snapshot for quick channel topology checks.
+        fig_sensors = raw.plot_sensors(kind="topomap", show=False)
+        report.add_figure(
+            fig=fig_sensors,
+            title=f"Sensor layout{title_suffix}",
+            section=sensors_section,
+        )
+
+        if args.trigger_channel not in raw.ch_names:
+            raise ValueError(
+                f"Channel {args.trigger_channel!r} not found in data. "
+                f"Available channels: {', '.join(raw.ch_names)}"
+            )
+        # Snapshot of the trigger/stim channel over a specified window.
+        # Clamp the window to the available time span to avoid out-of-range indexing.
+        first_time = float(raw.times[0])
+        last_time = float(raw.times[-1])
+        req_start = max(args.trigger_start, first_time)
+        req_stop = min(args.trigger_stop, last_time)
+        if req_start >= req_stop:
+            raise ValueError(
+                f"Requested trigger window ({args.trigger_start}-{args.trigger_stop}s) "
+                f"is outside data range ({first_time:.3f}-{last_time:.3f}s)."
+            )
+        # time_as_index returns absolute samples (incl. first_samp) on older MNE.
+        # Convert to relative indices for get_data(start/stop).
+        start_idx, stop_idx = raw.time_as_index([req_start, req_stop])
+        start_idx -= raw.first_samp
+        stop_idx -= raw.first_samp
+        if start_idx < 0 or stop_idx <= start_idx:
+            raise ValueError(
+                f"Computed trigger window indices invalid: start={start_idx}, stop={stop_idx}"
+            )
+        # Use the raw samples directly (do not drop annotated segments) so times
+        # stay aligned with detected events.
+        trig_data = raw.get_data(
+            picks=[args.trigger_channel],
+            start=start_idx,
+            stop=stop_idx,
+            reject_by_annotation="omit",  # match find_events behaviour
+        )[0]
+        # Build the time axis directly from sample indices so it matches the
+        # event detector (which also operates on sample indices).
+        # Event times from mne.find_events are based on absolute sample numbers,
+        # i.e., they include raw.first_samp. Mirror that here so the plot aligns.
+        times = (np.arange(start_idx, stop_idx) + raw.first_samp) / raw.info["sfreq"]
+        fig_trig, ax = plt.subplots(figsize=(10, 3))
+        ax.step(times, trig_data, where="post", linewidth=1)
+        # Y ticks every 5 units for clearer trigger levels.
+        ymin, ymax = ax.get_ylim()
+        ax.set_yticks(np.arange(0, max(5, ymax + 1), 5))
+        ax.set(
+            xlim=(args.trigger_start, args.trigger_stop),
+            xlabel="Time (s)",
+            ylabel="Amplitude",
+            title=(
+                f"{args.trigger_channel} from {args.trigger_start:.1f}s "
+                f"to {args.trigger_stop:.1f}s{title_suffix}"
+            ),
+        )
+        ax.grid(True, alpha=0.3)
+        fig_trig.tight_layout()
+        report.add_figure(
+            fig=fig_trig,
+            title=f"Trigger channel ({args.trigger_channel}){title_suffix}",
+            section=triggers_section,
+        )
+
+        # Detect triggers, append unified CSV rows, and add summary tables/plots.
+        _process_trigger_events(
+            args=args,
+            raw=raw,
+            report=report,
+            run_id=run_id,
+            trigger_base_dir=trigger_base_dir,
+            trigger_subject_dir=trigger_subject_dir,
+            use_subject_runs=use_subject_runs,
+            triggers_section=triggers_section,
+            csv_rows=csv_rows,
+            extra_csv_paths=extra_csv_paths,
+            extra_match_labels=extra_match_labels,
+        )
+
+    # Write the unified CSV, then save the report.
+    _write_unified_csv(output_csv_path, csv_header, csv_rows)
+    print(f"Saved detected triggers CSV to {output_csv_path}")
 
     # Write the report and optionally open a browser / interactive raw viewer.
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -860,15 +1191,21 @@ def main() -> None:
     print(f"Saved report to {out_path}")
     if args.open_browser:
         print("Report opened in your default browser.")
-    if args.browse_raw:
-        print("Launching interactive Raw.plot() browser...")
-        raw.plot(
+    if args.browse_raw and browse_raw_target is not None:
+        if use_subject_runs and len(run_entries) > 1:
+            print(
+                "Launching Raw.plot() for the first run only; use --fif to inspect others."
+            )
+        else:
+            print("Launching interactive Raw.plot() browser...")
+        browse_raw, browse_path = browse_raw_target
+        browse_raw.plot(
             duration=args.duration,
             n_channels=args.n_channels,
             start=args.start,
             scalings="auto",
             block=True,
-            title=f"Raw browser: {fif_path.name}",
+            title=f"Raw browser: {browse_path.name}",
         )
 
 

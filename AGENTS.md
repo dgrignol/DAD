@@ -1,9 +1,8 @@
 # AGENTS.md
 
 ## Documentation and Commenting Requirements
-
-- When adding or modifying code, include section-level comments that explain
-  the purpose of each major block and how data flows through it.
+- Add extensive documentation at the start of every script with example of usage.
+- When adding or modifying code, include section-level comments that explain the purpose of each major block and how data flows through it.
 - Add concise inline comments for non-obvious logic, edge cases, or
   experiment-specific assumptions; avoid redundant "what" comments.
 - Keep comments consistent with the existing file style and use ASCII unless

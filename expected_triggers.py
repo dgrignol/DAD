@@ -2,12 +2,31 @@
 """
 Compute the expected trigger timeline for MoveDot1.
 
-For a given subject/run, this script follows the same ordering logic as
-`MoveDot1_experiment_vX.m` and emits two columns per block:
-    trigger,time_s
+This script reconstructs the deterministic, experiment-controlled trigger
+sequence for each trial/block using the same ordering and timing rules as
+`experiment/MoveDot1_experiment_vX.m` and the trigger IDs documented in
+`experiment/trigger_codes.md`. It does not include subject-driven events
+(responses, gaze breaks, replays) and ignores any replay/abort delays.
 
-Subject-driven triggers (e.g., responses, gaze breaks, replays) are NOT included.
-Timing ignores any extra delays caused by gaze-based replays/aborts.
+Inputs
+- experiment/input_files/MovDot_SubXX.mat (stimulus sequences + fps)
+- experiment/input_files/SubXX_TrialStruct.mat (BlockOrder, TrialOrder, TrialStruct)
+
+Outputs
+- One CSV per block with columns: trigger,time_s
+- Files are written under derivatives/triggers/subXX by default
+
+Run selection
+- If --run is provided, generate only that run.
+- If --run is omitted, generate all runs available in TrialStruct.
+  Each run reuses the same RNG seed as a standalone invocation so outputs
+  match per-run calls.
+
+Usage examples
+  python expected_triggers.py --subject 4 --run 1
+  python expected_triggers.py --subject 4
+  python expected_triggers.py --subject 4 --seed 123
+  python expected_triggers.py --subject 4 --input-dir /path/to/input_files
 """
 from __future__ import annotations
 
@@ -61,7 +80,8 @@ def block_events(
         i_seq = int(cond_shuffled[2, trial_idx])  # original iSeq (1-based)
         ts = trial_struct[i_seq - 1]  # trial info for this sequence
 
-        # Trial-level trigger for first frame, following the experiment's mapping:
+        # Trial-level trigger for first frame, following the experiment's mapping
+        # in experiment/trigger_codes.md and MoveDot1_experiment_vX.m:
         # - Non-catch trials use sequence + condition/block offsets.
         # - Catch trials always use 102.
         num_catch = np.atleast_1d(ts.Start).size
@@ -109,7 +129,21 @@ def write_csv(path: Path, events: Iterable[Tuple[float, int]]) -> None:
             writer.writerow([trigger, f"{time_s:.6f}"])
 
 
+def resolve_runs(run_arg: int | None, trial_struct: np.ndarray) -> List[int]:
+    """
+    Return 1-based run numbers to generate.
+
+    If run_arg is None, all runs in TrialStruct are returned.
+    """
+    trial_struct_arr = np.atleast_1d(trial_struct)
+    num_runs = trial_struct_arr.size
+    if run_arg is None:
+        return list(range(1, num_runs + 1))
+    return [run_arg]
+
+
 def main() -> None:
+    # Parse CLI arguments to determine subject, run selection, and I/O roots.
     parser = argparse.ArgumentParser(
         description="Construct expected trigger timeline for MoveDot1."
     )
@@ -117,7 +151,14 @@ def main() -> None:
         "--subject", "-s", type=int, default=99, help="Subject number (e.g., 99)."
     )
     parser.add_argument(
-        "--run", "-r", type=int, default=1, help="Run number (1-based, default 1)."
+        "--run",
+        "-r",
+        type=int,
+        default=None,
+        help=(
+            "Run number (1-based). If omitted, generate all runs "
+            "available for the subject."
+        ),
     )
     parser.add_argument(
         "--seed",
@@ -142,57 +183,63 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Resolve output location for subject-specific CSVs.
     output_dir = args.output_dir
     if output_dir is None:
         output_dir = Path("derivatives/triggers") / f"sub{args.subject:02d}"
 
     # Resolve file paths and load stimulus + trial-structure MATLAB files.
-    run_idx = args.run - 1  # convert to 0-based
-
     stim_path = args.input_dir / f"MovDot_Sub{args.subject:02d}.mat"
     trial_path = args.input_dir / f"Sub{args.subject:02d}_TrialStruct.mat"
 
     stim_mat = loadmat(stim_path, squeeze_me=True, struct_as_record=False)
     trial_mat = loadmat(trial_path, squeeze_me=True, struct_as_record=False)
 
+    # Extract core timing/ordering inputs shared across runs.
     cfg = stim_mat["Cfg"]
     xy_seqs = stim_mat["xySeqs"]
     fps = int(cfg.fps)
     n_frames = xy_seqs.flat[0].xy.shape[0]
 
-    # Trial structure arrays follow the MATLAB layout for this subject/run.
+    # Trial structure arrays follow the MATLAB layout for this subject.
     block_order = trial_mat["BlockOrder"]
     trial_order = trial_mat["TrialOrder"]
-    trial_struct = trial_mat["TrialStruct"][run_idx]
+    trial_struct_all = trial_mat["TrialStruct"]
 
     # Match experiment ITI randomness: default seed is subject ID.
     seed_value = args.seed if args.seed is not None else args.subject
-    rng = np.random.default_rng(seed_value)
     cond_matrix = build_cond_matrix(xy_seqs)
+    runs = resolve_runs(args.run, trial_struct_all)
 
-    # Emit a CSV per block (BlockOrder controls which dot is attended).
+    # Emit a CSV per block, per run (BlockOrder controls which dot is attended).
     num_blocks = block_order.shape[1]
-    for block_idx in range(num_blocks):
-        block_cond = int(block_order[run_idx, block_idx])
-        block_events_list = block_events(
-            block_cond,
-            trial_order[block_idx, :, run_idx],
-            cond_matrix,
-            trial_struct,
-            fps,
-            n_frames,
-            rng,
-        )
+    for run in runs:
+        run_idx = run - 1  # convert to 0-based
+        trial_struct = np.atleast_1d(trial_struct_all)[run_idx]
+        # Re-seed per run so outputs match standalone per-run invocations.
+        rng = np.random.default_rng(seed_value)
 
-        out_path = output_dir / (
-            f"expected_triggers_sub{args.subject:02d}"
-            f"_run{args.run:02d}_block{block_idx + 1}.csv"
-        )
-        write_csv(out_path, block_events_list)
-        print(
-            f"Wrote {len(block_events_list)} events for block {block_idx + 1} "
-            f"({out_path})"
-        )
+        for block_idx in range(num_blocks):
+            block_cond = int(block_order[run_idx, block_idx])
+            block_events_list = block_events(
+                block_cond,
+                trial_order[block_idx, :, run_idx],
+                cond_matrix,
+                trial_struct,
+                fps,
+                n_frames,
+                rng,
+            )
+
+            out_path = output_dir / (
+                f"expected_triggers_sub{args.subject:02d}"
+                f"_run{run:02d}_block{block_idx + 1}.csv"
+            )
+            write_csv(out_path, block_events_list)
+            print(
+                f"Wrote {len(block_events_list)} events for run {run} "
+                f"block {block_idx + 1} ({out_path})"
+            )
 
 
 if __name__ == "__main__":
