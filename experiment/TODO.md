@@ -1,9 +1,7 @@
-Questions:
-- [x] Try experiment practice. Some trials seems not to register the response. Issue of timing? If you respond too close to the end of the trial it does not collect the response? It feels to much now. Or is it designed on puprpouse like this to increase difficulty (i.e. to push RTs?) -> by design the end of the trial does not collect response (0.2 sec)
-- [X] Implement new logic for detecting drifts or saccades away from the fixation cross, stop the current trial and repeat that or append it to a list of trials to re-run at the end of the block. (Second solution better but more difficult?). Implement a switch off for this.
+
+- [ ] check changes to constrains worked: new constrain that checks the non-deviant paths in deviant trials would not have touched the boudaries
 - [ ] scale the jitter with the distance from the center? (Bence suggestion)
 - [ ] Catch trials behavioural testing
-- [X] feedback for false positive quando dice che  c'è ma non c'è
 - [ ] try to find if eye-tracer detects blinks automatically or not and adjust code so that it is less demanding on the participant
 - [ ] non avere anticorrelation della posizione dei dots.
 
@@ -19,8 +17,12 @@ data/sub04/MEG/sub04_run01.fif"
 - [ ] Create script for fixing the issue with triggers seen in the simulation with 99: a few expected triggers were sent just after an unexpected one that impeded the mne.find_events function to correctly parse the trigger.
 - [ ] Check triggers of the real run. For sure there will be a problem with the currect script that does not take into account possibility of replays (so 150 instead of 81 to end a trial and then other unexpected trials at the end). Use the 150 and 151 for adjusting expectations and create a report section of replayed trials with some visualization and summary stats (number of replays, when in the experiment timeline, how many replays per gaze break angle setting)
 
-
+DONE
 FROM DAVIDE:
 
 - [x] 1440 screen size (width). Metti bande nere per renderlo 1440 da 1960.
 - [x] 1/conf.refrets
+
+- [x] Try experiment practice. Some trials seems not to register the response. Issue of timing? If you respond too close to the end of the trial it does not collect the response? It feels to much now. Or is it designed on puprpouse like this to increase difficulty (i.e. to push RTs?) -> by design the end of the trial does not collect response (0.2 sec)
+- [X] Implement new logic for detecting drifts or saccades away from the fixation cross, stop the current trial and repeat that or append it to a list of trials to re-run at the end of the block. (Second solution better but more difficult?). Implement a switch off for this.
+- [X] feedback for false positive quando dice che  c'è ma non c'è

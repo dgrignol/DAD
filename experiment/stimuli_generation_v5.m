@@ -1,6 +1,31 @@
-%% Stimuli Generation  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%  Ayman Hatoum
+%% Stimuli Generation
+% Script: stimuli_generation_v5.m
+% Author: Ayman Hatoum
 %
+% Purpose:
+%   Generate dot-motion stimuli trajectories across conditions, render them
+%   for preview, and save the resulting xy sequences for later use.
+%
+% Example usage (from repo root in MATLAB):
+%   addpath('experiment');
+%   stimuli_generation_v5;
+%   % Follow the dialog prompts for viewing distance and subject ID.
+%
+% Inputs:
+%   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
+%   - Utils helper class on MATLAB path.
+%   - Dialog values for viewing distance and subject ID.
+%
+% Outputs:
+%   - Saves xySeqs and Cfg to Config.inputDirectory using Config.stimuliFileName.
+%
+% Key assumptions:
+%   - Coordinates are in visual degrees relative to screen center.
+%   - Paths are regenerated when dots leave bounds or violate min distance.
+%   - Deviant direction changes affect only the real path; a baseline
+%     (no-deviant) path is propagated across frames and used only for
+%     boundary validation.
+%   - Psychtoolbox is available for window setup and preview drawing.
 
 addpath('lib/');
 
@@ -119,6 +144,8 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
 
             %get a random start angle of direction for both dots
             directionAngle = [Utils.RandAngleDegree(), Utils.RandAngleDegree()];
+            directionAngleNoDev = directionAngle; %baseline angle for the no-deviant path
+            dummyFrameDotXY = []; %baseline positions propagated across frames for boundary checks
 
             pathIndex = 1;
             % for pathIndex = 1:numPaths
@@ -138,6 +165,8 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
                     frameDotXY = dotRectCenterDegrees + Utils.ComputeOffsetCoordinates(Config.focusAroundCenterFactor, Config.dotRectSize);
                     %add another starting point for the second dot
                     frameDotXY = [frameDotXY dotRectCenterDegrees + Utils.ComputeOffsetCoordinates(Config.focusAroundCenterFactor, Config.dotRectSize)];
+                    %baseline path restarts from the same starting point
+                    dummyFrameDotXY = frameDotXY;
                 else
                     %if paths should be connected, take the previous
                     %coordinates (ie the last frame)
@@ -220,28 +249,44 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
                             end
                         end
 
+                        % Update real vs baseline angles, then compute candidate positions.
+                        % Data flow: angles -> direction vectors -> nextDotXY/dummyDotXY.
+                        directionAngleChangeNoDev = directionAngleChange;
+                        if Config.stimulusType == Utils.likelihood && dirVar ~= 0
+                            directionAngleChangeNoDev = 0; %baseline represents the no-deviant path
+                        end
                         directionAngle = directionAngle + curvynessFactor + directionAngleChange; %in their code it is written that this is not necessary here
+                        directionAngleNoDev = directionAngleNoDev + curvynessFactor + directionAngleChangeNoDev;
 
                         directionVector = Utils.GetDirectionVector(directionAngle, length(directionAngle));
                         nextDotXY = allPathsFrameDotXY(frameCount-1,:) + directionVector*Config.dotSpeedDegPerFrame;
                         
+                        dummyDirectionVector = Utils.GetDirectionVector(directionAngleNoDev, length(directionAngleNoDev));
+                        dummyDotXY = dummyFrameDotXY + dummyDirectionVector*Config.dotSpeedDegPerFrame;
+                        
                         %check if any of the dots hits the boundaries, and
                         %flag for repeating path if so
-                        if nextDotXY(1) < round(Config.dotWidth/2, 6) || nextDotXY(3) < round(Config.dotWidth/2, 6)
+                        if nextDotXY(1) < round(Config.dotWidth/2, 6) || nextDotXY(3) < round(Config.dotWidth/2, 6) || ...
+                            dummyDotXY(1) < round(Config.dotWidth/2, 6) || dummyDotXY(3) < round(Config.dotWidth/2, 6)
                             disp("left side hit, repeating path...");
                             outOfBoxPath = 1;
                             break;
-                        elseif nextDotXY(2) < round(Config.dotWidth/2, 6) || nextDotXY(4) < round(Config.dotWidth/2, 6)
+                        elseif nextDotXY(2) < round(Config.dotWidth/2, 6) || nextDotXY(4) < round(Config.dotWidth/2, 6) || ...
+                                dummyDotXY(2) < round(Config.dotWidth/2, 6) || dummyDotXY(4) < round(Config.dotWidth/2, 6)
                             disp("top side hit, repeating path...");
                             outOfBoxPath = 1;
                             break;
                         elseif nextDotXY(1) > Config.dotRectSize(1) - round(Config.dotWidth/2, 6) ...
-                                || nextDotXY(3) > Config.dotRectSize(1) - round(Config.dotWidth/2, 6)
+                                || nextDotXY(3) > Config.dotRectSize(1) - round(Config.dotWidth/2, 6) ...
+                                || dummyDotXY(1) > Config.dotRectSize(1) - round(Config.dotWidth/2, 6) ...
+                                || dummyDotXY(3) > Config.dotRectSize(1) - round(Config.dotWidth/2, 6)
                             disp("right side hit, repeating path...");
                             outOfBoxPath = 1;
                             break;
                         elseif nextDotXY(2) > Config.dotRectSize(2) - round(Config.dotWidth/2, 6) ...
-                                || nextDotXY(4) > Config.dotRectSize(2) - round(Config.dotWidth/2, 6)
+                                || nextDotXY(4) > Config.dotRectSize(2) - round(Config.dotWidth/2, 6) ...
+                                || dummyDotXY(2) > Config.dotRectSize(2) - round(Config.dotWidth/2, 6) ...
+                                || dummyDotXY(4) > Config.dotRectSize(2) - round(Config.dotWidth/2, 6)
                             disp("bottom side hit, repeating path...");
                             outOfBoxPath = 1;
                             break;
@@ -256,6 +301,7 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
                         end
 
                         allPathsFrameDotXY(frameCount,:) = nextDotXY;
+                        dummyFrameDotXY = dummyDotXY; %advance baseline position after successful frame
                         allPathsDirectionAngle(frameCount, :) = directionAngle;
                         allPathsCurvyness(frameCount, :) = curvynessFactor;
 
