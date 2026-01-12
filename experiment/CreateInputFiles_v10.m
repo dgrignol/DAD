@@ -1,5 +1,26 @@
+% CreateInputFiles_v10.m
+% Purpose:
+%   Generate catch-trial timing and simulated dot paths used by
+%   MoveDot1_experiment_vX.m, including jittered paths for occlusion catches.
+% Usage example:
+%   % Ensure input_files/MovDot_SubXX.mat exists (from stimuli_generation_v5.m).
+%   % Then run in MATLAB and follow prompts:
+%   %   >> CreateInputFiles_v10
+% Inputs:
+%   - input_files/MovDot_SubXX.mat with Dat.xySeqs and Dat.Cfg
+% Outputs:
+%   - input_files/SubXX_TrialStruct.mat or input_files/Practice_*.mat
+% Key assumptions:
+%   - XY coordinates are in dot-rect degrees (0..Dat.Cfg.rectSize).
+%   - Catch.Type: 1 = fixation, 2 = occlusion (jittered path window).
+%   - Congruent occlusion jitter uses distance-based scaling (optional) and is
+%     applied perpendicular to the local path tangent (AngleDirection):
+%       jitter = Catch.JitterSlope * distance_from_center
+%     Catch.JitterScaling supports 'off', 'linear', 'log', or 'exp' modes.
+%     If Catch.JitterScaling == 'off', jitter uses Catch.JitterBase only.
+%   - Catch paths are regenerated if jittered positions hit dot-rect boundaries.
 
-%Creates Catch Trial File that is used in other Matlab Script.
+% Creates Catch Trial File that is used in other Matlab Script.
 % Here we specify the Parameters of the Catch Trials
 
 clear all;
@@ -37,6 +58,12 @@ if ~exist(savedir, 'dir')
 end
 
 Dat = load (fullfile(savedir, Filename));
+
+% Precompute dot-rect center in degrees for jitter scaling.
+% Data flow: Dat.Cfg.rectSize -> rectCenter -> jitter scaling in catch paths.
+rectCenter = Dat.Cfg.rectSize ./ 2;
+maxDist = hypot(rectCenter(1), rectCenter(2)); %for log/exp normalization
+maxDist = max(maxDist, eps); %avoid division by zero
 
 %% Settings
 nRuns = 10;
@@ -77,6 +104,10 @@ Catch.OcclTotalDuration = Catch.OcclDuration + Catch.OcclVideoDuration + Catch.O
 Catch.CatchRatioOcc = 1-Catch.CatchRatioFix;
 Catch.OcclDeviance  = 0.5; %Temporal Deviance in s in Time task
 Catch.OcclDistance = round((Dat.Cfg.dpf*Catch.OcclDuration*Dat.Cfg.fps*1));  %Spacial Distance in Visual Angle in Space Task %
+% Catch jitter settings (linear scaling in deg per deg of distance).
+Catch.JitterSlope = 0.02;
+Catch.JitterBase = 0.02; %minimum jitter amplitude in degrees
+Catch.JitterScaling = 'linear'; %'off', 'linear', 'log', or 'exp' ('on' alias for linear)
 
 Catch.CatchDuration = [Catch.FixTotalDuration, Catch.OcclTotalDuration]; %1 Fixation, 2 Occlusion
 
@@ -529,18 +560,47 @@ for iSeq = 1:nSeq
 
                 else
 
-
+                    % Congruent occlusion catch: build a jittered path from the
+                    % baseline trajectory. Data flow: XYAll -> distance to
+                    % rectCenter -> scaled jitter -> boundary check -> SimulatedPath.
                     xyReplace = [];
                     jj = 0;
 
-                    yTweak = 0.04;
+                    jitterSign = 1; %alternate jitter direction each frame
                     for iMov = (StartCatch):(StartCatch+(Catch.OcclDuration)* Dat.Cfg.fps)
                         jj = jj+1;
 
-                        yTweak = -yTweak;
+                        jitterSign = -jitterSign;
 
                         originalCoords = XYAll(iSeq).xy(iMov, :);
-                        xyReplace(jj,:) = originalCoords + [0 yTweak 0 yTweak];
+                        dot1Dist = hypot(originalCoords(1) - rectCenter(1), originalCoords(2) - rectCenter(2));
+                        dot2Dist = hypot(originalCoords(3) - rectCenter(1), originalCoords(4) - rectCenter(2));
+                        % JITTER SCALING (optional): select constant vs distance-scaled amplitude.
+                        % Log/exp use normalized distance to keep magnitudes stable.
+                        scaleMode = lower(Catch.JitterScaling);
+                        if strcmp(scaleMode, 'off')
+                            jitterAmp1 = jitterSign * Catch.JitterBase;
+                            jitterAmp2 = jitterSign * Catch.JitterBase;
+                        elseif strcmp(scaleMode, 'log')
+                            normDist1 = dot1Dist / maxDist;
+                            normDist2 = dot2Dist / maxDist;
+                            jitterAmp1 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * log(1 + normDist1));
+                            jitterAmp2 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * log(1 + normDist2));
+                        elseif strcmp(scaleMode, 'exp')
+                            normDist1 = dot1Dist / maxDist;
+                            normDist2 = dot2Dist / maxDist;
+                            jitterAmp1 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * (exp(normDist1) - 1));
+                            jitterAmp2 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * (exp(normDist2) - 1));
+                        else
+                            % Default to linear scaling (also handles 'on').
+                            jitterAmp1 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * dot1Dist);
+                            jitterAmp2 = jitterSign * (Catch.JitterBase + Catch.JitterSlope * dot2Dist);
+                        end
+
+                        % Apply jitter perpendicular to the local tangent for each dot.
+                        perpAngles = XYAll(iSeq).AngleDirection(iMov, :) + 90;
+                        perpVec = Utils.GetDirectionVector(perpAngles, length(perpAngles));
+                        xyReplace(jj,:) = originalCoords + [perpVec(1:2) * jitterAmp1, perpVec(3:4) * jitterAmp2];
 
 
                         ValidNextPositions = xyReplace(jj,1:2:3) >=  round(Dat.Cfg.dot_w/2,6) &  ...

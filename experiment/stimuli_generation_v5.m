@@ -22,6 +22,8 @@
 % Key assumptions:
 %   - Coordinates are in visual degrees relative to screen center.
 %   - Paths are regenerated when dots leave bounds or violate min distance.
+%   - Curvyness valence can be randomized per dot per path when enabled in
+%     Config, and each dot carries its own signed factor.
 %   - Deviant direction changes affect only the real path; a baseline
 %     (no-deviant) path is propagated across frames and used only for
 %     boundary validation.
@@ -151,9 +153,11 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
             % for pathIndex = 1:numPaths
             while pathIndex <= numPaths
                 
-                %compute the curvyness factor for each path, check the
-                %function definition for details
-                curvynessFactor = curvynessFactor*Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand);
+                %Per-path per-dot curvyness update; data flow: prior per-dot
+                %factor -> random valence/magnitude -> signed per-dot factor.
+                curvynessFactor = [ ...
+                    curvynessFactor(1) * Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand), ...
+                    curvynessFactor(2) * Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand)];
 
                 %get the coordinates of the start point of the path
                 if ~Config.isConnectedPaths || pathIndex == 1

@@ -177,7 +177,7 @@ RestrictKeysForKbCheck([Key.escapeKey Key.spaceKey Key.LeftKey Key.RightKey Key.
 %PsychDefaultSetup(2);
 % if Conf.MEG
 %     win = Screen('OpenWindow',1);
-% end                                 
+% end
 Screen('Preference', 'SkipSyncTests', 1);%do screen sync + size tests
 
 % For real experiment hide cursor
