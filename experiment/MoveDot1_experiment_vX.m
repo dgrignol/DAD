@@ -49,7 +49,7 @@ Conf.trackeye = 0;
 Conf.IgnoreEyeTracker = 0; % disable EyeLink I/O and gaze-break logic (150/151)
 Conf.FakeEyeTracker = 0; % simulate gaze to exercise 150/151 without hardware
 Conf.fakeGazeBreakRate = 0.05; % per-trial probability of a simulated break (random onset)
-Conf.practice = 1;
+Conf.practice = 1;       
 Conf.debug = 0;                   
 Conf.testingMode = 0; %set to 1 to run a shortened block for quick tests
 Conf.testingModeTrialNum = 8; %number of trials per block when testingMode is on
@@ -1163,6 +1163,9 @@ while iTrial <= numel(trialSchedule)
     %time = GetSecs
     while iframe <= length(currentStim)
         framecounter = framecounter + 1;
+        % Frame-level sync gating for MEG: only sync when triggers are queued.
+        % Data flow: trigger scheduling -> needsVideoSync -> RegWrVideoSync.
+        needsVideoSync = false;
         
         response = -1;
         if Conf.MEG
@@ -1197,6 +1200,7 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 0, 1000, 2);		% No need for programmatic delay here, no wait for projector to fire trigger as we want the response exactly when it happens
                     Datapixx('StartDoutSchedule');
+                    needsVideoSync = true;
                     Datapixx('RegWr');
                     if Conf.debug
                         debugTriggerLog(end+1) = triggerPulse(1);
@@ -1262,6 +1266,7 @@ while iTrial <= numel(trialSchedule)
                             Datapixx('WriteDoutBuffer', triggerPulse);
                             Datapixx('SetDoutSchedule', 0, 1000, 2);
                             Datapixx('StartDoutSchedule');
+                            needsVideoSync = true;
                             Datapixx('RegWr');
                             if Conf.debug
                                 debugTriggerLog(end+1) = triggerPulse(1);
@@ -1327,6 +1332,7 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx because the actual flip in the projector happens after the entire screen has been drawn by the GPU)
                     Datapixx('StartDoutSchedule');
+                    needsVideoSync = true;
                     if Conf.debug
                         debugTriggerLog(end+1) = triggerPulse(1);
                         fprintf('Trigger: %d\n', triggerPulse(1));
@@ -1530,6 +1536,7 @@ while iTrial <= numel(trialSchedule)
                                 Datapixx('WriteDoutBuffer', triggerPulse);
                                 Datapixx('SetDoutSchedule', 0, 1000, 2);		% No need for programmatic delay here, no wait for projector to fire trigger
                                 Datapixx('StartDoutSchedule');
+                                needsVideoSync = true;
                                 if Conf.debug
                                     debugTriggerLog(end+1) = triggerPulse(1);
                                     fprintf('Trigger: %d\n', triggerPulse(1));
@@ -1586,6 +1593,7 @@ while iTrial <= numel(trialSchedule)
                         Datapixx('WriteDoutBuffer', triggerPulse);
                         Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                         Datapixx('StartDoutSchedule');
+                        needsVideoSync = true;
                         if Conf.debug
                             debugTriggerLog(end+1) = triggerPulse(1);
                             fprintf('Trigger: %d\n', triggerPulse(1));
@@ -2040,6 +2048,7 @@ while iTrial <= numel(trialSchedule)
                         Datapixx('WriteDoutBuffer', triggerPulse);
                         Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                         Datapixx('StartDoutSchedule');
+                        needsVideoSync = true;
                         if Conf.debug
                             debugTriggerLog(end+1) = triggerPulse(1);
                             fprintf('Trigger: %d\n', triggerPulse(1));
@@ -2109,6 +2118,7 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx) %$$ change trigger to video_nr
                     Datapixx('StartDoutSchedule');
+                    needsVideoSync = true;
                     if Conf.debug
                         debugTriggerLog(end+1) = triggerPulse(1);
                         fprintf('Trigger: %d\n', triggerPulse(1));
@@ -2144,6 +2154,7 @@ while iTrial <= numel(trialSchedule)
                     Datapixx('WriteDoutBuffer', triggerPulse);
                     Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);	% Delayed trigger (1/refresh delay rate with ProPixx)
                     Datapixx('StartDoutSchedule');
+                    needsVideoSync = true;
                     if Conf.debug
                         debugTriggerLog(end+1) = triggerPulse(1);
                         fprintf('Trigger: %d\n', triggerPulse(1));
@@ -2207,7 +2218,7 @@ while iTrial <= numel(trialSchedule)
                     
             %Now send all instructions to the Datapixx box, as close as possible to the actual screen flip in PTB
         
-            if Conf.MEG
+            if Conf.MEG && needsVideoSync
                 Datapixx('RegWrVideoSync');
             end
             
@@ -2225,7 +2236,7 @@ while iTrial <= numel(trialSchedule)
 
             DrawFormattedText(window,  'Wrong',  'center', 'center', Conf.white);
 
-            if Conf.MEG
+            if Conf.MEG && needsVideoSync
                 Datapixx('RegWrVideoSync');
             end
 
@@ -2238,7 +2249,7 @@ while iTrial <= numel(trialSchedule)
                     
             %Now send all instructions to the Datapixx box, as close as possible to the actual screen flip in PTB
         
-            if Conf.MEG
+            if Conf.MEG && needsVideoSync
                 Datapixx('RegWrVideoSync');
             end
             

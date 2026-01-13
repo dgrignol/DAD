@@ -293,3 +293,11 @@
 
 ### `commits_notes.md`
 - Add a new entry covering the fixation window update and backup-file removal.
+# 13 Jan 2026 19:45
+
+## MEG video sync gating
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Add a per-frame `needsVideoSync` flag that is set only when a trigger pulse is queued, tying `RegWrVideoSync` to actual trigger activity.
+- Gate all `Datapixx('RegWrVideoSync')` calls on `Conf.MEG && needsVideoSync` to avoid extra sync writes on frames without scheduled triggers.
+- Clarify the trigger scheduling data flow with inline comments so MEG sync behavior stays aligned with trigger emission.
