@@ -177,7 +177,7 @@ RestrictKeysForKbCheck([Key.escapeKey Key.spaceKey Key.LeftKey Key.RightKey Key.
 %PsychDefaultSetup(2);
 % if Conf.MEG
 %     win = Screen('OpenWindow',1);
-% end                                 
+% end                                          
 Screen('Preference', 'SkipSyncTests', 1);%do screen sync + size tests
 
 % For real experiment hide cursor
@@ -204,7 +204,7 @@ Conf.ppd = pi * (Conf.screenSize(3)-Conf.screenSize(1)) / atan(Conf.mon_width/Co
 Conf.mpd =  2*Conf.display.dist*tan(deg2rad(1)/2); % millimeters per degree angle
 
 % Eye-tracker fixation control and replay settings
-Conf.fixWindowDeg = 10; % radius in degrees
+Conf.fixWindowDeg = 7; % radius in degrees
 Conf.fixWindowPx = Conf.fixWindowDeg * Conf.ppd;
 Conf.fixBreakToleranceFrames = 5; % frames outside fixation window before flagging
 Conf.fixationWarningDuration = 2; % seconds for on-screen warning

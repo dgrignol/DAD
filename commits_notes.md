@@ -202,3 +202,61 @@
 ### `commits_notes.md`
 - Add a new entry documenting the staged experiment checklist and
   stimuli-generation changes.
+
+# 12 Jan 2026 19:34
+
+## Catch-trial generation
+
+### `experiment/CreateInputFiles_v10.m`
+- Add script-level documentation with usage, inputs/outputs, and catch-jitter
+  assumptions for the input/output file workflow.
+- Precompute the dot-rect center and max distance to support distance-based
+  jitter scaling with an `eps` guard against divide-by-zero.
+- Introduce configurable jitter parameters (`Catch.JitterBase`,
+  `Catch.JitterSlope`, `Catch.JitterScaling`) to control occlusion catch
+  amplitude and scaling mode (`off`, `linear`, `log`, `exp`, with `on` as
+  linear).
+- Replace the fixed alternating y-offset with per-dot, perpendicular jitter
+  driven by `AngleDirection + 90`, alternating sign each frame and scaling by
+  distance from the rect center before boundary validation.
+
+## Experiment runtime defaults
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Flip the default run-mode flags to a practice configuration: disable MEG,
+  eye-tracking, and debug, while enabling practice mode.
+
+### `experiment/MoveDot1_experiment_vX.m~` (new)
+- Add a full snapshot of the experiment script (editor backup) mirroring the
+  current defaults and logic.
+
+## Stimulus configuration and generation
+
+### `experiment/lib/Config.m`
+- Retune curvature settings for 120 Hz by halving `curvFactor` to 1.05 and
+  randomizing the curviness valence per path (`isCurvValenceRand = true`).
+
+### `experiment/stimuli_generation_v5.m`
+- Expand assumptions to note per-dot curviness valence randomization when
+  enabled in `Config`.
+- Update per-path curvyness updates to compute signed factors independently for
+  each dot, preserving per-dot randomness across paths.
+
+# 13 Jan 2026 10:33
+
+## Fixation monitoring
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Reduce the fixation window radius from 10 to 7 degrees by updating
+  `Conf.fixWindowDeg`, tightening the eye-tracking break threshold.
+
+## Repository cleanup
+
+### `experiment/MoveDot1_experiment_vX.m~` (deleted)
+- Remove the editor backup copy of the experiment script to avoid tracking a
+  redundant snapshot.
+
+## Commit notes
+
+### `commits_notes.md`
+- Add a new entry covering the fixation window update and backup-file removal.
