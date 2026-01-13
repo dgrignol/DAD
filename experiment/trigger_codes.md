@@ -11,7 +11,7 @@
 | 101 | Catch end (fix/occl) | First frame after glitch finishes. |
 | 113 | Missed fixation catch | First “Missed” frame when no response is given during a fixation catch; no equivalent code is emitted for occlusion misses (that branch is commented). |
 | 150 | Gaze break | Emitted when the eye leaves the fixation window long enough to abort the trial; trial is queued for replay. |
-| 151 | Replay start | Sent at the start of a replayed trial (after a gaze break) to mark the replay instance. |
+| 151 | Replay start | Sent once, immediately before the first replayed trial begins (after a gaze break). A 100 ms pause follows the pulse before the replay trial proceeds. |
 | 201 | Response (value 1) | Button-response pulse `response+200` when the response value is 1; the current MEG mapping recodes button codes 1 and 8 to `response = 1`, so 201 is the typical response TTL. |
 | 202 | Response (value 2, NOT expected) | Would be emitted if `response == 2`; note that 202 is not in `TriggerValues`, so it will be flagged if it occurs (e.g., from a nonstandard button code). |
 

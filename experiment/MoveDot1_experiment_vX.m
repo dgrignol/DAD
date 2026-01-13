@@ -1,3 +1,29 @@
+% MoveDot1_experiment_vX.m
+% Experiment runtime script for the MoveDot1 paradigm (MEG + EyeLink capable).
+%
+% Inputs
+% - experiment/input_files/MovDot_SubXX.mat (stimulus sequences + fps)
+% - experiment/input_files/SubXX_TrialStruct.mat (trial order + catch timing)
+% - Manual subject/run/viewing-distance entry at startup dialog
+%
+% Outputs
+% - output_files/MoveDot1_SUBXX_RUNYY.mat (CatchOutput, Catch, output, Conf)
+% - output_files/..._firstBlock.mat (intermediate save after block 1)
+% - output_files/debug_actual_triggers_subXX_runYY.csv (only when Conf.debug=1)
+%
+% Trigger logic
+% - Trigger IDs follow experiment/trigger_codes.md and are emitted through
+%   DataPixx when Conf.MEG=1. Replay-start (151) is emitted once, just before
+%   the first replay trial begins, with a 100 ms wait after the pulse.
+%
+% Usage example
+%   1) Ensure input files exist under experiment/input_files.
+%   2) In MATLAB, add this project to the path.
+%   3) Run this script; enter subject/run/viewing distance in the dialog.
+%
+% Key assumptions
+% - TrialStruct catch timings align to stimulus fps from MovDot_SubXX.mat.
+% - MEG triggers are recorded on the configured STI channel.
 %% Clear everything
 
 clear all;
@@ -848,6 +874,8 @@ numBlocks = size(BlockOrder, 2);
 output = repmat(output, numBlocks, 1); %AH: second block output(2,:)
 
 blockConditionOrder = BlockOrder(iRun, :);
+% INSERTED: run-level guard so the replay-start trigger fires once before the first replay trial.
+replayStartSent = false;
 
 for blockIndex = 1:numBlocks
 
@@ -1026,13 +1054,15 @@ while iTrial <= numel(trialSchedule)
         
     end
 
-    if Conf.MEG && isReplayTrial
+    % INSERTED: use isReplayTrial + replayStartSent to emit a single 151 before any replay begins.
+    if Conf.MEG && isReplayTrial && ~replayStartSent
         Datapixx('StopDoutSchedule');
         triggerPulse = [1 0] .* Conf.triggerReplayStart;
         Datapixx('WriteDoutBuffer', triggerPulse);
         Datapixx('SetDoutSchedule', 1.0/Conf.refrate, 1000, 2);
         Datapixx('StartDoutSchedule');
         Datapixx('RegWr');
+        replayStartSent = true;
         if Conf.debug
             debugTriggerLog(end+1) = triggerPulse(1);
             fprintf('Trigger: %d\n', triggerPulse(1));
@@ -1040,6 +1070,7 @@ while iTrial <= numel(trialSchedule)
         if ~ ismember(triggerPulse(1),TriggerValues)
             disp(sprintf('Replay start trigger %d not in TriggerValues',triggerPulse(1)));
         end
+        WaitSecs(0.1); % keep separation from subsequent trial-start trigger
     end
     
     

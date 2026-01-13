@@ -1,3 +1,16 @@
+# 13 Jan 2026 11:25
+
+## Experiment runtime trigger behavior
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Add script-level documentation with usage, inputs/outputs, and trigger logic assumptions aligned to `experiment/trigger_codes.md`.
+- Introduce a run-level guard so the replay-start trigger (151) is emitted once before the first replay trial, then pause 100 ms to keep separation from subsequent trial-start pulses.
+
+## Trigger reference updates
+
+### `experiment/trigger_codes.md`
+- Clarify that trigger 151 fires once before the first replayed trial begins and includes a 100 ms pause after the pulse.
+
 # 9 Jan 2026 16:23
 
 ## Documentation and workflow guidance
