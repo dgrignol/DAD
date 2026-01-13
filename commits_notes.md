@@ -1,3 +1,23 @@
+# 13 Jan 2026 11:57
+
+## Eye-tracker testing modes and gaze-break handling
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Extend script-level documentation with gaze-break (150) details, usage steps,
+  and testing mode behavior for ignore vs fake tracking, aligned to
+  `experiment/trigger_codes.md`.
+- Add `Conf.IgnoreEyeTracker`, `Conf.FakeEyeTracker`, and
+  `Conf.fakeGazeBreakRate`, then derive `useEyelink`, `useFakeEyeTracker`, and
+  `useGazeMonitoring` so real vs simulated gaze is resolved in one place.
+- Gate EyeLink setup, recording, and messaging on `useEyelink` to avoid
+  hardware I/O during testing while preserving MEG-trigger flow.
+- Schedule per-trial fake gaze breaks with a random onset that respects
+  `Conf.fixBreakToleranceFrames`, generate out-of-window samples during the
+  break, and feed them into the existing fixation-break logic/output.
+- Preserve inline trigger-code annotations for gaze-break (150) and replay
+  start (151) so the testing path stays consistent with the experiment
+  definitions.
+
 # 13 Jan 2026 11:25
 
 ## Experiment runtime trigger behavior

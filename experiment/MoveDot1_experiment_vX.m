@@ -15,15 +15,27 @@
 % - Trigger IDs follow experiment/trigger_codes.md and are emitted through
 %   DataPixx when Conf.MEG=1. Replay-start (151) is emitted once, just before
 %   the first replay trial begins, with a 100 ms wait after the pulse.
+% - Gaze-break (150) is emitted when fixation aborts; it is suppressed when
+%   Conf.IgnoreEyeTracker=1 and can be simulated when Conf.FakeEyeTracker=1.
+%
+% Eye-tracker testing modes
+% - Conf.IgnoreEyeTracker = 1 disables EyeLink I/O and gaze-break logic (150/151).
+% - Conf.FakeEyeTracker = 1 simulates gaze with a per-trial break rate
+%   (Conf.fakeGazeBreakRate), emitting 150/151 without hardware.
+% - If both are set, IgnoreEyeTracker wins.
 %
 % Usage example
-%   1) Ensure input files exist under experiment/input_files.
-%   2) In MATLAB, add this project to the path.
-%   3) Run this script; enter subject/run/viewing distance in the dialog.
+%   1) (Optional) Set Conf.IgnoreEyeTracker or Conf.FakeEyeTracker below.
+%   2) Ensure input files exist under experiment/input_files.
+%   3) In MATLAB, add this project to the path.
+%   4) Run this script; enter subject/run/viewing distance in the dialog.
 %
 % Key assumptions
 % - TrialStruct catch timings align to stimulus fps from MovDot_SubXX.mat.
 % - MEG triggers are recorded on the configured STI channel.
+% - Fake gaze breaks are scheduled per trial with a random onset that allows
+%   at least Conf.fixBreakToleranceFrames outside the fixation window.
+% - When Conf.IgnoreEyeTracker=1, EyeLink I/O and gaze-based aborts are disabled.
 %% Clear everything
 
 clear all;
@@ -31,9 +43,12 @@ clc;
 sca;
 format shortG
 
-%% Values for MEG, EyeTrac     ker, Practic eTrials, Debugging etc.
+%% Values for MEG, EyeTracker, practice trials, and testing modes
 Conf.MEG = 0;
 Conf.trackeye = 0;
+Conf.IgnoreEyeTracker = 0; % disable EyeLink I/O and gaze-break logic (150/151)
+Conf.FakeEyeTracker = 0; % simulate gaze to exercise 150/151 without hardware
+Conf.fakeGazeBreakRate = 0.05; % per-trial probability of a simulated break (random onset)
 Conf.practice = 1;
 Conf.debug = 0;                   
 Conf.testingMode = 0; %set to 1 to run a shortened block for quick tests
@@ -53,7 +68,15 @@ Conf.Task  = 1;
 if Conf.MEG
     Conf.trackeye = true;
 end
-if Conf.trackeye
+
+% Resolve eye-tracker testing modes and hardware usage (ignore overrides fake).
+if Conf.IgnoreEyeTracker
+    Conf.FakeEyeTracker = 0;
+end
+useFakeEyeTracker = Conf.FakeEyeTracker == 1;
+useEyelink = Conf.trackeye && ~Conf.IgnoreEyeTracker && ~useFakeEyeTracker;
+
+if useEyelink
     Screen('Preference',  'SkipSyncTests', 0);
 end
 
@@ -236,9 +259,12 @@ Conf.fixBreakToleranceFrames = 5; % frames outside fixation window before flaggi
 Conf.fixationWarningDuration = 2; % seconds for on-screen warning
 Conf.replayLimit = 1; % set to Inf for unlimited replays
 Conf.allowInfiniteReplays = 0; % set to 1 to ignore replayLimit
-Conf.triggerGazeBreak = 150;
-Conf.triggerReplayStart = 151;
+Conf.triggerGazeBreak = 150; % gaze break (experiment/trigger_codes.md)
+Conf.triggerReplayStart = 151; % replay start (experiment/trigger_codes.md)
 Conf.enableFixationAbort = 1; % set to 0 to disable gaze-based abort/replay logic for testing
+
+% Derived gaze-monitoring flag: drives fixation aborts from real or fake samples.
+useGazeMonitoring = Conf.enableFixationAbort && (useEyelink || useFakeEyeTracker);
 
 
 %% Transforming from Visual Angle into Pixel
@@ -397,9 +423,9 @@ end
 TriggerValues = [1:81, 100, 101, 102, 103, 150, 151, 201];
 
 
-%% Set up Eye Link
+%% Set up Eye Link (real hardware only)
 
-if Conf.trackeye
+if useEyelink
     % INITIALIZE EYELINK
     % It is better not to send too many Eyelink commands to the eye-tracker in a row. For this reason, between them, we wait for a short time, here defined.
     elk.wait = 0.01;
@@ -1008,7 +1034,7 @@ while iTrial <= numel(trialSchedule)
     currentStim = currentStim(all(currentStim~=0, 2),:);
     currentCond = mod(iSeq - 1, nCond) + 1;
     
-    if Conf.trackeye == true
+    if useEyelink
         % EYELINK RECORDING
         
         Eyelink('Message', 'TRIALID %d', iTrial);
@@ -1082,7 +1108,21 @@ while iTrial <= numel(trialSchedule)
     gazeBreakTriggered = false;
     gazeBreakFrame = NaN;
     
-    
+    % Fake eye-tracker schedule (per trial): decide if/when a break should occur.
+    fakeBreakThisTrial = false;
+    fakeBreakStartFrame = NaN;
+    fakeBreakEndFrame = NaN;
+    if useFakeEyeTracker && Conf.enableFixationAbort
+        % Only schedule a break if the trial is long enough to reach tolerance.
+        if length(currentStim) >= Conf.fixBreakToleranceFrames
+            fakeBreakThisTrial = rand < Conf.fakeGazeBreakRate;
+            if fakeBreakThisTrial
+                lastStart = length(currentStim) - Conf.fixBreakToleranceFrames + 1;
+                fakeBreakStartFrame = randi([1, lastStart]); % random onset within trial
+                fakeBreakEndFrame = fakeBreakStartFrame + Conf.fixBreakToleranceFrames - 1;
+            end
+        end
+    end
     
     % Continue with fixation cross in between trials (ITI)
 
@@ -1146,7 +1186,9 @@ while iTrial <= numel(trialSchedule)
                 
                 if response == 1 | response == 2
                     % Eyelink triggering
-                    Eyelink('Message', sprintf('Response %d', response));
+                    if useEyelink
+                        Eyelink('Message', sprintf('Response %d', response));
+                    end
                     
                     % Send RT/response trigger (response value + 200)
                     Datapixx('EnableDinDebounce');
@@ -1171,11 +1213,29 @@ while iTrial <= numel(trialSchedule)
             end
         end
         
-        % Gaze break detection (EyeLink)
-        if Conf.trackeye && Conf.enableFixationAbort && ~gazeBreakTriggered
-            sample = Eyelink('NewestFloatSample');
-            if ~isempty(sample) && isstruct(sample)
-                gazeX = sample.gx; gazeY = sample.gy; pupilA = sample.pa;
+        % Gaze break detection (real or simulated samples).
+        if useGazeMonitoring && ~gazeBreakTriggered
+            % Acquire a gaze sample: real EyeLink data or fake values for testing.
+            hasSample = false;
+            if useFakeEyeTracker
+                if fakeBreakThisTrial && iframe >= fakeBreakStartFrame && iframe <= fakeBreakEndFrame
+                    fakeOffset = Conf.fixWindowPx * 2; % ensure outside the fixation window
+                    gazeX = [xCenter + fakeOffset, xCenter + fakeOffset];
+                    gazeY = [yCenter + fakeOffset, yCenter + fakeOffset];
+                else
+                    gazeX = [xCenter, xCenter];
+                    gazeY = [yCenter, yCenter];
+                end
+                pupilA = [1, 1];
+                hasSample = true;
+            else
+                sample = Eyelink('NewestFloatSample');
+                if ~isempty(sample) && isstruct(sample)
+                    gazeX = sample.gx; gazeY = sample.gy; pupilA = sample.pa;
+                    hasSample = true;
+                end
+            end
+            if hasSample
                 validEyes = (~isnan(gazeX)) & (~isnan(gazeY)) & (pupilA > 0);
                 if any(validEyes)
                     % Accept fixation if at least one valid eye stays within the window
@@ -1193,7 +1253,9 @@ while iTrial <= numel(trialSchedule)
                         output(blockIndex, iTrial).fixation_break = true;
                         output(blockIndex, iTrial).fixation_break_frame = gazeBreakFrame;
                         output(blockIndex, iTrial).fixation_break_time = gazeBreakTime - StartTimeX;
-                        Eyelink('Message', sprintf('GAZE_BREAK frame %d', gazeBreakFrame));
+                        if useEyelink
+                            Eyelink('Message', sprintf('GAZE_BREAK frame %d', gazeBreakFrame));
+                        end
                         if Conf.MEG
                             Datapixx('StopDoutSchedule');
                             triggerPulse = [1 0] .* Conf.triggerGazeBreak;
@@ -1274,7 +1336,9 @@ while iTrial <= numel(trialSchedule)
                         disp(sprintf('2XXXXXXXXX %d',triggerPulse(1)))
                     end
                     % Eyelink triggering
-                    Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    if useEyelink
+                        Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    end
                     
                     Datapixx('EnableDinDebounce');  % Set this to avoid fast oscillation in button press (if unsure use it !)
                     
@@ -1310,7 +1374,9 @@ while iTrial <= numel(trialSchedule)
                         output(blockIndex, iTrial).RT = [output(blockIndex, iTrial).RT,  respTime - responseStart];
                         
                         % Eyelink triggering
-                        Eyelink('Message', sprintf('Response %d', response));
+                        if useEyelink
+                            Eyelink('Message', sprintf('Response %d', response));
+                        end
                         
                         % Send RT/response trigger (response value + 128)
                         %Datapixx('EnableDinDebounce');
@@ -1341,14 +1407,14 @@ while iTrial <= numel(trialSchedule)
                             if keyCode(Key.LeftKey) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 1];
                                 response = 1;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                                 
                             elseif keyCode(Key.RightKey) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 2];
                                 response = 2;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                             end
@@ -1380,7 +1446,9 @@ while iTrial <= numel(trialSchedule)
                         output(blockIndex, iTrial).RT = [output(blockIndex, iTrial).RT,  respTime - responseStart];
                         
                         % Eyelink triggering
-                        Eyelink('Message', sprintf('Response %d', response));
+                        if useEyelink
+                            Eyelink('Message', sprintf('Response %d', response));
+                        end
                         
                         % Send RT/response trigger (response value + 128)
                         %Datapixx('EnableDinDebounce');
@@ -1409,14 +1477,14 @@ while iTrial <= numel(trialSchedule)
                             if keyCode(Key.LeftKey ) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 1];
                                 response = 1;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                             elseif keyCode(Key.RightKey) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 2];
                                 %return
                                 response = 2;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                             end
@@ -1527,7 +1595,9 @@ while iTrial <= numel(trialSchedule)
                             disp(sprintf('4XXXXXXXXX %d',triggerPulse(1)))
                         end
                         % Eyelink triggering
-                        Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                        if useEyelink
+                            Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                        end
                         
                         Datapixx('EnableDinDebounce');  % Set this to avoid fast oscillation in button press (if unsure use it !)
                         
@@ -1730,13 +1800,13 @@ while iTrial <= numel(trialSchedule)
                             if keyCode(Key.LeftKey )
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 1];
                                 response = 1;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                             elseif keyCode(Key.RightKey)
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 2];
                                 response = 2;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                                 %return
@@ -1814,13 +1884,13 @@ while iTrial <= numel(trialSchedule)
                             if keyCode(Key.LeftKey) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 1];
                                 response = 1;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                             elseif keyCode(Key.RightKey) == true
                                 output(blockIndex, iTrial).response = [output(blockIndex, iTrial).response, 2];
                                 response = 2;
-                                if Conf.trackeye
+                                if useEyelink
                                     Eyelink('Message', sprintf('Response %d', response));
                                 end
                                 %return
@@ -1979,7 +2049,9 @@ while iTrial <= numel(trialSchedule)
                             disp(sprintf('6XXXXXXXXX %d',triggerPulse(1)))
                         end
                         % Eyelink triggering
-                        Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                        if useEyelink
+                            Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                        end
                         
                         Datapixx('EnableDinDebounce');  % Set this to avoid fast oscillation in button press (if unsure use it !)
                         
@@ -2043,7 +2115,9 @@ while iTrial <= numel(trialSchedule)
                     end
                     
                     % Eyelink triggering
-                    Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    if useEyelink
+                        Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    end
                     
                     % White square for photodiode
                     %Screen('FillRect', window, [1 1 1], [0 0 30 30]);
@@ -2076,7 +2150,9 @@ while iTrial <= numel(trialSchedule)
                     end
                     
                     % Eyelink triggering
-                    Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    if useEyelink
+                        Eyelink('Message', sprintf('Video onset %d', triggerPulse(1)));
+                    end
                     
                     Datapixx('EnableDinDebounce');  % Set this to avoid fast oscillation in button press (if unsure use it !)
                     
@@ -2223,7 +2299,7 @@ while iTrial <= numel(trialSchedule)
     %Response: 0 = missed, 1 = leftkey; 2 = rightkey
     %Maybe put it outside of for loop in separate for loop?
     
-    if Conf.trackeye
+    if useEyelink
         % Stop eyelink
         Eyelink('StopRecording');
     end
@@ -2416,7 +2492,7 @@ KbStrokeWait;
 
 
 
-if Conf.trackeye
+if useEyelink
     if Conf.practice == 0
         try
             fprintf('Receiving data file ''%s''\n', elk.edfFile );
