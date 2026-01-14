@@ -135,8 +135,9 @@ def resolve_runs(run_arg: int | None, trial_struct: np.ndarray) -> List[int]:
 
     If run_arg is None, all runs in TrialStruct are returned.
     """
+    # TrialStruct can be 1D (runs) or 2D (runs x trials); use the run axis.
     trial_struct_arr = np.atleast_1d(trial_struct)
-    num_runs = trial_struct_arr.size
+    num_runs = trial_struct_arr.shape[0]
     if run_arg is None:
         return list(range(1, num_runs + 1))
     return [run_arg]

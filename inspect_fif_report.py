@@ -7,6 +7,8 @@ This report includes:
 - Trigger-channel snapshots over a requested time window.
 - Trigger tables extracted from the stim channel, optionally aligned against
   expected trigger sequences to highlight missing/extra events.
+- Replay-rule checks that follow experiment/trigger_codes.md and
+  experiment/MoveDot1_experiment_vX.m (e.g., 150/151/81 expectations).
 
 Multi-run behavior:
 - When --subject is provided and --fif is left at its default, the script scans
@@ -25,6 +27,17 @@ Trial numbering:
   missing expected rows (NaN start/end).
 - "trial_exp" increments on expected trial-start triggers (including missing
   expected rows) when expected triggers are available.
+
+Replay expectations (see experiment/trigger_codes.md):
+- A gaze break (150) aborts the current trial; a trial-end 81 should NOT appear
+  until the next trial-start trigger (1-80/102).
+- A replay-start trigger (151) is emitted once per block, before the first
+  replayed trial in that block.
+- Triggers between the first 151 and the expected first trigger of block 2 are
+  marked as REPLAY in the match column to avoid misalignment.
+
+Usage:
+    ./inspect_fif_report.py [--subject N] [--run N] [--fif PATH] [--out PATH]
 
 Examples:
     # All runs for subject 04, default output path + unified CSV:
@@ -515,6 +528,25 @@ def _process_trigger_events(
 
         record_end_time = (raw.first_samp + raw.n_times - 1) / sfreq
 
+        # Helper to detect missing rows (NaN start/end) consistently across checks.
+        def is_missing_row(start, end):
+            return (
+                start is None
+                or end is None
+                or (isinstance(start, float) and math.isnan(start))
+                or (isinstance(end, float) and math.isnan(end))
+            )
+
+        # Convert detected trigger rows into a time-sorted event list for validation.
+        def build_events_by_time(records):
+            events_by_time = []
+            for trig, start, _, _ in records:
+                if is_missing_row(start, start):
+                    continue
+                events_by_time.append((float(start), trig))
+            events_by_time.sort(key=lambda x: x[0])
+            return events_by_time
+
         # Compute catch-trial summary stats (hits, misses, false alarms, etc.).
         def compute_catch_stats(records):
             """
@@ -528,12 +560,7 @@ def _process_trigger_events(
             gaze_break_trig = 150
             replay_trig = 151
 
-            events_by_time = []
-            for trig, start, _, _ in records:
-                if np.isnan(start):
-                    continue
-                events_by_time.append((float(start), trig))
-            events_by_time.sort(key=lambda x: x[0])
+            events_by_time = build_events_by_time(records)
 
             trial_start_times = [t for t, trig in events_by_time if trig in trial_start_trigs]
             catch_times = [t for t, trig in events_by_time if trig == catch_trig]
@@ -608,9 +635,131 @@ def _process_trigger_events(
                 "replay_count": len(replay_times),
             }
 
+        # Validate replay-related expectations from trigger_codes.md.
+        def compute_replay_checks(records, aligned_records, expected_idx_list):
+            """
+            Check replay rules:
+
+            - After a gaze break (150), no 81 should occur until the next trial start.
+            - Replay-start (151) should appear once per block before replayed trials begin.
+            """
+            events_by_time = build_events_by_time(records)
+            trial_starts = [(t, trig) for t, trig in events_by_time if trig in trial_start_trigs]
+            gaze_break_times = [t for t, trig in events_by_time if trig == 150]
+            trial_end_times = [t for t, trig in events_by_time if trig == 81]
+            replay_start_times = [t for t, trig in events_by_time if trig == 151]
+
+            # Rule 1: ensure no 81 appears between each 150 and the next trial start.
+            gaze_break_violations = []
+            for gb_time in gaze_break_times:
+                next_trial_time = None
+                for t, _ in trial_starts:
+                    if t > gb_time:
+                        next_trial_time = t
+                        break
+                window_end = next_trial_time if next_trial_time is not None else record_end_time
+                if any(gb_time < t < window_end for t in trial_end_times):
+                    gaze_break_violations.append((gb_time, window_end))
+
+            # Rule 2: identify replay block starts based on expected coverage when available.
+            replay_trial_starts = []
+            if expected_seq:
+                # Replay trials are expected to appear after the last expected trial start.
+                expected_trial_start_times = []
+                for (trig, start, end, _), exp_idx in zip(
+                    aligned_records, expected_idx_list
+                ):
+                    if exp_idx is None or exp_idx >= len(expected_seq):
+                        continue
+                    if expected_seq[exp_idx] not in trial_start_trigs:
+                        continue
+                    if is_missing_row(start, end):
+                        continue
+                    expected_trial_start_times.append(float(start))
+                last_expected_start = (
+                    max(expected_trial_start_times) if expected_trial_start_times else None
+                )
+                if last_expected_start is not None:
+                    replay_trial_starts = [
+                        t for t, _ in trial_starts if t > last_expected_start
+                    ]
+            elif replay_start_times:
+                first_replay_start = replay_start_times[0]
+                replay_trial_starts = [t for t, _ in trial_starts if t > first_replay_start]
+
+            replay_start_count = len(replay_start_times)
+            first_replay_start = replay_start_times[0] if replay_start_times else None
+            first_replay_trial = replay_trial_starts[0] if replay_trial_starts else None
+
+            max_replay_starts = len(expected_seq_blocks) if expected_seq_blocks else 1
+            replay_issues = []
+            if replay_start_count > max_replay_starts:
+                replay_issues.append(
+                    "Replay-start (151) count exceeds the number of blocks."
+                )
+            if replay_trial_starts and replay_start_count == 0:
+                replay_issues.append(
+                    "Replay trials detected, but no replay-start (151) was found."
+                )
+            if (
+                first_replay_start is not None
+                and first_replay_trial is not None
+                and first_replay_start > first_replay_trial
+            ):
+                replay_issues.append("Replay-start (151) occurs after replay trials begin.")
+            for replay_time in replay_start_times:
+                if not any(gb_time < replay_time for gb_time in gaze_break_times):
+                    replay_issues.append(
+                        "Replay-start (151) appears without a preceding gaze break (150)."
+                    )
+                    break
+
+            return {
+                "gaze_break_violations": gaze_break_violations,
+                "replay_start_count": replay_start_count,
+                "replay_trial_count": len(replay_trial_starts),
+                "replay_issues": replay_issues,
+            }
+
+        # Identify the replay window so we can pause expected matching.
+        # We use the first expected trigger from block 2 as the boundary marker.
+        def find_block2_first_trigger():
+            if not expected_seq_blocks:
+                return None
+            for block_idx, seq in expected_seq_blocks:
+                if block_idx == 2:
+                    return seq[0] if seq else None
+            if len(expected_seq_blocks) >= 2:
+                return expected_seq_blocks[1][1][0] if expected_seq_blocks[1][1] else None
+            return None
+
+        replay_start_time = None
+        if rows:
+            for trig, start, _, _ in rows:
+                if trig == 151:
+                    replay_start_time = float(start)
+                    break
+        block2_first_trigger = find_block2_first_trigger()
+        replay_stop_time = None
+        if replay_start_time is not None and block2_first_trigger is not None:
+            for trig, start, _, _ in rows:
+                if trig == block2_first_trigger and float(start) > replay_start_time:
+                    replay_stop_time = float(start)
+                    break
+
+        def in_replay_window(start):
+            if replay_start_time is None or replay_stop_time is None:
+                return False
+            return replay_start_time < float(start) < replay_stop_time
+
         # Align actual rows to the expected sequence, inserting placeholders for missing.
         def align_records(records):
-            """Align actual records to expected_seq; insert missing expected as synthetic rows."""
+            """
+            Align actual records to expected_seq; insert missing expected as synthetic rows.
+
+            Rows between replay-start (151) and the first expected block-2 trigger
+            are marked as REPLAY and do not advance expected matching.
+            """
             combined_rows = []
             matches = []
             expected_indices = []
@@ -618,6 +767,12 @@ def _process_trigger_events(
             act_idx = 0
             while act_idx < len(records):
                 trig, start, end, allowed = records[act_idx]
+                if not is_missing_row(start, end) and in_replay_window(start):
+                    combined_rows.append((trig, start, end, allowed))
+                    matches.append("REPLAY")
+                    expected_indices.append(None)
+                    act_idx += 1
+                    continue
                 if trig not in match_triggers:
                     combined_rows.append((trig, start, end, allowed))
                     matches.append(float("nan"))
@@ -679,12 +834,7 @@ def _process_trigger_events(
             has_expected = bool(expected_seq)
             for (trig, start, end, _), exp_idx in zip(records, expected_idx_list):
                 # Missing expected rows are represented by NaN start/end timestamps.
-                missing = (
-                    start is None
-                    or end is None
-                    or (isinstance(start, float) and math.isnan(start))
-                    or (isinstance(end, float) and math.isnan(end))
-                )
+                missing = is_missing_row(start, end)
                 if trig in trial_start_trigs and not missing:
                     trial += 1
                 trial_vals.append(trial)
@@ -707,7 +857,10 @@ def _process_trigger_events(
         trial_numbers, trial_exp_numbers = compute_trial_columns(
             combined_rows, expected_idx_list
         )
+        # Summarize catch trials from the raw detected rows.
         catch_stats = compute_catch_stats(rows)
+        # Summarize replay checks using detected rows plus expected alignment.
+        replay_checks = compute_replay_checks(rows, combined_rows, expected_idx_list)
 
         # Load triggers from existing CSVs to build extra match columns.
         def load_trigger_list_from_csv(path: Path, run_id: int | None):
@@ -816,9 +969,9 @@ def _process_trigger_events(
             )
 
         # Build an HTML table with per-row status and match indicators.
-        def build_html_table(records, match_cols, trial_vals, trial_exp_vals):
+        def build_html_table(records, match_cols, trial_vals, trial_exp_vals, block_vals):
             header = (
-                "<tr><th>Trial</th><th>Trial_exp</th><th>Trigger</th><th>Start (s)</th>"
+                "<tr><th>Trial</th><th>Trial_exp</th><th>Block</th><th>Trigger</th><th>Start (s)</th>"
                 "<th>End (s)</th><th>Allowed (0/1)</th>"
             )
             for col_name, _ in match_cols:
@@ -830,6 +983,8 @@ def _process_trigger_events(
                     return "<td style='background:#ffd699;text-align:center;'>NaN</td>"
                 if val == "MISSING":
                     return "<td style='background:#f8c5c5;text-align:center;'>MISSING</td>"
+                if val == "REPLAY":
+                    return "<td style='background:#cfe8ff;text-align:center;'>REPLAY</td>"
                 color = "#c8f7c5" if val == 1 else "#f8c5c5"
                 return f"<td style='background:{color};text-align:center;'>{val}</td>"
 
@@ -838,6 +993,8 @@ def _process_trigger_events(
                 trial_str = str(trial_vals[row_idx])
                 trial_exp_val = trial_exp_vals[row_idx]
                 trial_exp_str = "NaN" if trial_exp_val is None else str(trial_exp_val)
+                block_val = block_vals[row_idx]
+                block_str = "NaN" if block_val is None else str(block_val)
                 start_str = (
                     "NaN"
                     if isinstance(start, float) and math.isnan(start)
@@ -849,8 +1006,8 @@ def _process_trigger_events(
                     else f"{end:.3f}"
                 )
                 row_html = (
-                    f"<tr><td>{trial_str}</td><td>{trial_exp_str}</td><td>{trig}</td>"
-                    f"<td>{start_str}</td>"
+                    f"<tr><td>{trial_str}</td><td>{trial_exp_str}</td><td>{block_str}</td>"
+                    f"<td>{trig}</td><td>{start_str}</td>"
                     f"<td>{end_str}</td>"
                     f"<td style='background:{'#c8f7c5' if allowed else '#f8c5c5'};"
                     f"text-align:center;'>{allowed}</td>"
@@ -889,8 +1046,9 @@ def _process_trigger_events(
                     + "</p>"
                 )
 
-        # Create a compact catch-trial summary panel and plot.
+        # Create compact summary panels (catch trials + replay checks) and plot.
         catch_summary_html = ""
+        replay_summary_html = ""
         catch_fig = None
         if rows:
             accuracy = catch_stats["accuracy"]
@@ -922,6 +1080,44 @@ def _process_trigger_events(
                 "within it are excluded from FALSE ALARM and CORRECT REJECTION counts."
                 "</p>"
                 "</div>"
+            )
+
+            replay_issue_count = len(replay_checks["replay_issues"])
+            gaze_break_violations = replay_checks["gaze_break_violations"]
+            replay_issue_color = "#f8c5c5" if replay_issue_count or gaze_break_violations else "#c8f7c5"
+            replay_status = (
+                "Replay checks passed"
+                if replay_issue_count == 0 and not gaze_break_violations
+                else "Replay checks need attention"
+            )
+            replay_summary_html = (
+                "<div style='margin-top:8px;'>"
+                f"<p><strong>{replay_status}</strong></p>"
+                f"<p>Gaze-break 150 → 81 violations: {len(gaze_break_violations)}</p>"
+                f"<p>Replay-start (151) count: {replay_checks['replay_start_count']}</p>"
+                f"<p>Replay trial starts detected: {replay_checks['replay_trial_count']}</p>"
+                "</div>"
+            )
+            if gaze_break_violations:
+                replay_summary_html += (
+                    "<p style='margin-top:4px;'><strong>150 to 81 windows:</strong> "
+                    + "; ".join(
+                        f"{start:.3f}s-{end:.3f}s" for start, end in gaze_break_violations
+                    )
+                    + "</p>"
+                )
+            if replay_issue_count:
+                replay_summary_html += (
+                    "<p style='margin-top:4px;'><strong>Replay issues:</strong> "
+                    + "; ".join(replay_checks["replay_issues"])
+                    + "</p>"
+                )
+            replay_summary_html = (
+                "<div style='background:"
+                + replay_issue_color
+                + ";padding:6px 8px;border-radius:4px;'>"
+                + replay_summary_html
+                + "</div>"
             )
 
             fig, axes = plt.subplots(1, 2, figsize=(7, 2.5))
@@ -960,11 +1156,16 @@ def _process_trigger_events(
 
         html = (
             build_html_table(
-                combined_rows, match_columns, trial_numbers, trial_exp_numbers
+                combined_rows,
+                match_columns,
+                trial_numbers,
+                trial_exp_numbers,
+                block_by_row,
             )
             + status_html
             + missing_summary_html
             + catch_summary_html
+            + replay_summary_html
             if rows
             else f"<p>Events detected on {args.trigger_channel}, but no complete on/off pairs.</p>"
         )

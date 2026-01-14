@@ -13,8 +13,8 @@
 %
 % Trigger logic
 % - Trigger IDs follow experiment/trigger_codes.md and are emitted through
-%   DataPixx when Conf.MEG=1. Replay-start (151) is emitted once, just before
-%   the first replay trial begins, with a 100 ms wait after the pulse.
+%   DataPixx when Conf.MEG=1. Replay-start (151) is emitted once per block,
+%   just before the first replay trial begins, with a 100 ms wait after the pulse.
 % - Gaze-break (150) is emitted when fixation aborts; it is suppressed when
 %   Conf.IgnoreEyeTracker=1 and can be simulated when Conf.FakeEyeTracker=1.
 %
@@ -900,10 +900,10 @@ numBlocks = size(BlockOrder, 2);
 output = repmat(output, numBlocks, 1); %AH: second block output(2,:)
 
 blockConditionOrder = BlockOrder(iRun, :);
-% INSERTED: run-level guard so the replay-start trigger fires once before the first replay trial.
-replayStartSent = false;
 
 for blockIndex = 1:numBlocks
+% INSERTED: block-level guard so the replay-start trigger fires once before the first replay trial.
+replayStartSent = false;
 
 % For Feedback at end
 correctCountFixAll = 0;
@@ -1080,7 +1080,7 @@ while iTrial <= numel(trialSchedule)
         
     end
 
-    % INSERTED: use isReplayTrial + replayStartSent to emit a single 151 before any replay begins.
+    % INSERTED: use isReplayTrial + replayStartSent to emit a single 151 per block.
     if Conf.MEG && isReplayTrial && ~replayStartSent
         Datapixx('StopDoutSchedule');
         triggerPulse = [1 0] .* Conf.triggerReplayStart;
@@ -1301,12 +1301,12 @@ while iTrial <= numel(trialSchedule)
         Screen('FillRect', window, marginColor, Conf.marginRect);
         Screen('FillRect', window, Conf.RectColor, Conf.fillRects);
         
-        if Conf.MEG
-            %photo diode
-            disco = 1 - disco; %during duration of video let square for photodiode flicker between black and white
-            %discocolor = disco*255;
-            Screen('FillRect', window, disco*255, [0 0 50 50]);
-        end
+%         if Conf.MEG
+%             %photo diode
+%             disco = 1 - disco; %during duration of video let square for photodiode flicker between black and white
+%             %discocolor = disco*255;
+%             Screen('FillRect', window, disco*255, [0 0 50 50]);
+%         end
         
         
         if any(iframe >= TrialStruct(iRun,iSeq).Start & iframe < TrialStruct(iRun,iSeq).End) && ~ ismember(iframe, framelog) %Catch Trial

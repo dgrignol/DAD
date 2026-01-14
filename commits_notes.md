@@ -1,3 +1,32 @@
+# 14 Jan 2026 12:50
+
+## Replay trigger semantics and reporting
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Update trigger documentation so replay-start (151) is described as firing once per block before the first replay trial, keeping the 100 ms pause note.
+- Move the replay-start guard into the per-block loop so each block can emit one 151 before its first replayed trial.
+- Comment out the MEG photodiode flicker block in the video playback section.
+
+### `experiment/trigger_codes.md`
+- Clarify that trigger 151 is emitted once per block, immediately before the first replayed trial in that block, with the 100 ms pause preserved.
+
+## Trigger analysis tooling
+
+### `expected_triggers.py`
+- Fix run-count detection by using the first axis of `TrialStruct` so 2D run-by-trial arrays no longer inflate the run count.
+
+### `inspect_fif_report.py`
+- Add replay-rule documentation and a usage line in the script header, aligning expectations with trigger-code definitions.
+- Introduce replay validation checks (150-to-81 violations, 151 ordering/counts) and surface them in a new HTML summary panel.
+- Mark triggers between the first 151 and the first expected block-2 trigger as REPLAY so expected matching pauses during replay segments.
+- Add a block column to the HTML trigger table and color-code REPLAY matches for clarity.
+- Centralize missing-row detection and reuse it for event extraction and trial numbering.
+
+## Reports
+
+### `reports/sub98/sub98_report.html` (new)
+- New trigger report for subject 98 with replay-aware matching and summary panels.
+
 # 13 Jan 2026 11:57
 
 ## Eye-tracker testing modes and gaze-break handling
