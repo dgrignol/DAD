@@ -6,3 +6,7 @@ data/
 experiment/triggers_report_sub03_copy_withNotes.pdf
 reports/old_reports/
 derivatives/triggers/old_tests
+simulations/input/
+simulations/output/
+simulations/report/
+simulations/debug/debug/
