@@ -1,3 +1,84 @@
+# 16 Jan 2026 22:34
+
+## Simulation pipeline scripts
+
+### `simulations/build_movdot_simulation_inputs.m`
+- Resolve stimulus/output paths relative to the repo, load MovDot_SubXX stimuli, and split trials into deviant vs. non-deviant inputs.
+- Save dot1/dot2 path arrays with frame-count validation plus metadata (units, dot colors, condition definition) in the output .mat files.
+
+### `simulations/build_simulation_report_assets.m`
+- Configure participant inputs, ensure condition-specific dot paths exist, and load cached results or compute dRSA matrices per condition.
+- Generate grouped figures and persist report assets/parameters in `simulations/output/subXX` for the report generator.
+
+### `simulations/generate_PIPELINE_simulation_report.m`
+- Load precomputed report assets and assemble a PDF with parameter summaries and figure sections via MATLAB Report Generator.
+- Validate required assets and write the final report into `simulations/report/subXX`.
+
+### `simulations/messy_PIPELINE_simulation.m`
+- Build condition-specific inputs, load dot paths, and run trial-locked triggered subsampling for dRSA computations.
+- Plot dot-path and distance diagnostics, then save dRSA matrices/diagonal summaries and PNG outputs.
+
+## Simulation debug plotting
+
+### `simulations/debug/plot_paths.m`
+- Render time-graded scatter plots for dot trajectories with optional alpha/axis controls.
+- Auto-sanitize the title into a filename and save PNGs into `simulations/debug`.
+
+### `simulations/debug/plot_position_time_distance.m`
+- Compute time-by-time mean distance matrices across trials and visualize them as heatmaps.
+- Save diagnostics to `simulations/debug` with sanitized titles for repeatability.
+
+## dRSA functions
+
+### `simulations/functions/dRSA_PCR.m`
+- Implement PCR-based dRSA with optional autocorrelation and model-regression steps per timepoint.
+- Support extra PCA preprocessing and multiple component-selection modes for large models.
+
+### `simulations/functions/dRSA_average.m`
+- Average dRSA diagonals across a symmetric time window defined by `AverageTime` and `fs`, handling out-of-range samples as NaNs.
+
+### `simulations/functions/dRSA_border.m`
+- Compute autocorrelation regression borders by running dRSA autocorrelations, averaging diagonals, and thresholding by variance.
+
+### `simulations/functions/dRSA_computeRDM.m`
+- Build time-resolved RDMs via pdist (or correlation fast-path), with optional normalization for PCR workflows.
+
+### `simulations/functions/dRSA_concatenate.m`
+- Concatenate trial/segment data into a features×time matrix from arrays, cell matrices, or .mat paths.
+- Generate and append a "Concatenation mask" that flags boundaries, with diagnostic plotting.
+
+### `simulations/functions/dRSA_coreFunction.m`
+- Centralize dRSA execution by filling defaults, validating subsamples, and computing neural/model RDMs as needed.
+- Dispatch to correlation or PCR engines, including an autocorrelation-only path when requested.
+
+### `simulations/functions/dRSA_corr.m`
+- Compute correlation-based dRSA matrices for each requested model against the neural RDM.
+
+### `simulations/functions/dRSA_fastpdist.m`
+- Provide a vectorized correlation-distance implementation for fast RDM construction.
+
+### `simulations/functions/dRSA_random_subsampling.m`
+- Generate random non-overlapping subsamples from an availability mask with spacing and repetition checks.
+- Return indices plus a visualization mask and emit warnings when repetition rates are high.
+
+### `simulations/functions/dRSA_resample_subsamples.m`
+- Resample existing subsample sets with replacement to build iteration tensors at a configurable keep percentage.
+
+### `simulations/functions/dRSA_rescaleRDM.m`
+- Rescale RDM values to the [0, 1] interval and mean-center each column.
+
+### `simulations/functions/dRSA_standardizeRDM.m`
+- Mean-center and z-score RDM values to normalize variance for downstream analysis.
+
+### `simulations/functions/dRSA_subsampling_diagnostics.m`
+- Report mask statistics, iteration overlap (Jaccard), coverage, and start-point entropy with summary plots.
+
+### `simulations/functions/dRSA_trialwise_subsampling.m`
+- Sample subsamples trial-by-trial, limiting to one window per trial with repetition control and visualization masks.
+
+### `simulations/functions/dRSA_triggered_subsampling.m`
+- Time-lock subsamples to trigger points with pre/post windows, spacing constraints, and repetition tracking.
+
 # 16 Jan 2026 22:25
 
 ## Experiment documentation
