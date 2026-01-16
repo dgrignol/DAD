@@ -33,8 +33,10 @@ Replay expectations (see experiment/trigger_codes.md):
   until the next trial-start trigger (1-80/102).
 - A replay-start trigger (151) is emitted once per block, before the first
   replayed trial in that block.
-- Triggers between the first 151 and the expected first trigger of block 2 are
+- Triggers between each 151 and the next block's expected first trigger are
   marked as REPLAY in the match column to avoid misalignment.
+- Gaze breaks (150) and the missing 81 that follows are labeled GazeBreak
+  in the match column to keep aborts visible in the table.
 
 Usage:
     ./inspect_fif_report.py [--subject N] [--run N] [--fif PATH] [--out PATH]
@@ -715,61 +717,104 @@ def _process_trigger_events(
                     break
 
             return {
+                "gaze_break_count": len(gaze_break_times),
                 "gaze_break_violations": gaze_break_violations,
                 "replay_start_count": replay_start_count,
                 "replay_trial_count": len(replay_trial_starts),
                 "replay_issues": replay_issues,
             }
 
-        # Identify the replay window so we can pause expected matching.
-        # We use the first expected trigger from block 2 as the boundary marker.
-        def find_block2_first_trigger():
-            if not expected_seq_blocks:
-                return None
-            for block_idx, seq in expected_seq_blocks:
-                if block_idx == 2:
-                    return seq[0] if seq else None
-            if len(expected_seq_blocks) >= 2:
-                return expected_seq_blocks[1][1][0] if expected_seq_blocks[1][1] else None
-            return None
-
-        replay_start_time = None
-        if rows:
-            for trig, start, _, _ in rows:
+        # Identify replay windows so we can pause expected matching after each 151.
+        # The replay window lasts from each replay-start trigger to the next block's
+        # first expected trigger (or to the end of the recording for the last block).
+        def build_replay_windows(records):
+            replay_starts = []
+            for trig, start, _, _ in records:
                 if trig == 151:
-                    replay_start_time = float(start)
-                    break
-        block2_first_trigger = find_block2_first_trigger()
-        replay_stop_time = None
-        if replay_start_time is not None and block2_first_trigger is not None:
-            for trig, start, _, _ in rows:
-                if trig == block2_first_trigger and float(start) > replay_start_time:
-                    replay_stop_time = float(start)
-                    break
+                    replay_starts.append(float(start))
+            if not replay_starts:
+                return []
+
+            block_order = [block_idx for block_idx, _ in expected_seq_blocks]
+            block_first_trigs = {
+                block_idx: (seq[0] if seq else None) for block_idx, seq in expected_seq_blocks
+            }
+            block_first_times = {}
+            for block_idx, trig_val in block_first_trigs.items():
+                if trig_val is None:
+                    continue
+                for trig, start, _, _ in records:
+                    if trig == trig_val:
+                        block_first_times.setdefault(block_idx, []).append(float(start))
+                if block_idx in block_first_times:
+                    block_first_times[block_idx].sort()
+
+            replay_windows = []
+            for replay_start in replay_starts:
+                replay_end = None
+                for block_idx in block_order:
+                    times = block_first_times.get(block_idx, [])
+                    for t in times:
+                        if t > replay_start:
+                            replay_end = t
+                            break
+                    if replay_end is not None:
+                        break
+                if replay_end is None:
+                    replay_end = record_end_time
+                replay_windows.append((replay_start, replay_end))
+            return replay_windows
+
+        replay_windows = build_replay_windows(rows)
 
         def in_replay_window(start):
-            if replay_start_time is None or replay_stop_time is None:
+            if not replay_windows:
                 return False
-            return replay_start_time < float(start) < replay_stop_time
+            start_time = float(start)
+            return any(
+                replay_start < start_time < replay_end
+                for replay_start, replay_end in replay_windows
+            )
 
         # Align actual rows to the expected sequence, inserting placeholders for missing.
         def align_records(records):
             """
             Align actual records to expected_seq; insert missing expected as synthetic rows.
 
-            Rows between replay-start (151) and the first expected block-2 trigger
-            are marked as REPLAY and do not advance expected matching.
+            Rows between replay-start (151) and the next block's first expected
+            trigger are marked as REPLAY and do not advance expected matching.
             """
             combined_rows = []
             matches = []
             expected_indices = []
             exp_idx = 0
             act_idx = 0
+            gaze_break_pending = False
             while act_idx < len(records):
                 trig, start, end, allowed = records[act_idx]
+                # Gaze breaks (150) abort the current trial and suppress the end trigger (81).
+                if trig == 150 and not is_missing_row(start, end):
+                    combined_rows.append((trig, start, end, allowed))
+                    matches.append("GazeBreak")
+                    expected_indices.append(None)
+                    gaze_break_pending = True
+                    act_idx += 1
+                    continue
+                if trig == 151 and not is_missing_row(start, end):
+                    combined_rows.append((trig, start, end, allowed))
+                    matches.append("REPLAY")
+                    expected_indices.append(None)
+                    act_idx += 1
+                    continue
                 if not is_missing_row(start, end) and in_replay_window(start):
                     combined_rows.append((trig, start, end, allowed))
                     matches.append("REPLAY")
+                    expected_indices.append(None)
+                    act_idx += 1
+                    continue
+                if trig == 201 and not is_missing_row(start, end):
+                    combined_rows.append((trig, start, end, allowed))
+                    matches.append("RESPONSE")
                     expected_indices.append(None)
                     act_idx += 1
                     continue
@@ -800,7 +845,11 @@ def _process_trigger_events(
                 for missing_idx in range(exp_idx, found_idx):
                     missing_trig = expected_seq[missing_idx]
                     combined_rows.append((missing_trig, float("nan"), float("nan"), 1))
-                    matches.append("MISSING")
+                    if gaze_break_pending and missing_trig == 81:
+                        matches.append("GazeBreak")
+                        gaze_break_pending = False
+                    else:
+                        matches.append("MISSING")
                     expected_indices.append(missing_idx)
 
                 # Add the aligned actual trigger.
@@ -809,6 +858,8 @@ def _process_trigger_events(
                 expected_indices.append(found_idx)
                 exp_idx = found_idx + 1
                 act_idx += 1
+                if gaze_break_pending and trig in trial_start_trigs:
+                    gaze_break_pending = False
 
             # Append any remaining expected triggers as missing.
             for remaining_idx in range(exp_idx, len(expected_seq)):
@@ -985,6 +1036,10 @@ def _process_trigger_events(
                     return "<td style='background:#f8c5c5;text-align:center;'>MISSING</td>"
                 if val == "REPLAY":
                     return "<td style='background:#cfe8ff;text-align:center;'>REPLAY</td>"
+                if val == "RESPONSE":
+                    return "<td style='background:#c8f7c5;text-align:center;'>RESPONSE</td>"
+                if val == "GazeBreak":
+                    return "<td style='background:#ffd699;text-align:center;'>GazeBreak</td>"
                 color = "#c8f7c5" if val == 1 else "#f8c5c5"
                 return f"<td style='background:{color};text-align:center;'>{val}</td>"
 
@@ -1093,7 +1148,8 @@ def _process_trigger_events(
             replay_summary_html = (
                 "<div style='margin-top:8px;'>"
                 f"<p><strong>{replay_status}</strong></p>"
-                f"<p>Gaze-break 150 → 81 violations: {len(gaze_break_violations)}</p>"
+                f"<p>Gaze breaks (150) detected: {replay_checks['gaze_break_count']}</p>"
+                f"<p>Gaze-break 150 -> 81 violations: {len(gaze_break_violations)}</p>"
                 f"<p>Replay-start (151) count: {replay_checks['replay_start_count']}</p>"
                 f"<p>Replay trial starts detected: {replay_checks['replay_trial_count']}</p>"
                 "</div>"

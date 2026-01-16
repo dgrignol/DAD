@@ -1,4 +1,4 @@
-% MoveDot1_experiment_vX.m
+      % MoveDot1_experiment_vX.m
 % Experiment runtime script for the MoveDot1 paradigm (MEG + EyeLink capable).
 %
 % Inputs
@@ -7,7 +7,7 @@
 % - Manual subject/run/viewing-distance entry at startup dialog
 %
 % Outputs
-% - output_files/MoveDot1_SUBXX_RUNYY.mat (CatchOutput, Catch, output, Conf)
+% - output_files/MoveDot1_SUBXX_RUNYY       .mat (CatchOutput, Catch, output, Conf)
 % - output_files/..._firstBlock.mat (intermediate save after block 1)
 % - output_files/debug_actual_triggers_subXX_runYY.csv (only when Conf.debug=1)
 %

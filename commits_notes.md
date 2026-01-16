@@ -1,3 +1,24 @@
+# 16 Jan 2026 22:25
+
+## Experiment documentation
+
+### `experiment/MoveDot1_experiment_vX.m`
+- Indent the top banner line and adjust spacing in the output path comment; no runtime behavior changes.
+
+## Trigger analysis tooling
+
+### `inspect_fif_report.py`
+- Update replay expectations so each replay-start (151) opens a replay window until the next block's first expected trigger, and tag gaze breaks (150) plus the missing 81 as GazeBreak in the match column.
+- Build replay windows for every 151 using expected block order and an end-of-recording fallback so matching pauses per replay block.
+- Handle gaze breaks, replay starts, and response triggers (201) explicitly during alignment so they stay visible without advancing expected matching.
+- Add a gaze-break count to replay summaries and add HTML match styling for RESPONSE and GazeBreak rows.
+
+## Reports
+
+### `reports/sub98/sub98_report.html`
+- Regenerate the report with updated trigger matching so GazeBreak/REPLAY/RESPONSE labels and replay summary counts are included.
+- Refresh MNE section IDs and the footer timestamp from the new output.
+
 # 14 Jan 2026 12:50
 
 ## Replay trigger semantics and reporting
