@@ -2,9 +2,9 @@ classdef Config
     properties(Constant)
     
         %general
-        trialsPerCondition = 20;  %nSeq in their code
+        trialsPerCondition = 10000;  %nSeq in their code
         trialDuration = 2.67;       %in seconds
-        trialRepetetion = 2;
+        trialRepetetion = 1;
         %general - pc settings
         frameFrequency = 120;   %frames per senconds
         %in their code they define the inter frame interval, which is not used

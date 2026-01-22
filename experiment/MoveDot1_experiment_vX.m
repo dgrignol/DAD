@@ -1,4 +1,4 @@
-      % MoveDot1_experiment_vX.m
+% MoveDot1_experiment_vX.m
 % Experiment runtime script for the MoveDot1 paradigm (MEG + EyeLink capable).
 %
 % Inputs
