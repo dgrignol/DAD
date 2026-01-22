@@ -1,3 +1,10 @@
+# 22 Jan 2026 16:36
+
+## Repository hygiene
+
+### `.gitignore`
+- Ignore the local `simulations/pipeline_recursive_backup.m` copy so the backup stays out of version control.
+
 # 22 Jan 2026 16:35
 
 ## Simulation pipeline scripts

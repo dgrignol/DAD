@@ -12,5 +12,6 @@ simulations/output/
 simulations/report/
 simulations/debug/debug/
 simulations/debug/*.png
+simulations/pipeline_recursive_backup.m
 input/
 experiment/lib/Config.m~
