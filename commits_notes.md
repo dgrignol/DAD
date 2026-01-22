@@ -1,3 +1,20 @@
+# 22 Jan 2026 16:35
+
+## Simulation pipeline scripts
+
+### `simulations/pipeline_recursive.m`
+- Switch the recursive scan to score random subsets by max dot1-vs-dot2 position correlation, then reuse the lowest-correlation subset for a single full dRSA run.
+- Store per-iteration subset indices and max-correlation scores in `scanResults`, then capture final outputs in `bestResults` with the selected subset metadata.
+- Limit path and dRSA matrix plotting to the selected subset to keep the scan loop non-graphical and faster for batch usage.
+- Update script-level documentation to reflect the new subset-selection workflow and output variables.
+
+## dRSA functions
+
+### `simulations/functions/dRSA_concatenate.m`
+- Add a `plotConcat` input (default on) to suppress diagnostic figures during batch runs without changing concatenation behavior.
+- Validate the new plotting flag and document the new call signatures, including empty-mask usage when only toggling plotting.
+- Gate the plotting block behind `plotConcat` and keep the existing figure layout intact when enabled.
+
 # 22 Jan 2026 15:36
 
 ## Simulation pipeline scripts

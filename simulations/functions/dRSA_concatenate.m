@@ -1,13 +1,17 @@
-function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
+function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
     %dRSA_CONCATENATE  Concatenate feature matrices over time and create a boundary mask.
 %
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn)
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
+%   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
+%   [dataOut, maskOut] = dRSA_concatenate(dataIn, [], plotConcat)
+%     - plotConcat defaults to 1; set to 0 to suppress the diagnostic figure.
 %
 % DESCRIPTION
 %   Produces a single features×time matrix by concatenating inputs along the
 %   time dimension and returns/updates a "Concatenation mask" that flags the
 %   boundaries between segments (0 at each boundary sample, 1 elsewhere).
+%   Use plotConcat = 0 to skip plotting in batch runs.
 %
 %   Accepted input forms:
 %     • Numeric 3D array  (trial × feature × time)
@@ -33,6 +37,7 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
 % SYNTAX
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn)
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskInStruct)
+%   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskInStruct, plotConcat)
 %
 % INPUTS
 %   dataIn  : One of
@@ -44,6 +49,8 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
 %   maskIn  : (optional) struct with fields:
 %              – label : 1×N cellstr of mask names
 %              – mask  : N×T double, each row a mask over time
+%   plotConcat : (optional) scalar logical/numeric, default = 1
+%              – 1 to show the concatenation figure, 0 to suppress plotting
 %
 % OUTPUTS
 %   dataOut : double, feature × time concatenation of the input segments.
@@ -59,7 +66,7 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
 %   For cell inputs, the mask is 0 at each join index between matrices.
 %
 % SIDE EFFECTS
-%   Opens a figure with two subplots:
+%   When plotConcat = 1, opens a figure with two subplots:
 %     (1) imagesc of dataOut (features × time)
 %     (2) imagesc of the 0/1 boundary mask (gray colormap)
 %
@@ -70,10 +77,18 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
 %   • For .mat paths, each file must contain a single variable that is the
 %     intended feature × time matrix (no name assumptions are made).
 
+    % --- Input validation and defaults ---
     if nargin < 1
         error('dRSA_concatenate:missingData', 'Input data is required.');
     end
+    if nargin < 3 || isempty(plotConcat)
+        plotConcat = 1;
+    end
+    if ~isscalar(plotConcat) || ~isnumeric(plotConcat)
+        error('plotConcat must be a numeric scalar (0 or 1).');
+    end
     
+    % --- Concatenate data and build boundary mask ---
     if iscell(dataIn) % check if input is cell array
         if all(cellfun(@(x) isnumeric(x) && ismatrix(x), dataIn)) % Check that all elements are 2D numeric matrices
             disp('dataIn is a cell array of 2D matrices');            
@@ -105,7 +120,7 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
         error('dataIn must be either a 2D/3D numeric matrix or a cell array of 2D matrices');
     end
     
-        % --- Handle maskIn: create "Concatenation mask" entry ---
+    % --- Handle maskIn: create "Concatenation mask" entry ---
     if nargin < 2 || ~isstruct(maskIn) || ~all(isfield(maskIn, {'label','mask'})) % check maskIn exist and has necessary fields
         % Create new structure if maskIn not provided or invalid
         maskIn.label = {'Concatenation mask'}; % give concatenation mask label
@@ -127,22 +142,25 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
     
 
     
-    %% plot concatenated data and mask
-    figure('Name', 'Concatenated data and mask', 'NumberTitle', 'off');
+    %% Plot concatenated data and mask (optional)
+    % Data flow: concatenated outputs -> diagnostic figure.
+    if plotConcat ~= 0
+        figure('Name', 'Concatenated data and mask', 'NumberTitle', 'off');
 
-    subplot(2, 1, 1);
-    imagesc(dataOut);
-    colorbar;
-    title('Concatenated output (features × time)');
-    ylabel('Feature');
+        subplot(2, 1, 1);
+        imagesc(dataOut);
+        colorbar;
+        title('Concatenated output (features × time)');
+        ylabel('Feature');
 
-    subplot(2, 1, 2);
-    ax1 = gca;
-    imagesc(maskConcat);
-    colormap(ax1,gray); 
-    colorbar;
-    xlabel('Time');
-    title('Boundary mask');
+        subplot(2, 1, 2);
+        ax1 = gca;
+        imagesc(maskConcat);
+        colormap(ax1,gray);
+        colorbar;
+        xlabel('Time');
+        title('Boundary mask');
+    end
 
 
     
@@ -204,4 +222,3 @@ function [dataOut, maskConcat] = concat_cellArray(dataIn)
             startEndIdx = startEndIdx(1:end-1); % take out last one
             maskConcat(startEndIdx) = 0; % assign 0 to start and end    
 end
-
