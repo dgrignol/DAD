@@ -1,6 +1,7 @@
 .DS_Store
 experiment/input_files/
 experiment/output_files/
+experiment/output/
 .venv/
 data/
 experiment/triggers_report_sub03_copy_withNotes.pdf
@@ -10,3 +11,6 @@ simulations/input/
 simulations/output/
 simulations/report/
 simulations/debug/debug/
+simulations/debug/*.png
+input/
+experiment/lib/Config.m~
