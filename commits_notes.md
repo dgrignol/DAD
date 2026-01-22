@@ -1,3 +1,13 @@
+# 22 Jan 2026 15:36
+
+## Simulation pipeline scripts
+
+### `simulations/pipeline_recursive.m`
+- Add a recursive dRSA pipeline that rebuilds simulation inputs and samples random trial subsets to inspect run-to-run variability without writing outputs.
+- Configure per-run plotting for dot paths and dRSA matrices, with position and direction models run separately and labeled by model/time axes.
+- Include trial-locked trigger subsampling over full trials, with guardrails for subset size and trial-length alignment, and store per-run results in a workspace struct.
+- Embed a local plotting helper that mirrors the debug visualization style while keeping figures in-memory only.
+
 # 16 Jan 2026 22:34
 
 ## Simulation pipeline scripts
