@@ -59,6 +59,10 @@ conditions = assets.conditions;
 params = assets.params;
 paramsPCR = assets.paramsPCR;
 figureOutputDir = assets.figureOutputDir;
+includePCR = true;
+if isfield(assets, 'includePCR')
+    includePCR = assets.includePCR;
+end
 
 %% Initialize the report
 % Data flow: report metadata -> Report Generator document skeleton.
@@ -86,6 +90,7 @@ paramTableData = {
     'neuralDistMeasure', string(params.neuralDistMeasure);
     'dRSAtype (corr)', string(params.dRSAtype);
     'dRSAtype (PCR)', string(paramsPCR.dRSAtype);
+    'includePCR', string(includePCR);
 };
 paramTable = Table(paramTableData);
 paramTable.Style = {Border('solid'), ColSep('solid'), RowSep('solid')};
@@ -100,6 +105,10 @@ add(pathsSection, Paragraph('Each subplot shows dot trajectories per condition.'
 add_image(pathsSection, fullfile(figureOutputDir, ...
     sprintf('dot_paths_grouped_%s.png', subjectLabel)), ...
     sprintf('Dot paths grouped by condition and dot (%s)', subjectLabel));
+add(pathsSection, Paragraph('Mean distance-from-center profiles averaged across conditions.'));
+add_image(pathsSection, fullfile(figureOutputDir, ...
+    sprintf('dot_paths_position_distribution_%s.png', subjectLabel)), ...
+    sprintf('Distance from center (mean across conditions, %s)', subjectLabel));
 add(rpt, pathsSection);
 
 %% Add grouped position-time distance matrices
@@ -114,20 +123,22 @@ add(rpt, distSection);
 %% Add combined dRSA matrices page
 % Data flow: precomputed figures -> report section.
 drsaSection = Section('Title', 'dRSA matrices');
-add(drsaSection, Paragraph('Top row: dot 1 as data. Bottom row: dot 2 as data.'));
+add(drsaSection, Paragraph('Top row: position data (dot 1). Bottom row: direction data (dot 1).'));
 add_image(drsaSection, fullfile(figureOutputDir, ...
     sprintf('drsa_matrices_corr_%s.png', subjectLabel)), ...
     sprintf('dRSA matrices (corr, %s)', subjectLabel));
-add(drsaSection, Paragraph('PCR matrices shown below.'));
-add_image(drsaSection, fullfile(figureOutputDir, ...
-    sprintf('drsa_matrices_pcr_%s.png', subjectLabel)), ...
-    sprintf('dRSA matrices (PCR, %s)', subjectLabel));
+if includePCR
+    add(drsaSection, Paragraph('PCR matrices shown below.'));
+    add_image(drsaSection, fullfile(figureOutputDir, ...
+        sprintf('drsa_matrices_pcr_%s.png', subjectLabel)), ...
+        sprintf('dRSA matrices (PCR, %s)', subjectLabel));
+end
 add(rpt, drsaSection);
 
 %% Add combined lagged plots page
 % Data flow: precomputed figures -> report section.
 lagSection = Section('Title', 'Lagged dRSA');
-add(lagSection, Paragraph('Two panels: dot 1 as data and dot 2 as data.'));
+add(lagSection, Paragraph('Two panels: position data and direction data from dot 1.'));
 add_image(lagSection, fullfile(figureOutputDir, ...
     sprintf('lagged_drsa_%s.png', subjectLabel)), ...
     sprintf('Lagged dRSA plots combined (%s)', subjectLabel));

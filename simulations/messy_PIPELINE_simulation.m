@@ -1,22 +1,29 @@
-% PIPELINE_simulation.m
+% messy_PIPELINE_simulation.m
 %
 % Purpose:
 %   Run dRSA simulations on dot-motion inputs. This script loads
 %   condition-specific dot-path data (dot 1 + dot 2, visual degrees),
-%   prepares concatenated inputs, and executes the dRSA workflow.
+%   prepares concatenated inputs, and executes the dRSA workflow for
+%   position- and direction-based dot models.
 %
 % Example usage (from simulations/ in MATLAB):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   PIPELINE_simulation;
+%   messy_PIPELINE_simulation;
 %
 % Example usage (from anywhere in MATLAB):
 %   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   PIPELINE_simulation;
+%   messy_PIPELINE_simulation;
 %
 % Configuration (edit at the start of the script):
 %   - participantNumber selects MovDot_SubXX.mat and the derived simulation
 %     inputs (MovDot_SubXX_nondeviant/deviant.mat).
 %   - inputCondition selects which condition to load for the simulation run.
+%   - shuffleDot2Trials decouples dot2 trial order from dot1 (diagnostic).
+%   - resampleSubsamples toggles trial subsampling across iterations to
+%     reduce memory use; resampleIterations, resampleSubsampleCount, and
+%     resampleWithReplacement control the resampling behavior.
+%   - output filenames include subject/condition, dRSA type, sampling rate,
+%     averaging window, and shuffle/resampling flags.
 %   Example configuration:
 %     participantNumber = 98;
 %     inputCondition = 'deviant';
@@ -26,7 +33,12 @@
 %       dot1GreenPaths (trials × 2 × time) and dot2YellowPaths (same shape)
 %
 % Outputs:
-%   - dRSA matrices and figures (see sections below).
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_results.mat
+%     containing dRSA matrices, diagonal summaries, parameters, trigger masks,
+%     subsamples, and input dot-trial data needed to reproduce the run.
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_matrices.png
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_diagonal.png
+%   - Debug plots in simulations/debug (paths, time-distance, center-distance).
 %
 % Key assumptions:
 %   - dot1GreenPaths and dot2YellowPaths are in visual degrees.
@@ -52,9 +64,14 @@ addpath(fullfile(scriptDir, 'debug'));
 addpath '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD'
 %% Participant configuration
 % Data flow: participant number + condition -> input filenames -> simulation data.
-participantNumber = 98;
+participantNumber = 94;
 inputCondition = 'nondeviant'; % 'nondeviant' or 'deviant' to match output files.
 inputCondition = lower(inputCondition);
+shuffleDot2Trials = false; % true to shuffle dot2 trials relative to dot1 before dRSA
+resampleSubsamples = false; % true to use per-iteration trial subsets for dRSA
+resampleIterations = 100; % number of resampled iterations (only if resampleSubsamples)
+resampleSubsampleCount = 100; % number of triggers per iteration (only if resampleSubsamples)
+resampleWithReplacement = false; % true = bootstrap-style resampling, false = unique subset per iteration
 validConditions = {'nondeviant', 'deviant'};
 if ~ismember(inputCondition, validConditions)
     error('inputCondition must be one of: %s', strjoin(validConditions, ', '));
@@ -94,6 +111,16 @@ dot2YellowPaths = simulationData.dot2YellowPaths;
 dot1Trials = dot1GreenPaths;
 dot2Trials = dot2YellowPaths;
 
+%% Optional trial shuffling (dot2 relative to dot1)
+% Data flow: dot2Trials -> permuted trial order -> decoupled dot1/dot2 pairing.
+% Purpose: test whether dot1-dot2 structure is driven by trial-locked coupling.
+shuffleOrder = []; % store permutation for reproducibility (empty when unshuffled).
+if shuffleDot2Trials
+    rng('shuffle'); % avoid reusing the subject-seeded RNG for the shuffle
+    shuffleOrder = randperm(size(dot2Trials, 1));
+    dot2Trials = dot2Trials(shuffleOrder, :, :);
+end
+
 % % debug
 % simulationInputFile
 % size(dot1GreenPaths, 3)
@@ -102,18 +129,62 @@ dot2Trials = dot2YellowPaths;
 plot_paths(dot1GreenPaths, 'Title', 'Dot 1 paths');
 plot_paths(dot2YellowPaths, 'Title', 'Dot 2 paths');
 
+plot_position_distribution(dot1GreenPaths, 'Title', 'Dot 1 dot position distribution')
+plot_position_distribution(dot2YellowPaths, 'Title', 'Dot 2 dot position distribution')
+
 plot_position_time_distance(dot1GreenPaths, 'Title', 'Dot 1 distance');
 plot_position_time_distance(dot2YellowPaths, 'Title', 'Dot 2 distance');
 
+plot_direction_angle_over_time(dot1GreenPaths, 'DotLabel', 'dot1', 'Unwrap', true);
+plot_direction_angle_over_time(dot2YellowPaths, 'DotLabel', 'dot2', 'Unwrap', true);
+
+%% Plot mean distance from center for each timepoint
+% Data flow: input Cfg.rectSize -> center definition -> distance profiles.
+cfgData = load(inputFile, 'Cfg');
+rectSize = [];
+if isfield(cfgData, 'Cfg') && isfield(cfgData.Cfg, 'rectSize')
+    % Cfg.rectSize is Config.dotRectSize (visual degrees, origin at [0 0]).
+    rectSize = cfgData.Cfg.rectSize;
+end
+plot_position_distribution(dot1GreenPaths, ...
+    'Title', 'Dot 1 distance from center', ...
+    'RectSize', rectSize);
+plot_position_distribution(dot2YellowPaths, ...
+    'Title', 'Dot 2 distance from center', ...
+    'RectSize', rectSize);
+
 %% Prepare data, models, and trial-locked subsamples
-% Data flow: trial arrays -> concatenated time series -> trial-start triggers.
-%[data mask] = dRSA_concatenate(data,mask) %see documentation with help dRSA_concatenate
-data = dRSA_concatenate(dot1Trials); %see documentation with help dRSA_concatenate
-model1 = data;
-model2 = dRSA_concatenate(dot2Trials);
-% Build a trigger mask at the first sample of each trial (trial-locked dRSA).
-trialLen = size(dot1GreenPaths, 3);
-totalTime = size(data, 2);
+% Data flow: trial arrays -> per-dot position + direction models -> concatenated time series.
+% Position models use raw x/y paths; direction models use per-timepoint angles.
+% [data mask] = dRSA_concatenate(data,mask) %see documentation with help dRSA_concatenate
+dataPosition = dRSA_concatenate(dot1Trials); %see documentation with help dRSA_concatenate
+
+% Position models (per dot).
+modelPositionDot1 = dataPosition;
+modelPositionDot2 = dRSA_concatenate(dot2Trials);
+
+% Direction models (per dot).
+% Data flow: dot positions -> frame-to-frame displacement -> angle -> unit vector features.
+% The first timepoint uses the t1->t2 displacement to infer direction.
+dot1Dx = diff(dot1Trials(:, 1, :), 1, 3); % frame-to-frame x displacement (trials x 1 x time-1)
+dot1Dy = diff(dot1Trials(:, 2, :), 1, 3); % frame-to-frame y displacement (trials x 1 x time-1)
+dot1Dx = cat(3, dot1Dx(:, :, 1), dot1Dx); % pad with first displacement so length matches original time
+dot1Dy = cat(3, dot1Dy(:, :, 1), dot1Dy); % pad with first displacement so length matches original time
+dot1Angle = atan2(dot1Dy, dot1Dx); % per-timepoint direction angle in radians
+dot1Direction = cat(2, cos(dot1Angle), sin(dot1Angle)); % convert angles to unit vectors [cos; sin]
+modelDirectionDot1 = dRSA_concatenate(dot1Direction); % flatten trial/time into dRSA-ready direction model
+
+dot2Dx = diff(dot2Trials(:, 1, :), 1, 3); % frame-to-frame x displacement for dot 2 (trials x 1 x time-1)
+dot2Dy = diff(dot2Trials(:, 2, :), 1, 3); % frame-to-frame y displacement for dot 2 (trials x 1 x time-1)
+dot2Dx = cat(3, dot2Dx(:, :, 1), dot2Dx); % pad with first displacement so length matches original time
+dot2Dy = cat(3, dot2Dy(:, :, 1), dot2Dy); % pad with first displacement so length matches original time
+dot2Angle = atan2(dot2Dy, dot2Dx); % per-timepoint direction angle in radians
+dot2Direction = cat(2, cos(dot2Angle), sin(dot2Angle)); % convert angles to unit vectors [cos; sin]
+modelDirectionDot2 = dRSA_concatenate(dot2Direction); % flatten trial/time into dRSA-ready direction model
+dataDirection = modelDirectionDot1; % use dot 1 direction as the observed data series
+% Build a trigger mask at the first sample of each trial (trial-locked dRSA)
+trialLen = size(dot1Trials, 3);
+totalTime = size(dataPosition, 2);
 maskSubsampling = true(1, totalTime); % allow full-trial windows
 if mod(totalTime, trialLen) ~= 0
     error('Total time (%d) is not a multiple of trial length (%d).', totalTime, trialLen);
@@ -122,7 +193,7 @@ trialStarts = 1:trialLen:totalTime;
 maskTrigger = false(1, totalTime);
 maskTrigger(trialStarts) = true;
 
-% Triggered subsampling: each subsample spans the full trial.
+% Triggered subsampling: each subsample spans the full trial
 opt.PreTrigger = 0;
 opt.PostTrigger = trialLen - 1;
 opt.spacing = 0;
@@ -131,10 +202,26 @@ opt.nIter = 1;
 opt.checkRepetition = 0;
 
 subsamples = dRSA_triggered_subsampling(maskSubsampling, maskTrigger, opt);
-% Resample subsamples with replacement to create multiple iterations.
-% resampleIterations = 50;
-% resamplePercent = 50;
-% subsamples = dRSA_resample_subsamples(subsamples, resampleIterations, resamplePercent);
+%% Optional subsample resampling (memory control)
+% Data flow: full trial subsamples -> (optional) resampled subsets -> iteration tensor.
+if resampleSubsamples
+    baseSubsamples = subsamples(:, :, 1);
+    baseCount = size(baseSubsamples, 1);
+    if resampleSubsampleCount > baseCount
+        error('resampleSubsampleCount (%d) exceeds available subsamples (%d).', ...
+            resampleSubsampleCount, baseCount);
+    end
+    if resampleWithReplacement
+        resamplePercent = 100 * (resampleSubsampleCount / baseCount);
+        subsamples = dRSA_resample_subsamples(baseSubsamples, resampleIterations, resamplePercent);
+    else
+        subsamples = zeros(resampleSubsampleCount, size(baseSubsamples, 2), resampleIterations);
+        for iIter = 1:resampleIterations
+            drawIdx = randperm(baseCount, resampleSubsampleCount);
+            subsamples(:, :, iIter) = baseSubsamples(drawIdx, :);
+        end
+    end
+end
 
 % include illustration
 % mask is maskTypes*time
@@ -143,100 +230,209 @@ subsamples = dRSA_triggered_subsampling(maskSubsampling, maskTrigger, opt);
 
 
 
-%% Simulations dRSA
-
-Y = data; % data;
-model = {model1, model2};
+%% Simulations dRSA (position and direction data)
+% Data flow: dot1 position/direction data -> dRSA against all models.
+% Reuse the same models to compare how data choice changes the dRSA output.
+Y = dataPosition; % position data from dot 1
+model = {modelPositionDot1, modelPositionDot2, modelDirectionDot1, modelDirectionDot2};
+modelNames = {'position dot1', 'position dot2', 'direction dot1', 'direction dot2'};
 % wrapper for many subsamples (most cases, except e.g. Ayman)
 
 
 % In case we do the PCR, it is better to calculate the border outside, because otherwise we would need to recalculate it
 % for each iteration
-params.nIter = 1;%resampleIterations;  %how many Iterations?
+params.nIter = size(subsamples, 3);  % how many iterations?
 params.fs = 120; %framerate or how many samples fit into 1 second
 % Use an integer sample window for averaging to avoid non-integer sizes.
 avgHalfWindowSamples = floor((trialLen - 1) / 2);
 params.AverageTime = avgHalfWindowSamples / params.fs; %in s
-params.modelToTest = [1 2];  %array of models to test
+params.modelToTest = [1 2 3 4];  %array of models to test
 params.Var = 0.1; % how much variance? 
-params.modelDistMeasure = {'euclidean', 'euclidean'};
+params.modelDistMeasure = {'euclidean', 'euclidean', 'cosine', 'cosine'};
 params.neuralDistMeasure = 'euclidean'; % pdist expects a string/char or function handle.
 
 Autocorrborder = dRSA_border(model, subsamples, params);
 
 %For the PCR
 params.dRSAtype = 'PCR';% 'PCR';% 'corr'; %
-params.modeltoRegressout = {[] []};%{2 1}; % {[4 5] [1 3] [1 2]};
+params.modeltoRegressout = {[2 3 4] [1 3 4] [1 2 4] [1 2 3]};
+params.PCR.AdditionalPCA = 1;
+% params.normalizazion = 'Rescale';
 
 % Regress out autocorrelation
 params.PCR.RegressAutocor = 1 
-params.PCR.RessModel = 0
+params.PCR.RessModel = 1
 
 %the other stuff use default values. Can be changed, see documentation of PCR function
 
+% Run dRSA for position data.
 dRSA_Iter = [];
-
 for iIter = 1:params.nIter
     CurrSubsamples = subsamples(:,:,iIter); % subsamples is nSubsamples*subSampleDuration*iterations
-    dRSAma = dRSA_coreFunction(Y,model, params, ...
+    dRSAma = dRSA_coreFunction(Y, model, params, ...
         'CurrSubsamples', CurrSubsamples, 'Autocorrborder', Autocorrborder);%
     % Y is features*time or a finished RDM of subsamples x subsamples x time
     % models: 1*nModels cell arrray (also used for regress out models, automatically regresses out other models)
     
-    
     %In this funciton we have default values
     % we also have varagin: If we want, we can add the autocorrelation and already Subsamples at the end, but we dont need to
-    
     
     dRSA_Iter(iIter,:,:,:) = dRSAma;
 end  %of nIter
 
 % average dRSAmats (do by summing current with previous summed)  
- % ----------------------------------QUESTION:  include this into averaging function?
-dRSA = mean(dRSA_Iter ,1); % 1 = Fmean across first dim
-dRSA = reshape(dRSA, size(dRSA,2), size(dRSA,3), size(dRSA,4));
+% ----------------------------------QUESTION:  include this into averaging function?
+dRSA_position = mean(dRSA_Iter ,1); % 1 = Fmean across first dim
+dRSA_position = reshape(dRSA_position, size(dRSA_position,2), size(dRSA_position,3), size(dRSA_position,4));
 
-%% Plot dRSA matrices
-% Data flow: dRSA (time x time x model) -> per-model heatmaps.
-nModels = size(dRSA, 3);
-nTime = size(dRSA, 1);
+% Run dRSA for direction data.
+Y = dataDirection; % direction data from dot 1
+dRSA_Iter = [];
+for iIter = 1:params.nIter
+    CurrSubsamples = subsamples(:,:,iIter); % subsamples is nSubsamples*subSampleDuration*iterations
+    dRSAma = dRSA_coreFunction(Y, model, params, ...
+        'CurrSubsamples', CurrSubsamples, 'Autocorrborder', Autocorrborder);%
+    % Y is features*time or a finished RDM of subsamples x subsamples x time
+    % models: 1*nModels cell arrray (also used for regress out models, automatically regresses out other models)
+    
+    %In this funciton we have default values
+    % we also have varagin: If we want, we can add the autocorrelation and already Subsamples at the end, but we dont need to
+    
+    dRSA_Iter(iIter,:,:,:) = dRSAma;
+end  %of nIter
+
+% average dRSAmats (do by summing current with previous summed)  
+% ----------------------------------QUESTION:  include this into averaging function?
+dRSA_direction = mean(dRSA_Iter ,1); % 1 = Fmean across first dim
+dRSA_direction = reshape(dRSA_direction, size(dRSA_direction,2), size(dRSA_direction,3), size(dRSA_direction,4));
+
+% Preserve parameters used for dRSA before reusing them for diagonal averaging.
+paramsCore = params;
+
+%% Plot dRSA matrices (position vs direction data)
+% Data flow: dRSA per data type (time x time x model) -> grid of heatmaps.
+nModels = size(dRSA_position, 3);
+nTime = size(dRSA_position, 1);
+dRSAAll = {dRSA_position, dRSA_direction};
+rowNames = {'Data: position dot1', 'Data: direction dot1'};
 figMatrices = figure('Name', 'dRSA matrices', 'NumberTitle', 'off');
-tiledlayout(1, nModels, 'Padding', 'compact', 'TileSpacing', 'compact');
-for iModel = 1:nModels
-    nexttile;
-    imagesc(dRSA(:, :, iModel));
+tiledlayout(2, nModels, 'Padding', 'compact', 'TileSpacing', 'compact');
+rowAxes = gobjects(numel(dRSAAll), 1);
+for iRow = 1:numel(dRSAAll)
+    for iModel = 1:nModels
+        nexttile((iRow - 1) * nModels + iModel);
+        imagesc(dRSAAll{iRow}(:, :, iModel));
     set(gca, 'YDir', 'normal');
     axis image;
     colorbar;
-    title(sprintf('dRSA model %d', iModel));
-    xlabel('Time (samples)');
-    ylabel('Time (samples)');
+    title(sprintf('dRSA %s', modelNames{iModel}));
+    xlabel(sprintf('Time in %s (samples)', modelNames{iModel}));
+    ylabel(sprintf('Time in %s (samples)', rowNames{iRow}));
     hold on;
     plot(1:nTime, 1:nTime, 'w-', 'LineWidth', 1);
     hold off;
+        if iModel == 1
+            rowAxes(iRow) = gca;
+        end
+    end
+end
+for iRow = 1:numel(rowAxes)
+    if isgraphics(rowAxes(iRow))
+        % Label each row using the first-column axes to avoid annotation limitations.
+        text(rowAxes(iRow), -0.35, 0.5, rowNames{iRow}, ...
+            'Units', 'normalized', 'Rotation', 90, 'FontWeight', 'bold', ...
+            'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
+    end
 end
 
 
 % plot diagonal
-params.AverageTime = 2; %in s, how much should be left and right of the zerolag middle? 
+paramsDiagonal = paramsCore;
+paramsDiagonal.AverageTime = 2; %in s, how much should be left and right of the zerolag middle?
 % already set above: params.fs = 120; %framerate or how many samples fit into 1 second
-dRSA_diagonal = dRSA_average(dRSA, params);
+dRSA_diagonal_position = dRSA_average(dRSA_position, paramsDiagonal);
+dRSA_diagonal_direction = dRSA_average(dRSA_direction, paramsDiagonal);
 
 figLag = figure('Name', 'dRSA diagonal', 'NumberTitle', 'off');
-plot(dRSA_diagonal(1,:));
+plot(dRSA_diagonal_position(1,:), 'LineWidth', 1.5);
+hold on;
+plot(dRSA_diagonal_direction(1,:), 'LineWidth', 1.5);
+hold off;
+xlabel('Time (samples)');
+ylabel('dRSA (diagonal)');
+legend(rowNames, 'Location', 'best');
 
-%% Save matrices and plots (300 dpi)
-outputDir = fullfile('output');
-if ~exist(outputDir, 'dir')
-    mkdir(outputDir);
+%% Save matrices, plots, and reproducibility metadata (300 dpi)
+% Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
+outputDir = fullfile(scriptDir, 'output');
+subjectOutputDir = fullfile(outputDir, subjectLabel);
+if ~exist(subjectOutputDir, 'dir')
+    mkdir(subjectOutputDir);
 end
 
-dRSAtypeLabel = lower(params.dRSAtype);
-resultsBase = sprintf('dRSA_%s_%s_%s', subjectLabel, conditionLabel, dRSAtypeLabel);
-save(fullfile(outputDir, [resultsBase '_results.mat']), 'dRSA', 'dRSA_diagonal', 'params');
+dRSAtypeLabel = lower(paramsCore.dRSAtype);
+shuffleTag = 'noShufDot2';
+if shuffleDot2Trials
+    shuffleTag = 'shufDot2';
+end
+resampleTag = 'rsNone';
+if resampleSubsamples
+    resampleMode = 'sub';
+    if resampleWithReplacement
+        resampleMode = 'boot';
+    end
+    resampleTag = sprintf('rs%d_i%d_%s', ...
+        resampleSubsampleCount, resampleIterations, resampleMode);
+end
+runTagParts = {subjectLabel, conditionLabel, dRSAtypeLabel, ...
+    sprintf('fs%d', paramsCore.fs), sprintf('avg%d', avgHalfWindowSamples), ...
+    shuffleTag, resampleTag};
+resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
+resultsBase = regexprep(resultsBase, '\s+', '');
 
-print(figMatrices, fullfile(outputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
-print(figLag, fullfile(outputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+repro = struct();
+repro.timestamp = datestr(now, 'yyyymmddTHHMMSS');
+repro.scriptPath = mfilename('fullpath');
+repro.repoRoot = repoRoot;
+repro.matlabVersion = version;
+repro.participantNumber = participantNumber;
+repro.subjectLabel = subjectLabel;
+repro.inputCondition = inputCondition;
+repro.conditionLabel = conditionLabel;
+repro.simulationInputFile = simulationInputFile;
+repro.rawInputFile = inputFile;
+repro.shuffleDot2Trials = shuffleDot2Trials;
+repro.shuffleOrder = shuffleOrder;
+repro.resampleSubsamples = resampleSubsamples;
+repro.resampleIterations = resampleIterations;
+repro.resampleSubsampleCount = resampleSubsampleCount;
+repro.resampleWithReplacement = resampleWithReplacement;
+repro.trialLen = trialLen;
+repro.totalTime = totalTime;
+repro.nTrials = size(dot1Trials, 1);
+repro.nModels = nModels;
+repro.modelNames = modelNames;
+repro.paramsCore = paramsCore;
+repro.paramsDiagonal = paramsDiagonal;
+repro.triggerOptions = opt;
+repro.maskSubsampling = maskSubsampling;
+repro.maskTrigger = maskTrigger;
+repro.subsamples = subsamples;
+repro.rectSize = rectSize;
+repro.dot1Trials = dot1Trials;
+repro.dot2Trials = dot2Trials;
+repro.dataPosition = dataPosition;
+repro.dataDirection = dataDirection;
+repro.models = model;
+repro.autocorrBorder = Autocorrborder;
+
+save(fullfile(subjectOutputDir, [resultsBase '_results.mat']), ...
+    'dRSA_position', 'dRSA_direction', ...
+    'dRSA_diagonal_position', 'dRSA_diagonal_direction', ...
+    'params', 'paramsDiagonal', 'repro');
+
+print(figMatrices, fullfile(subjectOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
+print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
 
 % matrices
 % lag plots

@@ -23,6 +23,7 @@
 %
 % Key assumptions:
 %   - Dot paths are trials × 2 × time in visual degrees.
+%   - Direction models use unit vectors derived from frame-to-frame angles.
 %   - dRSA functions in simulations/functions are available on the path.
 
 %% Resolve paths and add dependencies
@@ -43,10 +44,14 @@ addpath(repoRoot);
 % Options:
 %   - useSavedResults: true to reuse cached dRSA results if available.
 %   - saveResults: true to save computed results for future re-plotting.
-useSavedResults = true;
+%   - includePCR: true to compute and plot PCR-based dRSA outputs.
+useSavedResults = false;
 saveResults = true;
+includePCR = true;
 participantNumber = 98;
 conditions = {'nondeviant', 'deviant'};
+% Use a single condition for the 2x4 dRSA matrices to avoid a 2x8 layout.
+drsaReportCondition = conditions{1};
 simulationInputDir = fullfile(simDir, 'input');
 subjectLabel = sprintf('sub%02d', participantNumber);
 outputDir = fullfile(simDir, 'output', subjectLabel);
@@ -67,15 +72,21 @@ fontSizes.colorbar = 24;
 params = struct();
 params.nIter = 1;
 params.fs = 120;
-params.modelToTest = [1 2];
+params.modelToTest = [1 2 3 4];
 params.Var = 0.1;
-params.modelDistMeasure = {'euclidean', 'euclidean'};
+params.modelDistMeasure = {'euclidean', 'euclidean', 'cosine', 'cosine'};
 params.neuralDistMeasure = 'euclidean';
 params.dRSAtype = 'corr';
-params.modeltoRegressout = {2 1};
+params.modeltoRegressout = {[2 3 4] [1 3 4] [1 2 4] [1 2 3]};
 
 paramsPCR = params;
 paramsPCR.dRSAtype = 'PCR';
+
+%% Suppress figure windows while saving report assets
+% Data flow: default figure visibility -> hidden figure generation.
+defaultFigureVisible = get(0, 'DefaultFigureVisible');
+cleanupVisibility = onCleanup(@() set(0, 'DefaultFigureVisible', defaultFigureVisible));
+set(0, 'DefaultFigureVisible', 'off');
 
 %% Ensure condition-specific inputs exist
 % Data flow: raw MovDot input -> condition-specific dot paths.
@@ -103,19 +114,23 @@ if useSavedResults
         error(['Missing cached results file: %s. Set useSavedResults = false ', ...
             'to compute results the first time.'], assetsFile);
     end
-    loaded = load(assetsFile, 'results', 'participantNumber', 'conditions');
+    loaded = load(assetsFile, 'results', 'participantNumber', 'conditions', 'includePCR');
     results = loaded.results;
     % Enforce exact match when using cached results.
     if loaded.participantNumber ~= participantNumber || ~isequal(loaded.conditions, conditions)
         error(['Cached results were computed for different settings. ', ...
             'Set useSavedResults = false to recompute with current settings.']);
     end
+    if ~isfield(loaded, 'includePCR') || loaded.includePCR ~= includePCR
+        error(['Cached results were computed with a different includePCR setting. ', ...
+            'Set useSavedResults = false to recompute with current settings.']);
+    end
 else
-    results = compute_results(simulationInputDir, participantNumber, conditions, params, paramsPCR);
+    results = compute_results(simulationInputDir, participantNumber, conditions, params, paramsPCR, includePCR);
 end
 
 if saveResults
-    save(assetsFile, 'results', 'participantNumber', 'conditions');
+    save(assetsFile, 'results', 'participantNumber', 'conditions', 'includePCR');
 end
 
 %% Build grouped figures and save to disk
@@ -123,14 +138,21 @@ end
 fig = plot_grouped_paths(results, conditions, fontSizes, subjectLabel);
 save_figure(fig, fullfile(figureOutputDir, sprintf('dot_paths_grouped_%s.png', subjectLabel)));
 
+rectSize = load_rect_size(inputFile);
+fig = plot_condition_position_distribution(results, conditions, fontSizes, subjectLabel, rectSize);
+save_figure(fig, fullfile(figureOutputDir, ...
+    sprintf('dot_paths_position_distribution_%s.png', subjectLabel)));
+
 fig = plot_grouped_distances(results, conditions, fontSizes, subjectLabel);
 save_figure(fig, fullfile(figureOutputDir, sprintf('distance_matrices_grouped_%s.png', subjectLabel)));
 
-fig = plot_grouped_drsa_combined(results, conditions, 'corr', fontSizes, subjectLabel);
+fig = plot_grouped_drsa_combined(results, drsaReportCondition, 'corr', fontSizes, subjectLabel);
 save_figure(fig, fullfile(figureOutputDir, sprintf('drsa_matrices_corr_%s.png', subjectLabel)));
 
-fig = plot_grouped_drsa_combined(results, conditions, 'pcr', fontSizes, subjectLabel);
-save_figure(fig, fullfile(figureOutputDir, sprintf('drsa_matrices_pcr_%s.png', subjectLabel)));
+if includePCR
+    fig = plot_grouped_drsa_combined(results, drsaReportCondition, 'pcr', fontSizes, subjectLabel);
+    save_figure(fig, fullfile(figureOutputDir, sprintf('drsa_matrices_pcr_%s.png', subjectLabel)));
+end
 
 fig = plot_all_lagged(results, conditions, fontSizes, subjectLabel);
 save_figure(fig, fullfile(figureOutputDir, sprintf('lagged_drsa_%s.png', subjectLabel)));
@@ -138,7 +160,11 @@ save_figure(fig, fullfile(figureOutputDir, sprintf('lagged_drsa_%s.png', subject
 %% Save report assets metadata
 % Data flow: parameters + paths -> MAT file for report generator.
 save(assetsFile, 'results', 'participantNumber', 'conditions', 'params', ...
-    'paramsPCR', 'fontSizes', 'figureOutputDir');
+    'paramsPCR', 'fontSizes', 'figureOutputDir', 'includePCR');
+
+%% Restore figure visibility (ensures plots are re-enabled after the script)
+% Data flow: onCleanup handle -> restore DefaultFigureVisible.
+clear cleanupVisibility
 
 %% Local helper functions
 % Data flow: encapsulate loading, dRSA computation, and plotting utilities.
@@ -171,11 +197,12 @@ function [dot1Paths, dot2Paths] = load_condition_paths(simInputDir, participantN
     dot2Paths = simData.dot2YellowPaths;
 end
 
-function [dRSA, dRSA_diagonal, diagTimeVec] = run_drsa(dot1Paths, dot2Paths, paramsIn)
+function [dRSA, dRSA_diagonal, diagTimeVec, modelNames] = run_drsa(dot1Paths, dot2Paths, paramsIn)
 % run_drsa
 %
 % Purpose:
-%   Compute dRSA matrices and their averaged diagonals for dot 1 and dot 2.
+%   Compute dRSA matrices and their averaged diagonals for position and
+%   direction models using dot 1 position as data.
 %
 % Inputs:
 %   dot1Paths : trials × 2 × time array for dot 1
@@ -186,21 +213,44 @@ function [dRSA, dRSA_diagonal, diagTimeVec] = run_drsa(dot1Paths, dot2Paths, par
 %   dRSA          : time × time × model dRSA matrices
 %   dRSA_diagonal : model × time diagonal averages
 %   diagTimeVec   : lag vector in samples for plotting
+%   modelNames    : 1x4 cell array of model names
 %
 % Key assumptions:
 %   - dot paths share the same number of trials and time samples.
 %   - Trial length divides the concatenated time series evenly.
 
     % Prepare concatenated data and models.
-    data = dRSA_concatenate(dot1Paths);
-    model1 = data;
-    model2 = dRSA_concatenate(dot2Paths);
-    model = {model1, model2};
-    Y = data;
+    dataPosition = dRSA_concatenate(dot1Paths);
+
+    % Position models (per dot).
+    modelPositionDot1 = dataPosition;
+    modelPositionDot2 = dRSA_concatenate(dot2Paths);
+
+    % Direction models (per dot).
+    % Data flow: positions -> displacement -> angle -> unit vector features.
+    dot1Dx = diff(dot1Paths(:, 1, :), 1, 3);
+    dot1Dy = diff(dot1Paths(:, 2, :), 1, 3);
+    dot1Dx = cat(3, dot1Dx(:, :, 1), dot1Dx);
+    dot1Dy = cat(3, dot1Dy(:, :, 1), dot1Dy);
+    dot1Angle = atan2(dot1Dy, dot1Dx);
+    dot1Direction = cat(2, cos(dot1Angle), sin(dot1Angle));
+    modelDirectionDot1 = dRSA_concatenate(dot1Direction);
+
+    dot2Dx = diff(dot2Paths(:, 1, :), 1, 3);
+    dot2Dy = diff(dot2Paths(:, 2, :), 1, 3);
+    dot2Dx = cat(3, dot2Dx(:, :, 1), dot2Dx);
+    dot2Dy = cat(3, dot2Dy(:, :, 1), dot2Dy);
+    dot2Angle = atan2(dot2Dy, dot2Dx);
+    dot2Direction = cat(2, cos(dot2Angle), sin(dot2Angle));
+    modelDirectionDot2 = dRSA_concatenate(dot2Direction);
+
+    model = {modelPositionDot1, modelPositionDot2, modelDirectionDot1, modelDirectionDot2};
+    modelNames = {'position dot1', 'position dot2', 'direction dot1', 'direction dot2'};
+    Y = dataPosition;
 
     % Build trigger-aligned subsamples (trial-locked).
     trialLen = size(dot1Paths, 3);
-    totalTime = size(data, 2);
+    totalTime = size(dataPosition, 2);
     if mod(totalTime, trialLen) ~= 0
         error('Total time (%d) is not a multiple of trial length (%d).', totalTime, trialLen);
     end
@@ -244,11 +294,11 @@ function [dRSA, dRSA_diagonal, diagTimeVec] = run_drsa(dot1Paths, dot2Paths, par
     diagTimeVec = (1:size(dRSA_diagonal, 2)) - ceil(size(dRSA_diagonal, 2) / 2);
 end
 
-function results = compute_results(simulationInputDir, participantNumber, conditions, params, paramsPCR)
+function results = compute_results(simulationInputDir, participantNumber, conditions, params, paramsPCR, includePCR)
 % compute_results
 %
 % Purpose:
-%   Compute per-condition dRSA outputs for corr and PCR, and cache results.
+%   Compute per-condition dRSA outputs for corr and optionally PCR, and cache results.
 %
 % Inputs:
 %   simulationInputDir : directory with condition-specific dot inputs
@@ -256,6 +306,7 @@ function results = compute_results(simulationInputDir, participantNumber, condit
 %   conditions        : cell array of condition labels
 %   params            : dRSA parameters for corr
 %   paramsPCR         : dRSA parameters for PCR
+%   includePCR        : true to compute PCR outputs
 %
 % Outputs:
 %   results : struct containing dot paths and dRSA outputs per condition
@@ -266,36 +317,103 @@ function results = compute_results(simulationInputDir, participantNumber, condit
         [dot1Paths, dot2Paths] = load_condition_paths(simulationInputDir, ...
             participantNumber, conditionLabel);
 
-        % Compute dRSA matrices (corr; dot 1 as data).
-        [dRSA, dRSA_diagonal, diagTimeVec] = run_drsa(dot1Paths, dot2Paths, params);
+        % Compute dRSA matrices (corr; position data from dot 1).
+        [dRSA_position, dRSA_diagonal_position, diagTimeVec_position, modelNames] = ...
+            run_drsa(dot1Paths, dot2Paths, params);
 
-        % Compute dRSA matrices (corr; dot 2 as data).
-        [dRSA_swapped, dRSA_diagonal_swapped, diagTimeVec_swapped] = ...
-            run_drsa(dot2Paths, dot1Paths, params);
+        % Compute dRSA matrices (corr; direction data from dot 1).
+        [dRSA_direction, dRSA_diagonal_direction, diagTimeVec_direction] = ...
+            run_drsa_direction(dot1Paths, dot2Paths, params);
 
-        % Compute dRSA matrices (PCR; dot 1 as data).
-        [dRSA_pcr, dRSA_diagonal_pcr, diagTimeVec_pcr] = ...
-            run_drsa(dot1Paths, dot2Paths, paramsPCR);
-
-        % Compute dRSA matrices (PCR; dot 2 as data).
-        [dRSA_swapped_pcr, dRSA_diagonal_swapped_pcr, diagTimeVec_swapped_pcr] = ...
-            run_drsa(dot2Paths, dot1Paths, paramsPCR);
+        % Compute dRSA matrices (PCR; position and direction data from dot 1).
+        dRSA_position_pcr = [];
+        dRSA_diagonal_position_pcr = [];
+        diagTimeVec_position_pcr = [];
+        dRSA_direction_pcr = [];
+        dRSA_diagonal_direction_pcr = [];
+        diagTimeVec_direction_pcr = [];
+        if includePCR
+            [dRSA_position_pcr, dRSA_diagonal_position_pcr, diagTimeVec_position_pcr] = ...
+                run_drsa(dot1Paths, dot2Paths, paramsPCR);
+            [dRSA_direction_pcr, dRSA_diagonal_direction_pcr, diagTimeVec_direction_pcr] = ...
+                run_drsa_direction(dot1Paths, dot2Paths, paramsPCR);
+        end
 
         results.(conditionLabel).dot1Paths = dot1Paths;
         results.(conditionLabel).dot2Paths = dot2Paths;
-        results.(conditionLabel).dRSA = dRSA;
-        results.(conditionLabel).dRSA_swapped = dRSA_swapped;
-        results.(conditionLabel).dRSA_diagonal = dRSA_diagonal;
-        results.(conditionLabel).diagTimeVec = diagTimeVec;
-        results.(conditionLabel).dRSA_diagonal_swapped = dRSA_diagonal_swapped;
-        results.(conditionLabel).diagTimeVec_swapped = diagTimeVec_swapped;
-        results.(conditionLabel).dRSA_pcr = dRSA_pcr;
-        results.(conditionLabel).dRSA_swapped_pcr = dRSA_swapped_pcr;
-        results.(conditionLabel).dRSA_diagonal_pcr = dRSA_diagonal_pcr;
-        results.(conditionLabel).diagTimeVec_pcr = diagTimeVec_pcr;
-        results.(conditionLabel).dRSA_diagonal_swapped_pcr = dRSA_diagonal_swapped_pcr;
-        results.(conditionLabel).diagTimeVec_swapped_pcr = diagTimeVec_swapped_pcr;
+        results.(conditionLabel).modelNames = modelNames;
+        results.(conditionLabel).dRSA_position = dRSA_position;
+        results.(conditionLabel).dRSA_direction = dRSA_direction;
+        results.(conditionLabel).dRSA_diagonal_position = dRSA_diagonal_position;
+        results.(conditionLabel).diagTimeVec_position = diagTimeVec_position;
+        results.(conditionLabel).dRSA_diagonal_direction = dRSA_diagonal_direction;
+        results.(conditionLabel).diagTimeVec_direction = diagTimeVec_direction;
+        results.(conditionLabel).dRSA_position_pcr = dRSA_position_pcr;
+        results.(conditionLabel).dRSA_direction_pcr = dRSA_direction_pcr;
+        results.(conditionLabel).dRSA_diagonal_position_pcr = dRSA_diagonal_position_pcr;
+        results.(conditionLabel).diagTimeVec_position_pcr = diagTimeVec_position_pcr;
+        results.(conditionLabel).dRSA_diagonal_direction_pcr = dRSA_diagonal_direction_pcr;
+        results.(conditionLabel).diagTimeVec_direction_pcr = diagTimeVec_direction_pcr;
     end
+end
+
+function figHandle = plot_condition_position_distribution(results, conditions, fontSizes, subjectLabel, rectSize)
+% plot_condition_position_distribution
+%
+% Purpose:
+%   Plot mean distance-from-center profiles for dot 1 and dot 2, averaged
+%   across conditions, to mirror plot_position_distribution in the report.
+%
+% Inputs:
+%   results    : struct with per-condition dot paths
+%   conditions : cell array of condition labels
+%   fontSizes  : struct of typography sizes
+%   rectSize   : 1x2 [width height] in visual degrees (optional)
+%
+% Outputs:
+%   figHandle : figure handle for the position distribution plot
+
+    nCond = numel(conditions);
+    meanSumDot1 = [];
+    meanSumDot2 = [];
+    for iCond = 1:nCond
+        conditionLabel = conditions{iCond};
+        dot1 = results.(conditionLabel).dot1Paths;
+        dot2 = results.(conditionLabel).dot2Paths;
+        meanDot1 = compute_mean_distance_from_center(dot1, rectSize, [0 0]);
+        meanDot2 = compute_mean_distance_from_center(dot2, rectSize, [0 0]);
+        if iCond == 1
+            meanSumDot1 = meanDot1;
+            meanSumDot2 = meanDot2;
+        else
+            meanSumDot1 = meanSumDot1 + meanDot1;
+            meanSumDot2 = meanSumDot2 + meanDot2;
+        end
+    end
+    meanDot1 = meanSumDot1 ./ nCond;
+    meanDot2 = meanSumDot2 ./ nCond;
+
+    figHandle = figure('Name', 'Mean distance from center', ...
+        'NumberTitle', 'off', 'Visible', 'off');
+    figHandle.Position = [100 100 1800 700];
+    sgtitle(sprintf('Mean distance from center (mean across conditions, %s)', subjectLabel), ...
+        'FontSize', fontSizes.title + 2);
+
+    subplot(1, 2, 1);
+    plot(meanDot1, 'LineWidth', 1.8);
+    grid on;
+    title('Dot 1 distance from center', 'FontSize', fontSizes.title);
+    xlabel('Time (samples)', 'FontSize', fontSizes.label);
+    ylabel('Mean distance from center (visual degrees)', 'FontSize', fontSizes.label);
+    set(gca, 'FontSize', fontSizes.tick);
+
+    subplot(1, 2, 2);
+    plot(meanDot2, 'LineWidth', 1.8);
+    grid on;
+    title('Dot 2 distance from center', 'FontSize', fontSizes.title);
+    xlabel('Time (samples)', 'FontSize', fontSizes.label);
+    ylabel('Mean distance from center (visual degrees)', 'FontSize', fontSizes.label);
+    set(gca, 'FontSize', fontSizes.tick);
 end
 
 function figHandle = plot_grouped_paths(results, conditions, fontSizes, subjectLabel)
@@ -369,51 +487,52 @@ function figHandle = plot_grouped_distances(results, conditions, fontSizes, subj
     end
 end
 
-function figHandle = plot_grouped_drsa_combined(results, conditions, drsaType, fontSizes, subjectLabel)
+function figHandle = plot_grouped_drsa_combined(results, conditionLabel, drsaType, fontSizes, subjectLabel)
 % plot_grouped_drsa_combined
 %
 % Purpose:
 %   Plot dRSA matrices in a single figure with two rows:
-%   top row = dot 1 as data, bottom row = dot 2 as data.
+%   top row = dot 1 position data, bottom row = dot 1 direction data.
 %
 % Inputs:
-%   results    : struct with per-condition dRSA outputs
-%   conditions : cell array of condition labels
-%   drsaType   : 'corr' or 'pcr' to select the dRSA variant
-%   fontSizes  : struct of typography sizes
+%   results        : struct with per-condition dRSA outputs
+%   conditionLabel : condition label to plot (e.g., 'nondeviant')
+%   drsaType       : 'corr' or 'pcr' to select the dRSA variant
+%   fontSizes      : struct of typography sizes
 %
 % Outputs:
 %   figHandle : figure handle for the combined dRSA plot
 
-    nCond = numel(conditions);
-    nModels = 2;
-    nCols = nCond * nModels;
+    nModels = 4;
     figHandle = figure('Name', 'dRSA matrices combined', ...
         'NumberTitle', 'off', 'Visible', 'off');
-    figHandle.Position = [100 100 2400 900];
-    sgtitle(sprintf('dRSA matrices (%s, %s)', upper(drsaType), subjectLabel), ...
+    figHandle.Position = [100 100 2200 900];
+    sgtitle(sprintf('dRSA matrices (%s, %s; %s)', ...
+        upper(drsaType), subjectLabel, format_condition_label(conditionLabel)), ...
         'FontSize', fontSizes.title + 2);
 
+    if ~isfield(results, conditionLabel)
+        error('Condition label not found in results: %s', conditionLabel);
+    end
+    rowDataLabels = {'data: position dot1', 'data: direction dot1'};
+    modelNames = results.(conditionLabel).modelNames;
     for iRow = 1:2
-        for iCond = 1:nCond
-            conditionLabel = conditions{iCond};
-            if iRow == 1
-                dRSA = select_drsa(results.(conditionLabel), drsaType, false);
-                rowLabel = 'dot 1 as data';
-            else
-                dRSA = select_drsa(results.(conditionLabel), drsaType, true);
-                rowLabel = 'dot 2 as data';
+        if iRow == 1
+            dRSA = select_drsa(results.(conditionLabel), drsaType, false);
+        else
+            dRSA = select_drsa(results.(conditionLabel), drsaType, true);
+        end
+        for iModel = 1:nModels
+            subplot(2, nModels, (iRow - 1) * nModels + iModel);
+            ax = gca;
+            plot_drsa_axes(ax, dRSA, iModel, modelNames{iModel}, false, false, fontSizes);
+            if iRow == 2
+                xlabel(ax, sprintf('Time in %s (samples)', modelNames{iModel}), ...
+                    'FontSize', fontSizes.label);
             end
-            for iModel = 1:nModels
-                colIndex = (iCond - 1) * nModels + iModel;
-                subplot(2, nCols, (iRow - 1) * nCols + colIndex);
-                ax = gca;
-                plot_drsa_axes(ax, dRSA, iModel, ...
-                    sprintf('Model %d (%s)', iModel, conditionLabel), ...
-                    iCond == 1, iRow == 2, fontSizes);
-                if iCond == 1 && iModel == 1
-                    ylabel(ax, sprintf('%s\nTime (samples)', rowLabel));
-                end
+            if iModel == 1
+                ylabel(ax, sprintf('Time in %s (samples)', rowDataLabels{iRow}), ...
+                    'FontSize', fontSizes.label);
             end
         end
     end
@@ -424,8 +543,8 @@ function figHandle = plot_all_lagged(results, conditions, fontSizes, subjectLabe
 %
 % Purpose:
 %   Plot all lagged dRSA curves in one figure with two panels:
-%   - dot 1 as data
-%   - dot 2 as data
+%   - position data (dot 1)
+%   - direction data (dot 1)
 %
 % Inputs:
 %   results    : struct with per-condition dRSA diagonals
@@ -440,11 +559,11 @@ function figHandle = plot_all_lagged(results, conditions, fontSizes, subjectLabe
     figHandle.Position = [100 100 2000 700];
     sgtitle(sprintf('Lagged dRSA (%s)', subjectLabel), 'FontSize', fontSizes.title + 2);
 
-    % Panel 1: dot 1 as data.
+    % Panel 1: position data (dot 1).
     subplot(1, 2, 1);
     plot_lagged_within_combined(gca, results, conditions, false, fontSizes);
 
-    % Panel 2: dot 2 as data.
+    % Panel 2: direction data (dot 1).
     subplot(1, 2, 2);
     plot_lagged_within_combined(gca, results, conditions, true, fontSizes);
 end
@@ -535,10 +654,10 @@ function plot_drsa_axes(ax, dRSA, modelIdx, titleText, showYLabel, showXLabel, f
     axis(ax, 'image');
     title(ax, titleText, 'FontSize', fontSizes.title);
     if showXLabel
-        xlabel(ax, 'Time (samples)', 'FontSize', fontSizes.label);
+        xlabel(ax, 'Time in model (samples)', 'FontSize', fontSizes.label);
     end
     if showYLabel
-        ylabel(ax, 'Time (samples)', 'FontSize', fontSizes.label);
+        ylabel(ax, 'Time in data (samples)', 'FontSize', fontSizes.label);
     end
     cb = colorbar(ax, 'eastoutside');
     cb.FontSize = fontSizes.colorbar;
@@ -559,7 +678,7 @@ function plot_lagged_within_combined(ax, results, conditions, useSwapped, fontSi
 %   ax         : target axes handle
 %   results    : struct with per-condition dRSA diagonals
 %   conditions : cell array of condition labels
-%   useSwapped : true to use swapped dRSA diagonals
+%   useSwapped : true to use direction-data dRSA diagonals
 %   fontSizes  : struct of typography sizes
 
     hold(ax, 'on');
@@ -567,18 +686,22 @@ function plot_lagged_within_combined(ax, results, conditions, useSwapped, fontSi
     for iCond = 1:numel(conditions)
         conditionLabel = conditions{iCond};
         if useSwapped
-            diagVals = results.(conditionLabel).dRSA_diagonal_swapped;
-            tVec = results.(conditionLabel).diagTimeVec_swapped;
-            labelSuffix = 'dot 2 as data';
+            diagVals = results.(conditionLabel).dRSA_diagonal_direction;
+            tVec = results.(conditionLabel).diagTimeVec_direction;
+            labelSuffix = 'direction data (dot 1)';
         else
-            diagVals = results.(conditionLabel).dRSA_diagonal;
-            tVec = results.(conditionLabel).diagTimeVec;
-            labelSuffix = 'dot 1 as data';
+            diagVals = results.(conditionLabel).dRSA_diagonal_position;
+            tVec = results.(conditionLabel).diagTimeVec_position;
+            labelSuffix = 'position data (dot 1)';
         end
         plot(ax, tVec, diagVals(1, :), 'LineWidth', 1.4);
-        labels{end + 1} = sprintf('%s model 1', format_condition_label(conditionLabel));
+        labels{end + 1} = sprintf('%s %s', format_condition_label(conditionLabel), 'position dot1');
         plot(ax, tVec, diagVals(2, :), 'LineWidth', 1.4);
-        labels{end + 1} = sprintf('%s model 2', format_condition_label(conditionLabel));
+        labels{end + 1} = sprintf('%s %s', format_condition_label(conditionLabel), 'position dot2');
+        plot(ax, tVec, diagVals(3, :), 'LineWidth', 1.4);
+        labels{end + 1} = sprintf('%s %s', format_condition_label(conditionLabel), 'direction dot1');
+        plot(ax, tVec, diagVals(4, :), 'LineWidth', 1.4);
+        labels{end + 1} = sprintf('%s %s', format_condition_label(conditionLabel), 'direction dot2');
     end
     hold(ax, 'off');
     xlabel(ax, 'Lag (samples)', 'FontSize', fontSizes.label);
@@ -674,22 +797,179 @@ function dRSA = select_drsa(conditionStruct, drsaType, useSwapped)
 % Inputs:
 %   conditionStruct : struct containing per-condition dRSA outputs
 %   drsaType        : 'corr' or 'pcr'
-%   useSwapped      : true to use dot 2 as data
+%   useSwapped      : true to use direction data from dot 1
 %
 % Outputs:
 %   dRSA : time × time × model dRSA matrices
 
     if strcmpi(drsaType, 'pcr')
         if useSwapped
-            dRSA = conditionStruct.dRSA_swapped_pcr;
+            dRSA = conditionStruct.dRSA_direction_pcr;
         else
-            dRSA = conditionStruct.dRSA_pcr;
+            dRSA = conditionStruct.dRSA_position_pcr;
         end
     else
         if useSwapped
-            dRSA = conditionStruct.dRSA_swapped;
+            dRSA = conditionStruct.dRSA_direction;
         else
-            dRSA = conditionStruct.dRSA;
+            dRSA = conditionStruct.dRSA_position;
+        end
+    end
+end
+
+function [dRSA, dRSA_diagonal, diagTimeVec] = run_drsa_direction(dot1Paths, dot2Paths, paramsIn)
+% run_drsa_direction
+%
+% Purpose:
+%   Compute dRSA matrices and their diagonals using dot 1 direction as data.
+%
+% Inputs:
+%   dot1Paths : trials × 2 × time array for dot 1
+%   dot2Paths : trials × 2 × time array for dot 2
+%   paramsIn  : struct of dRSA parameters (model distances, fs, etc.)
+%
+% Outputs:
+%   dRSA          : time × time × model dRSA matrices
+%   dRSA_diagonal : model × time diagonal averages
+%   diagTimeVec   : lag vector in samples for plotting
+%
+% Key assumptions:
+%   - Direction is derived from frame-to-frame displacement.
+
+    % Build direction data for dot 1 (unit vectors).
+    dot1Dx = diff(dot1Paths(:, 1, :), 1, 3);
+    dot1Dy = diff(dot1Paths(:, 2, :), 1, 3);
+    dot1Dx = cat(3, dot1Dx(:, :, 1), dot1Dx);
+    dot1Dy = cat(3, dot1Dy(:, :, 1), dot1Dy);
+    dot1Angle = atan2(dot1Dy, dot1Dx);
+    dot1Direction = cat(2, cos(dot1Angle), sin(dot1Angle));
+    dataDirection = dRSA_concatenate(dot1Direction);
+
+    % Recompute position and direction models to align with data.
+    dataPosition = dRSA_concatenate(dot1Paths);
+    modelPositionDot1 = dataPosition;
+    modelPositionDot2 = dRSA_concatenate(dot2Paths);
+
+    dot2Dx = diff(dot2Paths(:, 1, :), 1, 3);
+    dot2Dy = diff(dot2Paths(:, 2, :), 1, 3);
+    dot2Dx = cat(3, dot2Dx(:, :, 1), dot2Dx);
+    dot2Dy = cat(3, dot2Dy(:, :, 1), dot2Dy);
+    dot2Angle = atan2(dot2Dy, dot2Dx);
+    dot2Direction = cat(2, cos(dot2Angle), sin(dot2Angle));
+    modelDirectionDot2 = dRSA_concatenate(dot2Direction);
+
+    modelDirectionDot1 = dRSA_concatenate(dot1Direction);
+    model = {modelPositionDot1, modelPositionDot2, modelDirectionDot1, modelDirectionDot2};
+
+    % Build trigger-aligned subsamples (trial-locked).
+    trialLen = size(dot1Paths, 3);
+    totalTime = size(dataDirection, 2);
+    if mod(totalTime, trialLen) ~= 0
+        error('Total time (%d) is not a multiple of trial length (%d).', totalTime, trialLen);
+    end
+    trialStarts = 1:trialLen:totalTime;
+    maskSubsampling = true(1, totalTime);
+    maskTrigger = false(1, totalTime);
+    maskTrigger(trialStarts) = true;
+
+    opt.PreTrigger = 0;
+    opt.PostTrigger = trialLen - 1;
+    opt.spacing = 0;
+    opt.nSubSamples = numel(trialStarts);
+    opt.nIter = 1;
+    opt.checkRepetition = 0;
+
+    subsamples = dRSA_triggered_subsampling(maskSubsampling, maskTrigger, opt);
+
+    % Copy params and set average window based on trial length.
+    params = paramsIn;
+    avgHalfWindowSamples = floor((trialLen - 1) / 2);
+    params.AverageTime = avgHalfWindowSamples / params.fs;
+
+    % Compute autocorrelation borders and dRSA matrices (direction data).
+    Autocorrborder = dRSA_border(model, subsamples, params);
+    dRSA_Iter = [];
+    for iIter = 1:params.nIter
+        CurrSubsamples = subsamples(:, :, iIter);
+        dRSAma = dRSA_coreFunction(dataDirection, model, params, ...
+            'CurrSubsamples', CurrSubsamples, 'Autocorrborder', Autocorrborder);
+        dRSA_Iter(iIter, :, :, :) = dRSAma;
+    end
+
+    dRSA = mean(dRSA_Iter, 1);
+    dRSA = reshape(dRSA, size(dRSA, 2), size(dRSA, 3), size(dRSA, 4));
+
+    % Average across the diagonal for lagged plots.
+    diagParams = params;
+    diagParams.AverageTime = 2;
+    diagParams.fs = params.fs;
+    dRSA_diagonal = dRSA_average(dRSA, diagParams);
+    diagTimeVec = (1:size(dRSA_diagonal, 2)) - ceil(size(dRSA_diagonal, 2) / 2);
+end
+
+function meanDist = compute_mean_distance_from_center(paths, rectSize, rectOrigin)
+% compute_mean_distance_from_center
+%
+% Purpose:
+%   Compute mean distance from the stimulus center at each timepoint.
+%
+% Inputs:
+%   paths      : trials × 2 × time array of dot positions
+%   rectSize   : 1x2 [width height] in visual degrees (optional)
+%   rectOrigin : 1x2 [x0 y0] origin of the rect (default: [0 0])
+%
+% Outputs:
+%   meanDist : 1 × time vector of mean distances
+
+    if nargin < 3
+        rectOrigin = [0 0];
+    end
+
+    if isempty(rectSize)
+        xVals = reshape(paths(:, 1, :), [], 1);
+        yVals = reshape(paths(:, 2, :), [], 1);
+        xVals = xVals(~isnan(xVals));
+        yVals = yVals(~isnan(yVals));
+        if isempty(xVals) || isempty(yVals)
+            error('Cannot infer bounds: all positions are NaN.');
+        end
+        rectOrigin = [min(xVals) min(yVals)];
+        rectSize = [max(xVals) - min(xVals), max(yVals) - min(yVals)];
+    end
+    center = rectOrigin + rectSize / 2;
+
+    nTime = size(paths, 3);
+    meanDist = zeros(1, nTime);
+    for iTime = 1:nTime
+        positions = squeeze(paths(:, :, iTime)); % trials x 2
+        deltas = positions - center;
+        distances = sqrt(sum(deltas.^2, 2));
+        validMask = ~any(isnan(positions), 2);
+        if any(validMask)
+            meanDist(iTime) = mean(distances(validMask));
+        else
+            meanDist(iTime) = NaN;
+        end
+    end
+end
+
+function rectSize = load_rect_size(inputFile)
+% load_rect_size
+%
+% Purpose:
+%   Load rectSize from the experiment input file if present.
+%
+% Inputs:
+%   inputFile : path to MovDot_SubXX.mat
+%
+% Outputs:
+%   rectSize : 1x2 [width height] or [] if unavailable
+
+    rectSize = [];
+    if exist(inputFile, 'file')
+        cfgData = load(inputFile, 'Cfg');
+        if isfield(cfgData, 'Cfg') && isfield(cfgData.Cfg, 'rectSize')
+            rectSize = cfgData.Cfg.rectSize;
         end
     end
 end
