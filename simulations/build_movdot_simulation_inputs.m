@@ -16,6 +16,10 @@
 %       'OutputDir', 'simulations/input', ...
 %       'MoveDotScript', 'experiment/MoveDot1_experiment_vX.m');
 %
+% Example usage (retry with explicit rect size):
+%   build_movdot_simulation_inputs('experiment/input_files/MovDot_Sub98.mat', ...
+%       'RectSize', [10 10]);
+%
 % Inputs:
 %   - stimuliPath (char/string): Full or relative path to MovDot_SubXX.mat.
 %       Relative paths are checked against the current working directory
@@ -26,17 +30,34 @@
 %                         they already exist relative to the working directory.
 %       'MoveDotScript' : path to MoveDot1_experiment_vX.m for dot colors.
 %                         Relative paths are resolved like stimuliPath.
+%       'suppressDispText' : 0/1 to suppress console output (default: 0).
+%       'AllowMissingConditions' : true to allow files with only deviant or
+%                         nondeviant trials (default: false). This is useful
+%                         for MovDot_SubXX_wannabeDev.mat inputs that only
+%                         contain the deviant condition.
+%       'XySeqsField'  : override the struct field name containing xySeqs
+%                         (default: ''). If empty, auto-detects xySeqs or
+%                         xySeqsWannabeDev.
+%       'RectSize'     : optional [width height] in degrees to use when
+%                         recentering (default: []). If empty, uses
+%                         Cfg.rectSize from the stimulus file; errors if
+%                         rectSize is missing.
 %
 % Outputs:
 %   - Saves two .mat files (deviant, non-deviant) into OutputDir, each with:
 %       dot1Paths (trials × 2 × time) in visual degrees
 %       dot2Paths (trials × 2 × time) in visual degrees
 %       meta (struct with source info and color labels)
+%     Also saves center-relative paths:
+%       dot1GreenPathsCenterRelative (trials × 2 × time) in visual degrees
+%       dot2YellowPathsCenterRelative (trials × 2 × time) in visual degrees
 %
 % Key assumptions:
 %   - xySeqs(...).xy columns are [x1 y1 x2 y2] in visual degrees.
 %   - Deviant trials have condition > 0; non-deviant have condition == 0.
 %   - All trials within a condition share the same number of frames.
+%   - Center-relative paths are produced by subtracting rectSize/2 so that
+%     fixation (center of the stimulus rect) aligns to (0,0) in degrees.
 function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     %% Parse inputs and establish default paths
     parser = inputParser;
@@ -49,11 +70,22 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
 
     parser.addParameter('OutputDir', defaultOutputDir, @(x) ischar(x) || isstring(x));
     parser.addParameter('MoveDotScript', defaultMoveDotScript, @(x) ischar(x) || isstring(x));
+    parser.addParameter('suppressDispText', 0, ...
+        @(x) isscalar(x) && (islogical(x) || isnumeric(x)));
+    parser.addParameter('AllowMissingConditions', false, ...
+        @(x) isscalar(x) && (islogical(x) || isnumeric(x)));
+    parser.addParameter('XySeqsField', '', @(x) ischar(x) || isstring(x));
+    parser.addParameter('RectSize', [], ...
+        @(x) isempty(x) || (isnumeric(x) && numel(x) == 2));
     parser.parse(stimuliPath, varargin{:});
 
     stimuliPath = char(parser.Results.stimuliPath);
     outputDir = char(parser.Results.OutputDir);
     moveDotScript = char(parser.Results.MoveDotScript);
+    suppressDispText = logical(parser.Results.suppressDispText);
+    allowMissingConditions = logical(parser.Results.AllowMissingConditions);
+    xySeqsField = char(parser.Results.XySeqsField);
+    rectSizeOverride = parser.Results.RectSize;
 
     %% Resolve input/output paths (repo-root aware)
     % Data flow: user-provided paths -> resolved absolute paths -> file IO.
@@ -67,18 +99,68 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
 
     %% Load stimulus paths and derive condition split
     data = load(stimuliPath);
-    if ~isfield(data, 'xySeqs')
-        error('Stimulus file does not contain xySeqs: %s', stimuliPath);
+    if isempty(strtrim(xySeqsField))
+        if isfield(data, 'xySeqs')
+            xySeqsField = 'xySeqs';
+        elseif isfield(data, 'xySeqsWannabeDev')
+            xySeqsField = 'xySeqsWannabeDev';
+            if ~suppressDispText
+                fprintf('Using xySeqsWannabeDev from %s\n', stimuliPath);
+            end
+        else
+            error('Stimulus file does not contain xySeqs or xySeqsWannabeDev: %s', stimuliPath);
+        end
+    else
+        if ~isfield(data, xySeqsField)
+            error('Stimulus file does not contain %s: %s', xySeqsField, stimuliPath);
+        end
     end
-    xyAll = data.xySeqs(:);
-    conditions = [xyAll.condition];
-    deviantMask = conditions > 0;
-    nonDeviantMask = conditions == 0;
+
+    %% Resolve rect size for center-relative outputs
+    % Data flow: Cfg.rectSize or override -> center shift for recentering.
+    rectSize = resolve_rect_size(data, rectSizeOverride, true, stimuliPath);
+    centerOptions = struct();
+    centerOptions.enabled = true;
+    centerOptions.rectSize = rectSize;
+    centerOptions.centerShift = [];
+    centerOptions.centerRelativeFields = { ...
+        'dot1GreenPathsCenterRelative', ...
+        'dot2YellowPathsCenterRelative'};
+    centerOptions.centerShift = rectSize / 2;
 
     %% Resolve dot colors from MoveDot1_experiment_vX.m (for filenames)
-    [dot1Rgb, dot2Rgb] = read_dot_colors(moveDotScript);
+    [dot1Rgb, dot2Rgb] = read_dot_colors(moveDotScript, suppressDispText);
     dot1Name = rgb_to_name(dot1Rgb);
     dot2Name = rgb_to_name(dot2Rgb);
+
+    xyAllRaw = data.(xySeqsField);
+    % Special-case wannabe deviant inputs: keep row 2 (condition 45) trials.
+    if strcmp(xySeqsField, 'xySeqsWannabeDev') && ndims(xyAllRaw) >= 2 ...
+            && size(xyAllRaw, 1) >= 2
+        [~, baseName, ~] = fileparts(stimuliPath);
+        outputFiles = struct('condition', {}, 'file', {});
+        deviantTrials = reshape(xyAllRaw(2, :, :), [], 1);
+        nonDeviantTrials = reshape(xyAllRaw(1, :, :), [], 1);
+        outputFiles(end+1) = save_trials( ...
+            baseName, 'nondeviant', nonDeviantTrials, outputDir, ...
+            dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+            suppressDispText, allowMissingConditions, centerOptions);
+        outputFiles(end+1) = save_trials( ...
+            baseName, 'deviant', deviantTrials, outputDir, ...
+            dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+            suppressDispText, allowMissingConditions, centerOptions);
+        return;
+    end
+    xyAll = xyAllRaw(:);
+    conditions = [xyAll.condition];
+    if strcmp(xySeqsField, 'xySeqsWannabeDev')
+        % Wannabe deviant files use condition==45 for the deviant-only paths.
+        deviantMask = conditions == 45;
+        nonDeviantMask = conditions == 0;
+    else
+        deviantMask = conditions > 0;
+        nonDeviantMask = conditions == 0;
+    end
 
     %% Build per-condition arrays and save results
     [~, baseName, ~] = fileparts(stimuliPath);
@@ -86,10 +168,12 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
 
     outputFiles(end+1) = save_condition( ...
         baseName, 'nondeviant', nonDeviantMask, xyAll, outputDir, ...
-        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath);
+        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+        suppressDispText, allowMissingConditions, centerOptions);
     outputFiles(end+1) = save_condition( ...
         baseName, 'deviant', deviantMask, xyAll, outputDir, ...
-        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath);
+        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+        suppressDispText, allowMissingConditions, centerOptions);
 end
 
 %% Helper: resolve existing file/directory paths with repo-root fallback
@@ -156,10 +240,41 @@ end
 
 %% Helper: save a condition-specific file
 function entry = save_condition(baseName, conditionLabel, mask, xyAll, outputDir, ...
-        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath)
+        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+        suppressDispText, allowMissingConditions, centerOptions)
     trials = xyAll(mask);
+    entry = save_trials(baseName, conditionLabel, trials, outputDir, ...
+        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+        suppressDispText, allowMissingConditions, centerOptions);
+end
+
+%% Helper: save a condition-specific file from a trial list
+function entry = save_trials(baseName, conditionLabel, trials, outputDir, ...
+        dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
+        suppressDispText, allowMissingConditions, centerOptions)
     if isempty(trials)
-        warning('No trials found for condition: %s', conditionLabel);
+        if ~suppressDispText && ~allowMissingConditions
+            warning('No trials found for condition: %s', conditionLabel);
+        end
+        entry.condition = conditionLabel;
+        entry.file = '';
+        return;
+    end
+
+    % Drop empty/zero-frame trials (e.g., wannabe files with only one condition).
+    % Data flow: raw trial list -> valid trials with non-empty xy.
+    hasFrames = arrayfun(@(s) ~isempty(s.xy) && size(s.xy, 1) > 0, trials);
+    if ~all(hasFrames)
+        if ~suppressDispText
+            fprintf('Skipping %d empty trials for condition %s.\n', ...
+                sum(~hasFrames), conditionLabel);
+        end
+        trials = trials(hasFrames);
+    end
+    if isempty(trials)
+        if ~suppressDispText && ~allowMissingConditions
+            warning('No non-empty trials found for condition: %s', conditionLabel);
+        end
         entry.condition = conditionLabel;
         entry.file = '';
         return;
@@ -187,6 +302,18 @@ function entry = save_condition(baseName, conditionLabel, mask, xyAll, outputDir
         dot2YellowPaths(iTrial, 2, :) = reshape(xy(:, 4), 1, 1, []);
     end
 
+    %% Optional center-relative coordinates
+    % Data flow: absolute paths -> subtract center shift -> center-relative paths.
+    dot1GreenPathsCenterRelative = [];
+    dot2YellowPathsCenterRelative = [];
+    if centerOptions.enabled
+        centerShift = reshape(centerOptions.centerShift, 1, 2, 1);
+        dot1GreenPathsCenterRelative = bsxfun(@minus, dot1GreenPaths, centerShift);
+        dot2YellowPathsCenterRelative = bsxfun(@minus, dot2YellowPaths, centerShift);
+    end
+
+    %% Package metadata
+    % Data flow: source config + recenter info -> meta fields for downstream use.
     meta = struct();
     meta.sourceFile = stimuliPath;
     meta.condition = conditionLabel;
@@ -197,23 +324,39 @@ function entry = save_condition(baseName, conditionLabel, mask, xyAll, outputDir
     meta.dot1Name = dot1Name;
     meta.dot2Name = dot2Name;
     meta.deviantDefinition = 'condition > 0 (non-deviant = condition == 0)';
+    meta.rectSize = centerOptions.rectSize;
+    meta.rectOrigin = [0 0];
+    meta.centerRelativeEnabled = centerOptions.enabled;
+    meta.centerRelativeShift = centerOptions.centerShift;
+    if centerOptions.enabled
+        meta.centerRelativeFields = centerOptions.centerRelativeFields;
+    else
+        meta.centerRelativeFields = {};
+    end
 
     outName = sprintf('%s_%s.mat', baseName, conditionLabel);
     outPath = fullfile(outputDir, outName);
-    save(outPath, 'dot1GreenPaths', 'dot2YellowPaths', 'meta');
+    if centerOptions.enabled
+        save(outPath, 'dot1GreenPaths', 'dot2YellowPaths', ...
+            'dot1GreenPathsCenterRelative', 'dot2YellowPathsCenterRelative', 'meta');
+    else
+        save(outPath, 'dot1GreenPaths', 'dot2YellowPaths', 'meta');
+    end
 
     entry.condition = conditionLabel;
     entry.file = outPath;
 end
 
 %% Helper: read Conf.DotColor1/2 from MoveDot1_experiment_vX.m
-function [dot1Rgb, dot2Rgb] = read_dot_colors(moveDotScript)
+function [dot1Rgb, dot2Rgb] = read_dot_colors(moveDotScript, suppressDispText)
     % Defaults if the script is missing or parsing fails.
     dot1Rgb = [0 255 0];
     dot2Rgb = [242 223 0];
 
     if ~isfile(moveDotScript)
-        warning('MoveDot script not found; using default dot colors.');
+        if ~suppressDispText
+            warning('MoveDot script not found; using default dot colors.');
+        end
         return;
     end
 
@@ -259,4 +402,22 @@ function name = rgb_to_name(rgb)
     end
     [~, idx] = min(dists);
     name = colorTable(idx).name;
+end
+
+%% Helper: resolve rect size for recentering
+function rectSize = resolve_rect_size(data, rectSizeOverride, requireRectSize, stimuliPath)
+    % Data flow: override or Cfg.rectSize -> validated rect size.
+    rectSize = [];
+    if ~isempty(rectSizeOverride)
+        rectSize = reshape(rectSizeOverride, 1, 2);
+        return;
+    end
+    if isfield(data, 'Cfg') && isfield(data.Cfg, 'rectSize')
+        rectSize = reshape(data.Cfg.rectSize, 1, 2);
+        return;
+    end
+    if requireRectSize
+        error(['Missing rectSize for center-relative paths. ' ...
+            'Provide ''RectSize'', or ensure %s contains Cfg.rectSize.'], stimuliPath);
+    end
 end

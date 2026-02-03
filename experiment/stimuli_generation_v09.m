@@ -1,6 +1,6 @@
-%% Stimuli Generation (uniform starts, boundary rejection)
-% Script: stimuli_generation_v6.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8) 
+%% Stimuli Generation (uniform starts, boundary rejection, curvature flip on deviant)
+% Script: stimuli_generation_v9.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9 updates by Codex
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -9,6 +9,8 @@
 %     - draws initial positions uniformly within the allowed rectangle,
 %     - advances positions with constant step size, and
 %     - rejects any path that would cross the boundary.
+%   When a deviant occurs (likelihood stimulus), the curvature sign can
+%   flip from that frame onward for the deviant path (configurable below).
 %   Optionally plots a random subset of paths per condition after generation.
 %
 %   Output matches the structure expected by:
@@ -17,13 +19,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v6;
+%   stimuli_generation_v9;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v6;
+%   stimuli_generation_v9;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -31,7 +33,8 @@
 %   - Dialog values for viewing distance and subject ID.
 %
 % Outputs:
-%   - Saves xySeqs and Cfg to Config.inputDirectory using Config.stimuliFileName.
+%   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
+%   - repro captures Config, script settings, and RNG state needed to reproduce paths.
 %   - xySeqs(...).xy is frames x 4 with columns [x1 y1 x2 y2] in visual degrees.
 %   - Optional per-condition path plots after generation using time colors.
 %
@@ -39,6 +42,8 @@
 %   - Coordinates are in visual degrees in the rectangle [0..rectSize].
 %   - Deviant logic, curviness, and step size are preserved from v5.
 %   - Dots must remain at least Config.minDistanceBetweenDots apart.
+%   - If enabled, curvature flips only for the deviant path (baseline keeps
+%     constant curvature for boundary validation).
 %   - Rejection sampling introduces boundary-related selection effects.
 
 addpath('lib/');
@@ -52,6 +57,7 @@ renderPreview = false; % set true to draw stimuli during generation
 plotPathsAtEnd = true; % set true to plot path samples after generation
 plotPathsPerCondition = 20; % number of paths to plot per condition (randomly sampled)
 plotPathConditions = [0 45]; % directionVariance values to plot as conditions
+flipCurvatureOnDeviant = false; % set true to flip curvature sign at deviant onset
 
 userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, ...
     Config.dialogPrompts, Config.dialogDefaults);
@@ -60,6 +66,8 @@ subjectID = userDoubles(2);
 
 % Seed RNG for reproducibility (per subject)
 rng(subjectID);
+% Snapshot RNG state after seeding to reproduce path generation later.
+rngState = rng;
 
 % Ensure output folders exist before saving
 if ~exist(Config.inputDirectory, 'dir')
@@ -170,7 +178,9 @@ if ~skipGeneration
                 end
 
                 % Vectorized path generation: build per-frame angles and positions.
+                % Data flow: deviant onset -> optional curvature flip -> cumulative angles.
                 numSteps = framesPerTrial - 1;
+                devFrameOnset = [];
                 directionAngleChange = zeros(max(numSteps, 0), 1);
                 if numSteps > 0
                     if Config.stimulusType == Utils.likelihood
@@ -189,11 +199,19 @@ if ~skipGeneration
                     end
                 end
 
-                % Data flow: per-step angle changes -> cumulative angles.
+                % Data flow: per-step angle changes + curvature -> cumulative angles.
                 directionAngleChange = repmat(directionAngleChange, 1, 2);
                 directionAngleChangeNoDev = directionAngleChange;
                 if Config.stimulusType == Utils.likelihood && dirVar ~= 0
                     directionAngleChangeNoDev(:) = 0; % baseline represents the no-deviant path
+                end
+
+                curvynessPerStep = repmat(curvynessFactor, max(numSteps, 0), 1);
+                curvynessPerStepNoDev = curvynessPerStep;
+                if flipCurvatureOnDeviant && ~isempty(devFrameOnset) && numSteps > 0
+                    flipIndex = devFrameOnset - 1;
+                    numFlipSteps = numSteps - flipIndex + 1;
+                    curvynessPerStep(flipIndex:end, :) = repmat(-curvynessFactor, numFlipSteps, 1);
                 end
 
                 allPathsDirectionAngle = zeros(framesPerTrial, 2);
@@ -201,8 +219,8 @@ if ~skipGeneration
                 allPathsDirectionAngle(1, :) = directionAngle;
                 allPathsDirectionAngleNoDev(1, :) = directionAngleNoDev;
                 if numSteps > 0
-                    allPathsDirectionAngle(2:end, :) = directionAngle + cumsum(directionAngleChange + curvynessFactor, 1);
-                    allPathsDirectionAngleNoDev(2:end, :) = directionAngleNoDev + cumsum(directionAngleChangeNoDev + curvynessFactor, 1);
+                    allPathsDirectionAngle(2:end, :) = directionAngle + cumsum(directionAngleChange + curvynessPerStep, 1);
+                    allPathsDirectionAngleNoDev(2:end, :) = directionAngleNoDev + cumsum(directionAngleChangeNoDev + curvynessPerStepNoDev, 1);
                 end
 
                 % Data flow: angles -> direction vectors -> cumulative positions.
@@ -251,7 +269,11 @@ if ~skipGeneration
                 end
 
                 % Per-trial buffers from vectorized outputs.
-                allPathsCurvyness = repmat(curvynessFactor, framesPerTrial, 1);
+                allPathsCurvyness = zeros(framesPerTrial, 2);
+                allPathsCurvyness(1, :) = curvynessFactor;
+                if numSteps > 0
+                    allPathsCurvyness(2:end, :) = curvynessPerStep;
+                end
                 allPathsStartingPoint = zeros(framesPerTrial, 2);
                 allPathsStartingPoint(1, :) = [1, 1];
                 if numSteps > 0
@@ -388,8 +410,33 @@ if plotPathsAtEnd
 end
 
 %% Save outputs (xySeqs + Cfg)
-% Data flow: Config -> Cfg struct -> .mat on disk.
+% Data flow: Config + script settings + RNG seed -> repro + Cfg -> .mat on disk.
 if ~skipSave
+    %% Reproducibility snapshot
+    % Data flow: Config constants + script params + inputs -> repro struct.
+    configProps = properties('Config');
+    configSnapshot = struct();
+    for propIndex = 1:numel(configProps)
+        propName = configProps{propIndex};
+        configSnapshot.(propName) = Config.(propName); % capture constant Config values
+    end
+
+    repro = struct();
+    repro.script = struct( ...
+        'name', mfilename, ...
+        'version', 'v09', ...
+        'parameters', struct( ...
+            'renderPreview', renderPreview, ...
+            'plotPathsAtEnd', plotPathsAtEnd, ...
+            'plotPathsPerCondition', plotPathsPerCondition, ...
+            'plotPathConditions', plotPathConditions, ...
+            'flipCurvatureOnDeviant', flipCurvatureOnDeviant));
+    repro.inputs = struct('subjectID', subjectID, 'viewingDistance', viewingDistance);
+    repro.rng = rngState;
+    repro.config = configSnapshot;
+    repro.stimulusTypeConfig = stimulusTypeConfig;
+    repro.derived = struct('framesPerTrial', framesPerTrial, 'minPos', minPos, 'maxPos', maxPos);
+
     Cfg = struct();
     Cfg.dpf = Config.dotSpeedDegPerFrame;
     Cfg.fps = Config.frameFrequency;
@@ -399,7 +446,7 @@ if ~skipSave
     Cfg.DirChange = stimulusTypeConfig.directionChange;
 
     xySeqs = repmat(xySeqs, 1, Config.trialRepetetion, 1);
-    save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg');
+    save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg', 'repro');
 end
 
 % Close all onscreens and offscreens

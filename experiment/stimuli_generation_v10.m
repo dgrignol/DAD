@@ -1,6 +1,6 @@
 %% Stimuli Generation (uniform starts, boundary rejection, curvature flip on deviant)
-% Script: stimuli_generation_v9.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9 updates by Codex
+% Script: stimuli_generation_v10.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v10 updates by Codex
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -12,6 +12,8 @@
 %   When a deviant occurs (likelihood stimulus), the curvature sign can
 %   flip from that frame onward for the deviant path (configurable below).
 %   Optionally plots a random subset of paths per condition after generation.
+%   This version also saves the no-deviant baseline paths for deviant
+%   conditions to a separate analysis-only file.
 %
 %   Output matches the structure expected by:
 %     - experiment/MoveDot1_experiment_vX.m
@@ -19,13 +21,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v9;
+%   stimuli_generation_v10;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v9;
+%   stimuli_generation_v10;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -33,8 +35,12 @@
 %   - Dialog values for viewing distance and subject ID.
 %
 % Outputs:
-%   - Saves xySeqs and Cfg to Config.inputDirectory using Config.stimuliFileName.
+%   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
+%   - repro captures Config, script settings, and RNG state needed to reproduce paths.
 %   - xySeqs(...).xy is frames x 4 with columns [x1 y1 x2 y2] in visual degrees.
+%   - Saves xySeqsWannabeDev and Cfg to input_files/MovDot_SubXX_wannabeDev.mat.
+%     The "wannabe" file stores no-deviant baseline paths for deviant conditions
+%     only (analysis use; not presented to participants).
 %   - Optional per-condition path plots after generation using time colors.
 %
 % Key assumptions:
@@ -43,6 +49,8 @@
 %   - Dots must remain at least Config.minDistanceBetweenDots apart.
 %   - If enabled, curvature flips only for the deviant path (baseline keeps
 %     constant curvature for boundary validation).
+%   - No-deviant baselines reuse the same start points and curvature, but
+%     remove deviant angle changes.
 %   - Rejection sampling introduces boundary-related selection effects.
 
 addpath('lib/');
@@ -56,7 +64,7 @@ renderPreview = false; % set true to draw stimuli during generation
 plotPathsAtEnd = true; % set true to plot path samples after generation
 plotPathsPerCondition = 20; % number of paths to plot per condition (randomly sampled)
 plotPathConditions = [0 45]; % directionVariance values to plot as conditions
-flipCurvatureOnDeviant = true; % set true to flip curvature sign at deviant onset
+flipCurvatureOnDeviant = false; % set true to flip curvature sign at deviant onset
 
 userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, ...
     Config.dialogPrompts, Config.dialogDefaults);
@@ -65,6 +73,8 @@ subjectID = userDoubles(2);
 
 % Seed RNG for reproducibility (per subject)
 rng(subjectID);
+% Snapshot RNG state after seeding to reproduce path generation later.
+rngState = rng;
 
 % Ensure output folders exist before saving
 if ~exist(Config.inputDirectory, 'dir')
@@ -75,8 +85,9 @@ if ~exist(Config.outputDirectory, 'dir')
 end
 
 %% Output file guard
-% Data flow: subject ID -> output file -> user choice -> generate/plot path.
+% Data flow: subject ID -> output files -> user choice -> generate/plot path.
 outputFile = [Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)];
+wannabeFile = [Config.inputDirectory sprintf('MovDot_Sub%02d_wannabeDev.mat', subjectID)];
 skipGeneration = false;
 skipSave = false;
 if exist(outputFile, 'file')
@@ -136,14 +147,16 @@ elseif Config.stimulusType == Utils.path_duration_norm
 end
 
 %% Main generation loop
-% Data flow: condition params -> trial loops -> xySeqs output struct.
+% Data flow: condition params -> trial loops -> xySeqs + xySeqsWannabeDev outputs.
 if ~skipGeneration
     framesPerTrial = round(Config.trialDuration * Config.frameFrequency);
     minPos = [Config.dotWidth/2, Config.dotWidth/2];
     maxPos = Config.dotRectSize - minPos;
+    xySeqsWannabeDev = struct();
 
     for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)
         dirVar = stimulusTypeConfig.directionVariance(dirVarIndex);
+        isDeviantCondition = (Config.stimulusType == Utils.likelihood && dirVar ~= 0);
 
         for pathDurIndex = 1:length(stimulusTypeConfig.pathDuration)
             pathDuration = stimulusTypeConfig.pathDuration(pathDurIndex);
@@ -278,6 +291,23 @@ if ~skipGeneration
                     allPathsStartingPoint(2:end, :) = repmat(changeMask, 1, 2);
                 end
 
+                % Analysis-only buffers for no-deviant baselines (deviant conditions only).
+                % Data flow: no-deviant angle changes -> per-frame curvyness/start flags.
+                if isDeviantCondition
+                    allPathsCurvynessNoDev = zeros(framesPerTrial, 2);
+                    allPathsCurvynessNoDev(1, :) = curvynessFactor;
+                    if numSteps > 0
+                        allPathsCurvynessNoDev(2:end, :) = curvynessPerStepNoDev;
+                    end
+
+                    allPathsStartingPointNoDev = zeros(framesPerTrial, 2);
+                    allPathsStartingPointNoDev(1, :) = [1, 1];
+                    if numSteps > 0
+                        changeMaskNoDev = any(directionAngleChangeNoDev, 2);
+                        allPathsStartingPointNoDev(2:end, :) = repmat(changeMaskNoDev, 1, 2);
+                    end
+                end
+
                 % Grid occupancy bookkeeping and optional preview rendering.
                 gridCount = zeros(Config.numXGrids, Config.numYGrids, framesPerTrial, 2);
                 for frameIndex = 1:framesPerTrial
@@ -320,6 +350,18 @@ if ~skipGeneration
                 xySeqs(dirVarIndex, pathDurIndex, trialPerCondIndex).tolleranceGrid     = Config.spreadoutTolerance;
                 xySeqs(dirVarIndex, pathDurIndex, trialPerCondIndex).borderCounter      = zeros(1, framesPerTrial);
                 xySeqs(dirVarIndex, pathDurIndex, trialPerCondIndex).borderTot          = 0;
+
+                % Analysis-only storage: no-deviant baseline for deviant conditions.
+                % Data flow: dummy path -> xySeqsWannabeDev output struct.
+                if isDeviantCondition
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).condition       = dirVar;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).PredictionRange = pathDuration;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).sequence        = trialPerCondIndex;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).xy              = dummyPathsFrameDotXY;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).pathAll         = allPathsStartingPointNoDev;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).curvyness       = allPathsCurvynessNoDev;
+                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).AngleDirection  = allPathsDirectionAngleNoDev;
+                end
 
                 totalSpread = totalSpread + gridSum;
                 fprintf("End of trial %d within condition %d\n", trialPerCondIndex, dirVar);
@@ -406,9 +448,34 @@ if plotPathsAtEnd
     end
 end
 
-%% Save outputs (xySeqs + Cfg)
-% Data flow: Config -> Cfg struct -> .mat on disk.
+%% Save outputs (xySeqs + Cfg, plus no-deviant baselines)
+% Data flow: Config + script settings + RNG seed -> repro + Cfg -> .mat on disk.
 if ~skipSave
+    %% Reproducibility snapshot
+    % Data flow: Config constants + script params + inputs -> repro struct.
+    configProps = properties('Config');
+    configSnapshot = struct();
+    for propIndex = 1:numel(configProps)
+        propName = configProps{propIndex};
+        configSnapshot.(propName) = Config.(propName); % capture constant Config values
+    end
+
+    repro = struct();
+    repro.script = struct( ...
+        'name', mfilename, ...
+        'version', 'v10', ...
+        'parameters', struct( ...
+            'renderPreview', renderPreview, ...
+            'plotPathsAtEnd', plotPathsAtEnd, ...
+            'plotPathsPerCondition', plotPathsPerCondition, ...
+            'plotPathConditions', plotPathConditions, ...
+            'flipCurvatureOnDeviant', flipCurvatureOnDeviant));
+    repro.inputs = struct('subjectID', subjectID, 'viewingDistance', viewingDistance);
+    repro.rng = rngState;
+    repro.config = configSnapshot;
+    repro.stimulusTypeConfig = stimulusTypeConfig;
+    repro.derived = struct('framesPerTrial', framesPerTrial, 'minPos', minPos, 'maxPos', maxPos);
+
     Cfg = struct();
     Cfg.dpf = Config.dotSpeedDegPerFrame;
     Cfg.fps = Config.frameFrequency;
@@ -418,7 +485,11 @@ if ~skipSave
     Cfg.DirChange = stimulusTypeConfig.directionChange;
 
     xySeqs = repmat(xySeqs, 1, Config.trialRepetetion, 1);
-    save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg');
+    save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg', 'repro');
+
+    % Analysis-only output: no-deviant baselines for deviant conditions.
+    xySeqsWannabeDev = repmat(xySeqsWannabeDev, 1, Config.trialRepetetion, 1);
+    save(wannabeFile, 'xySeqsWannabeDev', 'Cfg');
 end
 
 % Close all onscreens and offscreens

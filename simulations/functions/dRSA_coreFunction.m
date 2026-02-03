@@ -41,6 +41,7 @@ function [dRSAmat] = dRSA_coreFunction (Y, model, params, varargin)
 % varargin:  can be added, but must not be
 %             CurrSubsamples: nSubsamples*subSampleDuration*1, needed if no RDM provided
 %             Autocorrborder: For PCR necessary. A vector of nmodel x 1 where the number is the sample for the border
+%             suppressDispText: 0/1 to suppress console output
 
 
 
@@ -54,11 +55,14 @@ function [dRSAmat] = dRSA_coreFunction (Y, model, params, varargin)
 p = inputParser;
 addParameter(p, 'CurrSubsamples', [], @(x) isnumeric(x));
 addParameter(p, 'Autocorrborder', [], @(x) isnumeric(x));
+addParameter(p, 'suppressDispText', 0, ...
+    @(x) isscalar(x) && (islogical(x) || isnumeric(x)));
 
 parse(p, varargin{:});
 
 CurrSubsamples = p.Results.CurrSubsamples;   %if not added, take it here
 Autocorrborder = p.Results.Autocorrborder;   %if not added, take it here
+suppressDispText = logical(p.Results.suppressDispText);
 
 
 %% Some Default Options
@@ -140,8 +144,11 @@ end
 
 %%in case we want to have the autocorrelation we only calculate it one time
 if iscell(model) && numel(model) == 1 && isequal(model{1}, Y) && strcmp(params.dRSAtype, 'corr')
-    disp('Calculating autocorrelation');
-    DistMeasure = 'correlation';
+    if ~suppressDispText
+        disp('Calculating autocorrelation');
+    end
+    DistMeasure = params.modelDistMeasure;
+    %DistMeasure = 'correlation';
     singleRDM  = dRSA_computeRDM(Y, params, CurrSubsamples, DistMeasure); % params.neuralDistMeasure = type of dist measure
     
     %for later

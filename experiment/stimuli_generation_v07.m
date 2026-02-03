@@ -39,7 +39,8 @@
 %   - Dialog values for viewing distance and subject ID.
 %
 % Outputs:
-%   - Saves xySeqs and Cfg to Config.inputDirectory using Config.stimuliFileName.
+%   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
+%   - repro captures Config, script settings, and RNG state needed to reproduce paths.
 %   - xySeqs(...).xy is frames x 4 with columns [x1 y1 x2 y2] in visual degrees.
 %   - Saves path plots to simulations/debug as PNGs.
 %
@@ -67,6 +68,8 @@ subjectID = userDoubles(2);
 
 % Seed RNG for reproducibility (per subject)
 rng(subjectID);
+% Snapshot RNG state after seeding to reproduce path generation later.
+rngState = rng;
 
 % Ensure output folders exist before saving
 if ~exist(Config.inputDirectory, 'dir')
@@ -307,7 +310,34 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)
 end
 
 %% Save outputs (xySeqs + Cfg)
-% Data flow: Config -> Cfg struct -> .mat on disk.
+% Data flow: Config + script settings + RNG seed -> repro + Cfg -> .mat on disk.
+%% Reproducibility snapshot
+% Data flow: Config constants + script params + inputs -> repro struct.
+configProps = properties('Config');
+configSnapshot = struct();
+for propIndex = 1:numel(configProps)
+    propName = configProps{propIndex};
+    configSnapshot.(propName) = Config.(propName); % capture constant Config values
+end
+
+repro = struct();
+repro.script = struct( ...
+    'name', mfilename, ...
+    'version', 'v07', ...
+    'parameters', struct( ...
+        'renderPreview', renderPreview, ...
+        'plotGeneratedPaths', true));
+repro.inputs = struct('subjectID', subjectID, 'viewingDistance', viewingDistance);
+repro.rng = rngState;
+repro.config = configSnapshot;
+repro.stimulusTypeConfig = stimulusTypeConfig;
+repro.derived = struct( ...
+    'framesPerTrial', framesPerTrial, ...
+    'minPos', minPos, ...
+    'maxPos', maxPos, ...
+    'curvMinDeg', curvMinDeg, ...
+    'curvMaxDeg', curvMaxDeg);
+
 Cfg = struct();
 Cfg.dpf = Config.dotSpeedDegPerFrame;
 Cfg.fps = Config.frameFrequency;
@@ -317,7 +347,7 @@ Cfg.rectSize = Config.dotRectSize;
 Cfg.DirChange = stimulusTypeConfig.directionChange;
 
 xySeqs = repmat(xySeqs, 1, Config.trialRepetetion, 1);
-save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg');
+save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg', 'repro');
 
 % Close all onscreens and offscreens
 if renderPreview

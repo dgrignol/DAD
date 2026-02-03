@@ -1,3 +1,117 @@
+# 03 Feb 2026 10:28
+
+## Repository hygiene
+
+### `.gitignore`
+- Ignore editor backup `*~` files to keep temporary artifacts out of version control.
+
+## Simulation input building and experimental pipeline
+
+### `simulations/build_movdot_simulation_inputs.m`
+- Remove the `RecenterToFixation` toggle and always emit center-relative paths alongside absolute paths.
+- Require a valid rect size for center-relative outputs, using `RectSize` overrides or the stimulus `Cfg.rectSize`.
+
+### `simulations/messy_PIPELINE_simulation_experimental.m`
+- Always load center-relative paths and error with guidance if they are missing from inputs.
+- Sample a fixed number of paths for overview plots to keep figure output compact.
+
+# 29 Jan 2026 16:13
+
+## Experiment configuration and stimuli generation
+
+### `experiment/lib/Config.m`
+- Reduce `trialsPerCondition` to 20 for faster runs while preserving the original value as an inline comment.
+- Adjust default curvature settings (`curvFactor` and `isCurvValenceRand`) to match the latest pilot assumptions.
+
+### `experiment/stimuli_generation_v05.m` (renamed from `experiment/stimuli_generation_v5.m`)
+- Rename to the zero-padded version label while keeping the v05 generation logic intact.
+- Add RNG seeding + state snapshot notes and expand the header documentation to spell out outputs and reproducibility.
+
+### `experiment/stimuli_generation_v06.m` (renamed from `experiment/stimuli_generation_v6.m`)
+- Rename to the zero-padded version label while preserving the uniform-start, boundary-rejection logic.
+- Expand the header block with reproducibility notes and clarify the output struct fields.
+
+### `experiment/stimuli_generation_v07.m` (renamed from `experiment/stimuli_generation_v7.m`)
+- Rename to the zero-padded version label and keep the fit-to-bounds path placement workflow.
+- Document the bounded curvature logic and reproducibility metadata in the script header.
+
+### `experiment/stimuli_generation_v08.m` (renamed from `experiment/stimuli_generation_v8.m`)
+- Rename to the zero-padded version label and retain the vectorized, min-distance-checked generation path.
+- Update header documentation to capture RNG state and output details.
+
+### `experiment/stimuli_generation_v09.m` (renamed from `experiment/stimuli_generation_v9.m`)
+- Rename to the zero-padded version label and keep the curvature-flip-on-deviant option.
+- Document reproducibility metadata and deviant curvature handling in the script header.
+
+### `experiment/stimuli_generation_v10.m`
+- Add a new stimuli generator that preserves v09 behavior while exporting no-deviant baseline paths as `MovDot_SubXX_wannabeDev.mat`.
+- Capture RNG state and script settings in the saved repro metadata for analysis reproducibility.
+
+### `experiment/stimuli_generation_versions.md`
+- Add a version guide describing which `stimuli_generation_vXX.m` script to use for each path capability.
+- Summarize how each version changes bounds handling, curvature logic, and deviant behavior.
+
+### `experiment/CreateInputFiles_v11.m`
+- Add a new catch-trial input generator with usage docs, jitter scaling controls, and boundary guards for occlusion paths.
+- Centralize catch trial timing, jitter scaling modes, and boundary checks in a script-level configuration block.
+
+## Simulation input building and utilities
+
+### `simulations/build_movdot_simulation_inputs.m`
+- Add support for `xySeqsWannabeDev` with auto-detection or `XySeqsField` overrides, plus missing-condition tolerance.
+- Introduce `suppressDispText` and empty-trial filtering to keep batch runs quiet and robust.
+- Add optional center-relative outputs (`RecenterToFixation`, `RectSize`) and persist the recentering metadata.
+
+### `simulations/compute_avg_path_distance.m`
+- Add a helper to compute per-sample dot distances plus mean summaries across trials/time with NaN handling.
+
+## Simulation diagnostics (debug helpers)
+
+### `simulations/debug/plot_direction.m`
+- Add a quick diagnostic plot for cosine/sine direction timecourses from a random or specified trial.
+
+### `simulations/debug/plot_direction_cosine_distance.m`
+- Add a cosine-distance heatmap diagnostic for direction time series, matching dRSA cosine metrics.
+
+### `simulations/debug/plot_direction_dRSA_by_turn.m`
+- Add a diagnostic that splits trials by CW/CCW turn sign and recomputes direction dRSA maps per group.
+
+## dRSA helper functions
+
+### `simulations/functions/dRSA_border.m`
+- Add `suppressDispText` and `plotAutocorr` options plus a local diagonal helper for plotting regression borders.
+- Gate console output and add optional autocorrelation visualizations to inspect border placement.
+
+### `simulations/functions/dRSA_concatenate.m`
+- Add `suppressDispText` parsing and route console output through a quiet flag for batch usage.
+- Allow `plotConcat` to be passed as a name/value fallback and propagate quiet mode to reshape warnings.
+
+### `simulations/functions/dRSA_coreFunction.m`
+- Add `suppressDispText` handling and use the configured `params.modelDistMeasure` for autocorrelation runs.
+
+### `simulations/functions/dRSA_triggered_subsampling.m`
+- Add `suppressDispText` to silence trigger/subsample status prints during batch runs.
+
+## Simulation pipeline scripts
+
+### `simulations/messy_PIPELINE_simulation.m`
+- Add quiet-mode wiring, compute dot-to-dot distance summaries, and save path overview figures alongside dRSA outputs.
+- Add direction diagnostics (timecourse, cosine distance, angle plots) and align neural distance metrics with model type.
+- Skip autocorr border computation for corr-only runs, gating it behind `dRSAtype` and quiet options.
+
+### `simulations/messy_PIPELINE_simulation_experimental.m`
+- Add an experimental pipeline that can switch between absolute and center-relative paths with recentering support.
+- Integrate dot distance summaries, direction diagnostics, and the same dRSA workflow as the main pipeline.
+
+### `simulations/messy_PIPELINE_simulation_posOnly.m`
+- Add a position-only pipeline that supports deviant and wannabe-deviant inputs with aligned metadata handling.
+- Preserve the trial-locked subsampling workflow and debug plotting for position-only analyses.
+
+### `simulations/pipeline_recursive.m`
+- Add top-k subset tracking with duplicate filtering, checkpointing, and scoring by mean/max absolute correlation.
+- Support resuming scans, plotting multiple best subsets, and averaging dRSA matrices across top runs.
+- Append a Markdown report section with plots and ranked subset metadata for reproducibility.
+
 # 22 Jan 2026 16:36
 
 ## Repository hygiene

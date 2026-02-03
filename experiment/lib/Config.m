@@ -2,7 +2,7 @@ classdef Config
     properties(Constant)
     
         %general
-        trialsPerCondition = 10000;  %nSeq in their code
+        trialsPerCondition = 20; %10000;  %nSeq in their code
         trialDuration = 2.67;       %in seconds
         trialRepetetion = 1;
         %general - pc settings
@@ -14,8 +14,8 @@ classdef Config
         % stimulusType = Utils.path_duration;
 
         %curvyness
-        curvFactor = 1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
-        isCurvValenceRand = true;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
+        curvFactor = 0.85;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
+        isCurvValenceRand = false;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
         isCurvFactorRand = false;    %if set the curvFactor will be multiplied by a rand before added
 
         %dot settings

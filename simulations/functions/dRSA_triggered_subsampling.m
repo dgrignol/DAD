@@ -1,4 +1,4 @@
-function [SSIndices, SSIndicesPlot, usedIterations] = dRSA_triggered_subsampling(maskSubsampling, maskTrigger, opt)
+function [SSIndices, SSIndicesPlot, usedIterations] = dRSA_triggered_subsampling(maskSubsampling, maskTrigger, opt, varargin)
 % dRSA_triggered_subsampling
 % Time-lock subsamples to specific trigger points (e.g. word onsets).
 %
@@ -17,6 +17,9 @@ function [SSIndices, SSIndicesPlot, usedIterations] = dRSA_triggered_subsampling
 %   SSIndicesPlot  : [nIter × N] logical mask of selected points
 %   usedIterations : number of unique valid iterations
 %
+% Name/value options:
+%   'suppressDispText' : suppress console output (default = 0)
+%
 % -------------------------------------------------------------------------
 % Based on: dRSA_random_subsampling
 % -------------------------------------------------------------------------
@@ -30,6 +33,13 @@ if ~islogical(maskSubsampling) || ~islogical(maskTrigger)
 end
 if ~isfield(opt, 'checkRepetition'), opt.checkRepetition = true; end
 if ~isfield(opt, 'spacing'), opt.spacing = 0; end
+
+% Data flow: name/value options -> suppressDispText -> status output gating.
+parser = inputParser;
+parser.addParameter('suppressDispText', 0, ...
+    @(x) isscalar(x) && (islogical(x) || isnumeric(x)));
+parser.parse(varargin{:});
+suppressDispText = logical(parser.Results.suppressDispText);
 
 PreTrigger  = opt.PreTrigger;
 PostTrigger = opt.PostTrigger;
@@ -46,7 +56,9 @@ rng('shuffle'); % randomize RNG seed
 %% --- Step 1: Identify all trigger points
 allTriggers = find(maskTrigger);
 nTriggersTotal = numel(allTriggers);
-fprintf('\nFound %d total trigger points.\n', nTriggersTotal);
+if ~suppressDispText
+    fprintf('\nFound %d total trigger points.\n', nTriggersTotal);
+end
 
 %% --- Step 2: Check which triggers are usable (fully within available data)
 validTriggers = [];
@@ -62,8 +74,10 @@ for t = allTriggers(:)'
 end
 
 nValid = numel(validTriggers);
-fprintf('%d trigger points are valid for subsampling (%.1f%% of total).\n', ...
-    nValid, 100 * nValid / nTriggersTotal);
+if ~suppressDispText
+    fprintf('%d trigger points are valid for subsampling (%.1f%% of total).\n', ...
+        nValid, 100 * nValid / nTriggersTotal);
+end
 
 if nValid == 0
     error('No valid triggers found: check masks or Pre/PostTrigger parameters.');
@@ -148,13 +162,17 @@ for iter = 1:nIter
     end
 end
 
-fprintf('\nGenerated %d unique subsampling iterations (requested %d)\n', ...
+if ~suppressDispText
+    fprintf('\nGenerated %d unique subsampling iterations (requested %d)\n', ...
         usedIterations, nIter);
+end
 
 %% --- Step 5: Summary
-fprintf('Subsample duration: %d points (from %d before to %d after trigger)\n', ...
-    SubSampleDur, PreTrigger, PostTrigger);
-fprintf('Average trigger spacing constraint: %d points\n', spacing);
+if ~suppressDispText
+    fprintf('Subsample duration: %d points (from %d before to %d after trigger)\n', ...
+        SubSampleDur, PreTrigger, PostTrigger);
+    fprintf('Average trigger spacing constraint: %d points\n', spacing);
+end
 
 %% --- Step 6: Post-hoc repetition check (if checkRepetition = false)
 if ~checkRepetition
@@ -171,7 +189,9 @@ if ~checkRepetition
         warning('Detected %d repeated iterations (%.2f%%) after sampling without repetition check.', ...
             nRepetitions, 100 * nRepetitions / nIter);
     else
-        fprintf('No repeated iterations detected in post-hoc check.\n');
+        if ~suppressDispText
+            fprintf('No repeated iterations detected in post-hoc check.\n');
+        end
     end
 end
 

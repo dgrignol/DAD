@@ -17,7 +17,9 @@
 %   - Dialog values for viewing distance and subject ID.
 %
 % Outputs:
-%   - Saves xySeqs and Cfg to Config.inputDirectory using Config.stimuliFileName.
+%   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
+%   - repro captures Config, script settings, screen geometry, and RNG state
+%     needed to reproduce paths.
 %
 % Key assumptions:
 %   - Coordinates are in visual degrees relative to screen center.
@@ -51,6 +53,8 @@ subjectID = userDoubles(2);
 
 % Seed RNG for reproducibility (per subject)
 rng(subjectID);
+% Snapshot RNG state after seeding to reproduce path generation later.
+rngState = rng;
 
 % Ensure output folders exist before saving
 if ~exist(Config.inputDirectory, 'dir')
@@ -414,6 +418,37 @@ for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)    %so this one
     fprintf("End of condition [%d] = %d (loop directionVariance)\n", dirVarIndex, dirVar);
 end %end loop of directionVariance
 
+%% Reproducibility snapshot
+% Data flow: Config + script settings + screen geometry + RNG seed -> repro struct.
+configProps = properties('Config');
+configSnapshot = struct();
+for propIndex = 1:numel(configProps)
+    propName = configProps{propIndex};
+    configSnapshot.(propName) = Config.(propName); % capture constant Config values
+end
+
+repro = struct();
+repro.script = struct( ...
+    'name', mfilename, ...
+    'version', 'v05', ...
+    'parameters', struct( ...
+        'extraNumPaths', extraNumPaths, ...
+        'previewEnabled', true));
+repro.inputs = struct('subjectID', subjectID, 'viewingDistance', viewingDistance);
+repro.rng = rngState;
+repro.config = configSnapshot;
+repro.stimulusTypeConfig = stimulusTypeConfig;
+repro.screen = struct( ...
+    'monitorIndex', monitorIndex, ...
+    'monitorPixelSize', monitorPixelSize, ...
+    'monitorMilliWidth', monitorMilliWidth, ...
+    'monitorMilliHeight', monitorMilliHeight, ...
+    'pixelsPerDegrees', pixelsPerDegrees, ...
+    'screenCenterDegrees', screenCenterDegrees, ...
+    'dotRectDegrees', dotRectDegrees, ...
+    'dotRectCenterDegrees', dotRectCenterDegrees);
+repro.derived = struct('framesPerTrial', round(Config.trialDuration * Config.frameFrequency));
+
 %for integration the Cfg struct is needed in their scripts to be removed
 %later on and use the Config class instead
 Cfg = struct();
@@ -427,7 +462,7 @@ Cfg.DirChange = stimulusTypeConfig.directionChange; %this one only needed in the
 %replicate the trial the amount of repetetions
 xySeqs = repmat(xySeqs, 1, Config.trialRepetetion, 1);
 
-save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg');
+save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg', 'repro');
 %close all onscreens and offscreens
 sca;
 

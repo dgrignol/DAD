@@ -1,10 +1,11 @@
-function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
+function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat, varargin)
     %dRSA_CONCATENATE  Concatenate feature matrices over time and create a boundary mask.
 %
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn)
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn)
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
 %   [dataOut, maskOut] = dRSA_concatenate(dataIn, [], plotConcat)
+%   [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat, 'suppressDispText', 1)
 %     - plotConcat defaults to 1; set to 0 to suppress the diagnostic figure.
 %
 % DESCRIPTION
@@ -51,6 +52,8 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
 %              – mask  : N×T double, each row a mask over time
 %   plotConcat : (optional) scalar logical/numeric, default = 1
 %              – 1 to show the concatenation figure, 0 to suppress plotting
+%   suppressDispText : (optional) scalar logical, default = 0
+%              – 1 to suppress console messages
 %
 % OUTPUTS
 %   dataOut : double, feature × time concatenation of the input segments.
@@ -81,18 +84,35 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
     if nargin < 1
         error('dRSA_concatenate:missingData', 'Input data is required.');
     end
+    if nargin >= 3 && (ischar(plotConcat) || isstring(plotConcat))
+        varargin = [{plotConcat}, varargin];
+        plotConcat = [];
+    end
     if nargin < 3 || isempty(plotConcat)
         plotConcat = 1;
     end
     if ~isscalar(plotConcat) || ~isnumeric(plotConcat)
         error('plotConcat must be a numeric scalar (0 or 1).');
     end
+
+    % --- Optional name/value parsing ---
+    % Data flow: varargin -> suppressDispText flag -> console output gating.
+    suppressDispText = 0;
+    if ~isempty(varargin)
+        parser = inputParser;
+        parser.addParameter('suppressDispText', 0, ...
+            @(x) isscalar(x) && (islogical(x) || isnumeric(x)));
+        parser.parse(varargin{:});
+        suppressDispText = logical(parser.Results.suppressDispText);
+    end
     
     % --- Concatenate data and build boundary mask ---
     if iscell(dataIn) % check if input is cell array
         if all(cellfun(@(x) isnumeric(x) && ismatrix(x), dataIn)) % Check that all elements are 2D numeric matrices
-            disp('dataIn is a cell array of 2D matrices');            
-            [dataOut, maskConcat] = concat_cellArray(dataIn); 
+            if ~suppressDispText
+                disp('dataIn is a cell array of 2D matrices');
+            end
+            [dataOut, maskConcat] = concat_cellArray(dataIn);
         elseif all(cellfun(@(x) ischar(x) || isstring(x), dataIn)) % dataIn is a cell array of .mat file paths          
             loadedData = cell(size(dataIn));
             for i = 1:numel(dataIn)
@@ -114,8 +134,10 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
             error('If dataIn is a cell array: all elements must be either 2D numeric matrices or charachter vectors representing full paths of files from where to lead the 2D numeric matrices');
         end
     elseif isnumeric(dataIn) && (ismatrix(dataIn) || ndims(dataIn) == 3) % if dataIn is a numeric 2D or 3D matrix
-        disp('dataIn is a numeric 2D or 3D matrix');       
-        [dataOut, maskConcat] = do_reshape(dataIn); % reshape and create mask
+        if ~suppressDispText
+            disp('dataIn is a numeric 2D or 3D matrix');
+        end
+        [dataOut, maskConcat] = do_reshape(dataIn, suppressDispText); % reshape and create mask
     else
         error('dataIn must be either a 2D/3D numeric matrix or a cell array of 2D matrices');
     end
@@ -169,7 +191,7 @@ function [dataOut, maskOut] = dRSA_concatenate(dataIn, maskIn, plotConcat)
 
 
 
-function [dataOut, maskConcat] = do_reshape(dataIn)
+function [dataOut, maskConcat] = do_reshape(dataIn, suppressDispText)
 
 % do_concatenation: Minimal concatenation for trial*feature*time inputs.
 %
@@ -185,8 +207,13 @@ function [dataOut, maskConcat] = do_reshape(dataIn)
 % [dataOut, maskOut] = dRSA_concatenate_V0(rand(1,3,10)) % 1*features*time
 
     % Basic input validation to ensure the function receives the expected shapes.
+    if nargin < 2
+        suppressDispText = false;
+    end
     if ismatrix(dataIn)
-        warning('Assuming "dataIn" to be a feature*time matrix.')
+        if ~suppressDispText
+            warning('Assuming "dataIn" to be a feature*time matrix.');
+        end
         dataIn = reshape(dataIn,[1,size(dataIn)]);
     end
     if ndims(dataIn) ~= 3
