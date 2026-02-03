@@ -1,3 +1,26 @@
+# 03 Feb 2026 11:43
+
+## Experiment configuration and stimuli generation
+
+### `experiment/lib/Config.m`
+- Adjust the default `curvFactor` to 0.5 while retaining the prior value as an inline comment.
+- Add `flipCurvatureOnDeviant` under deviant settings to centralize the curvature flip toggle.
+
+### `experiment/stimuli_generation_v10.m`
+- Read `flipCurvatureOnDeviant` from `Config` instead of a script-local literal.
+- Update the header note to point to the Config-driven toggle.
+
+## Stimuli generation documentation
+
+### `experiment/stimuli_generation_versions.md`
+- Add an input file parameter summary table with a source priority of `inferred_repro` → `repro` → `Cfg`.
+- Populate summary rows for Sub04/05 (missing fields) and Sub88–98 with key parameters including curvature and direction variance.
+
+## Simulation pipeline scripts
+
+### `simulations/PIPELINE_simulation.m`
+- Switch the default `participantNumber` to 88 for local runs.
+
 # 03 Feb 2026 10:45
 
 ## Simulation pipeline scripts

@@ -10,7 +10,7 @@
 %     - advances positions with constant step size, and
 %     - rejects any path that would cross the boundary.
 %   When a deviant occurs (likelihood stimulus), the curvature sign can
-%   flip from that frame onward for the deviant path (configurable below).
+%   flip from that frame onward for the deviant path (via Config).
 %   Optionally plots a random subset of paths per condition after generation.
 %   This version also saves the no-deviant baseline paths for deviant
 %   conditions to a separate analysis-only file.
@@ -64,7 +64,7 @@ renderPreview = false; % set true to draw stimuli during generation
 plotPathsAtEnd = true; % set true to plot path samples after generation
 plotPathsPerCondition = 20; % number of paths to plot per condition (randomly sampled)
 plotPathConditions = [0 45]; % directionVariance values to plot as conditions
-flipCurvatureOnDeviant = false; % set true to flip curvature sign at deviant onset
+flipCurvatureOnDeviant = Config.flipCurvatureOnDeviant; % set true to flip curvature sign at deviant onset
 
 userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, ...
     Config.dialogPrompts, Config.dialogDefaults);

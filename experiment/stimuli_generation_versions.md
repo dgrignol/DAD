@@ -1,5 +1,29 @@
 # Stimuli generation versions: path capabilities
 
+## Input file parameter summary
+
+This table summarizes key generation parameters per subject input file. Values
+are read from `inferred_repro.config` (and `inferred_repro.stimulusTypeConfig`
+for `pathDuration`/`directionVariance`) when available; if missing, the lookup
+falls back to `repro` and then to the top-level `Cfg`. When none of these
+structures expose a field (currently Subj 04 and 05), the cell is left as `—`.
+
+| Input file | Subj | Source | curvFactor | trialsPerCondition | trialDuration | pathDuration | directionVariance | dotSpeedDegPerFrame | minDistanceBetweenDots | flipCurvatureOnDeviant |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — |
+| `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — |
+| `experiment/input_files/MovDot_Sub88.mat` | 88 | inferred_repro | 0.85 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub89.mat` | 89 | inferred_repro | 0.85 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub90.mat` | 90 | inferred_repro | 0.9 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub91.mat` | 91 | inferred_repro | 0.4 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub92.mat` | 92 | inferred_repro | 0.9 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub93.mat` | 93 | inferred_repro | 1.05 | 10000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub94.mat` | 94 | inferred_repro | 1.088 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub95.mat` | 95 | inferred_repro | 1.05 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub96.mat` | 96 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub97.mat` | 97 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+| `experiment/input_files/MovDot_Sub98.mat` | 98 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — |
+
 This document summarizes how each `stimuli_generation_vXX.m` script differs in the
 kinds of dot-motion paths it can generate. It focuses on *capabilities* and how
 parameter options affect the output paths, not on any specific parameter values.

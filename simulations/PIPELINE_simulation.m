@@ -73,7 +73,7 @@ addpath(fullfile(scriptDir, 'debug'));
 addpath '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD'
 %% Participant configuration
 % Data flow: participant number + condition -> input filenames -> simulation data.
-participantNumber = 89;
+participantNumber = 88;
 inputCondition = 'nondeviant'; % 'nondeviant' or 'deviant' to match output files.
 inputCondition = lower(inputCondition);
 shuffleDot2Trials = false; % true to shuffle dot2 trials relative to dot1 before dRSA
