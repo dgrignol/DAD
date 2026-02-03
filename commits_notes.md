@@ -1,3 +1,16 @@
+# 03 Feb 2026 10:45
+
+## Simulation pipeline scripts
+
+### `simulations/PIPELINE_simulation.m` (renamed from `simulations/messy_PIPELINE_simulation_experimental.m`)
+- Rename the experimental pipeline script to the cleaned `PIPELINE_` name without changing its contents.
+
+### `simulations/PIPELINE_simulation_posOnly.m` (renamed from `simulations/messy_PIPELINE_simulation_posOnly.m`)
+- Rename the position-only pipeline script to the cleaned `PIPELINE_` name without changing its contents.
+
+### `simulations/messy_PIPELINE_simulation.m`
+- Remove the legacy pipeline script now that the cleaned pipeline naming is in place.
+
 # 03 Feb 2026 10:28
 
 ## Repository hygiene
