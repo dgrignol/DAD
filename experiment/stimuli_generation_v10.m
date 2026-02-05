@@ -38,8 +38,8 @@
 %   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
 %   - repro captures Config, script settings, and RNG state needed to reproduce paths.
 %   - xySeqs(...).xy is frames x 4 with columns [x1 y1 x2 y2] in visual degrees.
-%   - Saves xySeqsWannabeDev and Cfg to input_files/MovDot_SubXX_wannabeDev.mat.
-%     The "wannabe" file stores no-deviant baseline paths for deviant conditions
+%   - Saves xySeqsPredicted and Cfg to input_files/MovDot_SubXX_predicted.mat.
+%     The "predicted" file stores no-deviant baseline paths for deviant conditions
 %     only (analysis use; not presented to participants).
 %   - Optional per-condition path plots after generation using time colors.
 %
@@ -87,7 +87,7 @@ end
 %% Output file guard
 % Data flow: subject ID -> output files -> user choice -> generate/plot path.
 outputFile = [Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)];
-wannabeFile = [Config.inputDirectory sprintf('MovDot_Sub%02d_wannabeDev.mat', subjectID)];
+predictedFile = [Config.inputDirectory sprintf('MovDot_Sub%02d_predicted.mat', subjectID)];
 skipGeneration = false;
 skipSave = false;
 if exist(outputFile, 'file')
@@ -147,12 +147,12 @@ elseif Config.stimulusType == Utils.path_duration_norm
 end
 
 %% Main generation loop
-% Data flow: condition params -> trial loops -> xySeqs + xySeqsWannabeDev outputs.
+% Data flow: condition params -> trial loops -> xySeqs + xySeqsPredicted outputs.
 if ~skipGeneration
     framesPerTrial = round(Config.trialDuration * Config.frameFrequency);
     minPos = [Config.dotWidth/2, Config.dotWidth/2];
     maxPos = Config.dotRectSize - minPos;
-    xySeqsWannabeDev = struct();
+    xySeqsPredicted = struct();
 
     for dirVarIndex = 1:length(stimulusTypeConfig.directionVariance)
         dirVar = stimulusTypeConfig.directionVariance(dirVarIndex);
@@ -352,15 +352,15 @@ if ~skipGeneration
                 xySeqs(dirVarIndex, pathDurIndex, trialPerCondIndex).borderTot          = 0;
 
                 % Analysis-only storage: no-deviant baseline for deviant conditions.
-                % Data flow: dummy path -> xySeqsWannabeDev output struct.
+                % Data flow: dummy path -> xySeqsPredicted output struct.
                 if isDeviantCondition
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).condition       = dirVar;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).PredictionRange = pathDuration;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).sequence        = trialPerCondIndex;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).xy              = dummyPathsFrameDotXY;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).pathAll         = allPathsStartingPointNoDev;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).curvyness       = allPathsCurvynessNoDev;
-                    xySeqsWannabeDev(dirVarIndex, pathDurIndex, trialPerCondIndex).AngleDirection  = allPathsDirectionAngleNoDev;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).condition       = dirVar;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).PredictionRange = pathDuration;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).sequence        = trialPerCondIndex;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).xy              = dummyPathsFrameDotXY;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).pathAll         = allPathsStartingPointNoDev;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).curvyness       = allPathsCurvynessNoDev;
+                    xySeqsPredicted(dirVarIndex, pathDurIndex, trialPerCondIndex).AngleDirection  = allPathsDirectionAngleNoDev;
                 end
 
                 totalSpread = totalSpread + gridSum;
@@ -488,8 +488,8 @@ if ~skipSave
     save([Config.inputDirectory sprintf(Config.stimuliFileName, subjectID)], 'xySeqs', 'Cfg', 'repro');
 
     % Analysis-only output: no-deviant baselines for deviant conditions.
-    xySeqsWannabeDev = repmat(xySeqsWannabeDev, 1, Config.trialRepetetion, 1);
-    save(wannabeFile, 'xySeqsWannabeDev', 'Cfg');
+    xySeqsPredicted = repmat(xySeqsPredicted, 1, Config.trialRepetetion, 1);
+    save(predictedFile, 'xySeqsPredicted', 'Cfg');
 end
 
 % Close all onscreens and offscreens

@@ -3,33 +3,45 @@ function figHandle = plot_paths(paths, varargin)
 %
 % Purpose:
 %   Plot 2D dot paths (trials × features × time) using a time-graded color
-%   ramp, so early samples appear cool and late samples appear warm.
+%   ramp, so early samples appear cool and late samples appear warm. The
+%   colorbar is expressed in seconds using the provided sampling rate.
 %
-% Example usage:
+% Example usage (basic):
 %   % dotPaths: trials × 2 × time (visual degrees)
-%   fig = plot_paths(dot1GreenPaths, 'Title', 'Dot 1 paths');
+%   fig = plot_paths(dot1GreenPaths, 'Title', 'Dot 1 paths', 'SampleRateHz', 120);
 %
 % Example usage (with transparency):
-%   fig = plot_paths(dot1GreenPaths, 'UseAlpha', true, 'AlphaValue', 0.05);
+%   fig = plot_paths(dot1GreenPaths, 'UseAlpha', true, 'AlphaValue', 0.05, ...
+%       'SampleRateHz', 120);
+%
+% Example usage (subplot integration):
+%   fig = figure;
+%   ax = subplot(2, 2, 1);
+%   plot_paths(dot1GreenPaths, 'ParentAxes', ax, 'SavePlot', false, ...
+%       'Title', 'Dot 1', 'SampleRateHz', 120);
 %
 % Inputs:
 %   paths : numeric array, trials × 2 × time (features are [x, y])
 %
 % Name/value options:
-%   'Title'      : figure title string (default: '')
-%   'Colormap'   : colormap name or n×3 array (default: parula)
-%   'MarkerSize' : scatter marker size (default: 8)
-%   'UseAlpha'   : true/false to enable transparency (default: false)
-%   'AlphaValue' : alpha for marker face/edge when UseAlpha = true (default: 0.1)
-%   'AxisEqual'  : true/false to enforce equal axes (default: true)
-%   'AxisLimits' : 1×4 [xmin xmax ymin ymax] (default: [])
+%   'Title'        : figure title string (default: '')
+%   'Colormap'     : colormap name or n×3 array (default: parula)
+%   'MarkerSize'   : scatter marker size (default: 8)
+%   'UseAlpha'     : true/false to enable transparency (default: false)
+%   'AlphaValue'   : alpha for marker face/edge when UseAlpha = true (default: 0.1)
+%   'AxisEqual'    : true/false to enforce equal axes (default: true)
+%   'AxisLimits'   : 1×4 [xmin xmax ymin ymax] (default: [])
+%   'SampleRateHz' : sampling rate (Hz) for seconds colorbar (default: 1)
+%   'ParentAxes'   : axes handle to plot into (default: [])
+%   'SavePlot'     : true/false to save PNG into simulations/debug (default: true)
 %
 % Outputs:
-%   figHandle : handle to the created figure
+%   figHandle : handle to the created figure (or parent figure if provided)
 %
 % Key assumptions:
 %   - paths is trials × 2 × time, where features are [x, y].
 %   - Time dimension is shared across trials.
+%   - SampleRateHz reflects the sampling rate used to interpret seconds.
 
     %% Input validation and options
     parser = inputParser;
@@ -40,14 +52,19 @@ function figHandle = plot_paths(paths, varargin)
     parser.addParameter('UseAlpha', false, @(x) islogical(x) && isscalar(x));
     parser.addParameter('AlphaValue', 0.1, @(x) isnumeric(x) && isscalar(x) && x > 0 && x <= 1);
     parser.addParameter('AxisEqual', true, @(x) islogical(x) && isscalar(x));
-    parser.addParameter('AxisLimits', [], @(x) isempty(x) || (isnumeric(x) && numel(x) == 4));
+    parser.addParameter('AxisLimits', [-5 5 -5 5], @(x) isempty(x) || (isnumeric(x) && numel(x) == 4));
+    parser.addParameter('SampleRateHz', 1, @(x) isnumeric(x) && isscalar(x) && x > 0);
+    parser.addParameter('ParentAxes', [], @(x) isempty(x) || isgraphics(x, 'axes'));
+    parser.addParameter('SavePlot', true, @(x) islogical(x) && isscalar(x));
     parser.parse(paths, varargin{:});
 
     opts = parser.Results;
 
     %% Flatten trials into a single scatter set
+    % Data flow: trials × 2 × time -> x/y vectors + time indices.
     nTrials = size(paths, 1);
     nTime = size(paths, 3);
+    timeSeconds = (0:(nTime - 1)) / opts.SampleRateHz;
 
     xVals = reshape(paths(:, 1, :), [], 1);
     yVals = reshape(paths(:, 2, :), [], 1);
@@ -66,8 +83,14 @@ function figHandle = plot_paths(paths, varargin)
     pointColors = cmap(timeIdx, :);
 
     %% Plot paths with time-graded color
-    figHandle = figure('Name', 'Dot paths', 'NumberTitle', 'off');
-    ax = axes(figHandle);
+    % Data flow: x/y/time vectors -> scatter -> colorbar in seconds.
+    if isempty(opts.ParentAxes)
+        figHandle = figure('Name', 'Dot paths', 'NumberTitle', 'off');
+        ax = axes(figHandle);
+    else
+        ax = opts.ParentAxes;
+        figHandle = ancestor(ax, 'figure');
+    end
     hold(ax, 'on');
 
     if opts.UseAlpha
@@ -78,9 +101,11 @@ function figHandle = plot_paths(paths, varargin)
     end
 
     colormap(ax, cmap);
-    caxis(ax, [1 nTime]);
+    caxis(ax, [timeSeconds(1) timeSeconds(end)]);
     cb = colorbar(ax);
-    cb.Label.String = 'Time (samples)';
+    cb.Label.String = 'Time (s)';
+    cb.Ticks = linspace(timeSeconds(1), timeSeconds(end), 5);
+    cb.TickLabels = arrayfun(@(x) sprintf('%.2f', x), cb.Ticks, 'UniformOutput', false);
 
     xlabel(ax, 'X (visual degrees)');
     ylabel(ax, 'Y (visual degrees)');
@@ -96,14 +121,17 @@ function figHandle = plot_paths(paths, varargin)
     hold(ax, 'off');
 
     %% Save plot to simulations/debug
-    debugDir = fullfile(fileparts(mfilename('fullpath')), 'debug');
-    if ~exist(debugDir, 'dir')
-        mkdir(debugDir);
+    % Data flow: figure -> PNG on disk (optional).
+    if opts.SavePlot
+        debugDir = fullfile(fileparts(mfilename('fullpath')), 'debug');
+        if ~exist(debugDir, 'dir')
+            mkdir(debugDir);
+        end
+        safeTitle = regexprep(char(opts.Title), '[^A-Za-z0-9_-]+', '_');
+        if isempty(strtrim(safeTitle))
+            safeTitle = 'plot_paths';
+        end
+        outFile = fullfile(debugDir, [safeTitle '.png']);
+        print(figHandle, outFile, '-dpng', '-r300');
     end
-    safeTitle = regexprep(char(opts.Title), '[^A-Za-z0-9_-]+', '_');
-    if isempty(strtrim(safeTitle))
-        safeTitle = 'plot_paths';
-    end
-    outFile = fullfile(debugDir, [safeTitle '.png']);
-    print(figHandle, outFile, '-dpng', '-r300');
 end

@@ -1,3 +1,61 @@
+# 05 Feb 2026 16:06
+
+## Experiment configuration and stimuli generation
+
+### `experiment/lib/Config.m`
+- Raise `trialsPerCondition` to 1000 and update the curvature defaults (`curvFactor`, `isCurvValenceRand`) for the current pilot assumptions.
+- Change the dialog default viewing distance to 1000 mm to match the new setup.
+
+### `experiment/stimuli_generation_v10.m`
+- Rename the analysis-only baseline output from “wannabe” to “predicted,” including variable names and the saved `MovDot_SubXX_predicted.mat` file.
+- Update inline documentation to match the predicted baseline naming and data flow.
+
+## Stimuli generation documentation
+
+### `experiment/stimuli_generation_versions.md`
+- Add a `dotWidth` column to the input-file parameter table and reorder the rows while inserting Sub87 metadata.
+- Update the capability notes to reference the predicted baseline export filename and struct (`xySeqsPredicted`).
+
+## Simulation input building and diagnostics
+
+### `simulations/build_movdot_simulation_inputs.m`
+- Switch auto-detection from `xySeqsWannabeDev` to `xySeqsPredicted`, including console messaging and error text.
+- Treat predicted deviant inputs as the special-case single-condition sources (condition 45) and keep the empty-trial filtering notes consistent.
+
+### `simulations/debug/plot_paths.m`
+- Add seconds-aware colorbar support via `SampleRateHz`, plus optional `ParentAxes`/`SavePlot` controls for subplot integration.
+- Default the axis limits to `[-5 5 -5 5]`, update examples, and emit formatted second ticks on the colorbar.
+
+### `simulations/debug/plot_paths_wrap.m`
+- Add a helper to plot all conditions in a 2x2 grid with time-graded colorbars, configurable sampling, and a single combined export.
+- Use `plot_paths` in parent axes mode to keep subplot styling and saving consistent.
+
+## Simulation pipeline scripts
+
+### `simulations/PIPELINE_simulation.m`
+- Load center-relative paths for both conditions, plot all four dot/condition paths via `plot_paths_wrap`, and route the overview plot to a single `_all_conditions` output.
+- Silence concatenation display output, switch to seconds-based axes/ticks for dRSA matrices and diagonals, and mark the midpoint with `M`.
+- Compact output filename tags to only include shuffle/resample when enabled and set the default `dRSAtype` to `PCR`.
+- Pass `modelNames` into dRSA border diagnostics and standardize the sampling rate reference via `plotSampleRateHz`.
+
+### `simulations/PIPELINE_simulation_posOnly.m`
+- Move to center-relative paths with optional `centerRelativeRectSize`, predicted-devian model inputs, and a shared all-conditions path plot.
+- Replace “wannabe” nomenclature with “predicted” throughout the deviant-only model workflow and metadata labels.
+- Comment out the output save block while preserving the new compact tag logic and predicted-model repro fields for future re-enable.
+
+## dRSA helper functions
+
+### `simulations/functions/dRSA_border.m`
+- Anchor lag-0 to the midpoint sample, compute borders and diagnostics in seconds, and include model labels in console summaries.
+- Add shared color limits for autocorr heatmaps and update plots to use seconds-based axes and titles.
+
+## Hypothesis testing scripts
+
+### `simulations/hypothesis_testing/counterfactual_simulation.m`
+- Add a counterfactual dRSA pipeline that combines position and direction models (including predicted variants) with reuse prompts for existing results.
+- Generate both common and per-subplot colorbar matrix figures, scale text for export, and save consolidated path plots for all conditions.
+- Include local helpers for plot layout, figure scaling, and parameter match reporting to keep runs reproducible.
+
 # 03 Feb 2026 11:43
 
 ## Experiment configuration and stimuli generation

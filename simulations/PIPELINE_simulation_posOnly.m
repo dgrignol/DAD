@@ -2,12 +2,12 @@
 %
 % Purpose:
 %   Run position-only dRSA simulations on dot-motion inputs. This script
-%   loads dot-path data (dot 1 + dot 2, visual degrees) for both
-%   nondeviant and deviant conditions, prepares concatenated inputs, and
-%   executes the dRSA workflow using dot 1 position as the neural data and
-%   dot 1 + dot 2 positions as the models for each condition. For the
-%   deviant condition, it can also add "wannabe deviant" position models
-%   from MovDot_SubXX_wannabeDev.mat (deviant-only paths without deviation).
+%   loads center-relative dot-path data (dot 1 + dot 2, visual degrees) for
+%   both nondeviant and deviant conditions, prepares concatenated inputs,
+%   and executes the dRSA workflow using dot 1 position as the neural data
+%   and dot 1 + dot 2 positions as the models for each condition. For the
+%   deviant condition, it can also add "predicted deviant" position models
+%   from MovDot_SubXX_predicted.mat (deviant-only paths without deviation).
 %
 % Example usage (from simulations/ in MATLAB):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
@@ -22,32 +22,34 @@
 %     inputs (MovDot_SubXX_nondeviant/deviant.mat).
 %   - inputConditions selects which conditions to run (default: both).
 %   - shuffleDot2Trials decouples dot2 trial order from dot1 (diagnostic).
+%   - centerRelativeRectSize overrides Cfg.rectSize when recentering.
 %   - resampleSubsamples toggles trial subsampling across iterations to
 %     reduce memory use; resampleIterations, resampleSubsampleCount, and
 %     resampleWithReplacement control the resampling behavior.
-%   - output filenames include subject/condition, dRSA type, sampling rate,
-%     averaging window, and shuffle/resampling flags.
+%   - output filenames include subject/condition, dRSA type, and (only when
+%     enabled) shuffle/resampling flags.
 %   Example configuration:
 %     participantNumber = 98;
 %     inputConditions = {'nondeviant', 'deviant'};
 %
 % Inputs:
 %   - simulations/input/MovDot_SubXX_{nondeviant|deviant}.mat with:
-%       dot1GreenPaths (trials × 2 × time) and dot2YellowPaths (same shape)
-%   - experiment/input_files/MovDot_SubXX_wannabeDev.mat (deviant-only)
+%       dot1GreenPathsCenterRelative and dot2YellowPathsCenterRelative
+%   - experiment/input_files/MovDot_SubXX_predicted.mat (deviant-only)
 %       used to build additional position models for deviant analyses.
 %
 % Outputs:
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_results.mat
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
 %     containing dRSA matrices, diagonal summaries, parameters, trigger masks,
 %     subsamples, and input dot-trial data needed to reproduce the run.
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_matrices.png
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_fs<fs>_avg<avg>_<shuffle>_<resample>_diagonal.png
-%   - Debug plots in simulations/debug (paths, time-distance, center-distance)
-%     saved separately per condition.
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices.png
+%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
+%   - simulations/output/paths_<subject>_allConditions_all_conditions.png
+%   - Debug plots in simulations/debug (paths, time-distance, center-distance).
 %
 % Key assumptions:
-%   - dot1GreenPaths and dot2YellowPaths are in visual degrees.
+%   - dot1GreenPathsCenterRelative and dot2YellowPathsCenterRelative are in visual degrees.
+%   - Paths are centered so fixation is (0,0).
 %   - Trials have uniform frame counts within each condition.
 %   - The functions in simulations/functions are on the MATLAB path.
 %   - Paths are resolved relative to this script, not the MATLAB cwd.
@@ -71,10 +73,11 @@ addpath(fullfile(scriptDir, 'debug'));
 addpath '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD'
 %% Participant configuration
 % Data flow: participant number + condition list -> input filenames -> simulation data.
-participantNumber = 88;
+participantNumber = 87;
 inputConditions = {'nondeviant', 'deviant'}; % conditions to run.
 inputConditions = cellfun(@lower, inputConditions, 'UniformOutput', false);
 shuffleDot2Trials = false; % true to shuffle dot2 trials relative to dot1 before dRSA
+centerRelativeRectSize = []; % optional [width height] in degrees if Cfg.rectSize missing
 resampleSubsamples = false; % true to use per-iteration trial subsets for dRSA
 resampleIterations = 100; % number of resampled iterations (only if resampleSubsamples)
 resampleSubsampleCount = 100; % number of triggers per iteration (only if resampleSubsamples)
@@ -92,7 +95,8 @@ inputFile = fullfile(repoRoot, 'experiment', 'input_files', ...
 
 build_movdot_simulation_inputs(inputFile, ...
     'OutputDir', simulationInputDir, ...
-    'MoveDotScript', moveDotScript);
+    'MoveDotScript', moveDotScript, ...
+    'RectSize', centerRelativeRectSize);
 
 %% Load plotting config for center-distance diagnostics
 % Data flow: input file -> Cfg.rectSize -> debug plot parameters.
@@ -103,14 +107,43 @@ if isfield(cfgData, 'Cfg') && isfield(cfgData.Cfg, 'rectSize')
     rectSize = cfgData.Cfg.rectSize;
 end
 
+%% Plot dot paths for all conditions in a single figure
+% Data flow: per-condition .mat files -> dot paths -> plot_paths_wrap figure.
+n = 20; % number of paths to plot per condition
+plotSampleRateHz = 120; % keep in sync with params.fs for seconds-based colorbars.
+allConditions = {'nondeviant', 'deviant'};
+pathsByCondition = struct();
+for iCond = 1:numel(allConditions)
+    condName = allConditions{iCond};
+    condFile = fullfile(simulationInputDir, ...
+        sprintf('MovDot_Sub%02d_%s.mat', participantNumber, condName));
+    condData = load(condFile);
+    if ~isfield(condData, 'dot1GreenPathsCenterRelative') ...
+            || ~isfield(condData, 'dot2YellowPathsCenterRelative')
+        error(['Center-relative paths not found for condition: %s. ' ...
+            'Rebuild inputs or provide centerRelativeRectSize.'], condName);
+    end
+    pathsByCondition.(condName).dot1 = condData.dot1GreenPathsCenterRelative;
+    pathsByCondition.(condName).dot2 = condData.dot2YellowPathsCenterRelative;
+end
+
+figAllPaths = plot_paths_wrap( ...
+    pathsByCondition.nondeviant.dot1, ...
+    pathsByCondition.nondeviant.dot2, ...
+    pathsByCondition.deviant.dot1, ...
+    pathsByCondition.deviant.dot2, ...
+    'SampleCount', n, ...
+    'SampleRateHz', plotSampleRateHz, ...
+    'Title', sprintf('Dot paths (sub%02d, all conditions)', participantNumber));
+
 %% Run position-only dRSA per condition
 % Data flow: condition list -> per-condition load -> position-only dRSA outputs.
 for iCond = 1:numel(inputConditions)
     inputCondition = inputConditions{iCond};
-    useWannabeModels = strcmp(inputCondition, 'deviant');
+    usePredictedModels = strcmp(inputCondition, 'deviant');
 
-    %% Load condition-specific dot paths (visual degrees)
-    % Data flow: condition .mat -> dot1/dot2 arrays -> placeholders for simulation.
+    %% Load condition-specific dot paths (center-relative visual degrees)
+    % Data flow: condition .mat -> center-relative dot arrays -> placeholders for simulation.
     simulationInputFile = fullfile(simulationInputDir, ...
         sprintf('MovDot_Sub%02d_%s.mat', participantNumber, inputCondition));
 % Extract subject and condition from the input filename for output naming.
@@ -125,10 +158,15 @@ if numel(tokens) > 1 && ~isempty(tokens{2})
 else
     conditionLabel = 'unknown';
 end
-conditionSuffix = sprintf('(%s)', conditionLabel);
-simulationData = load(simulationInputFile);
-dot1GreenPaths = simulationData.dot1GreenPaths;
-dot2YellowPaths = simulationData.dot2YellowPaths;
+    conditionSuffix = sprintf('(%s)', conditionLabel);
+    simulationData = load(simulationInputFile);
+    if ~isfield(simulationData, 'dot1GreenPathsCenterRelative') ...
+            || ~isfield(simulationData, 'dot2YellowPathsCenterRelative')
+        error(['Center-relative paths not found. Rebuild inputs or provide ' ...
+            'centerRelativeRectSize if Cfg.rectSize is missing.']);
+    end
+    dot1GreenPaths = simulationData.dot1GreenPathsCenterRelative;
+    dot2YellowPaths = simulationData.dot2YellowPathsCenterRelative;
 
 % Prepare per-dot inputs (trial × features × time).
 dot1Trials = dot1GreenPaths;
@@ -149,9 +187,6 @@ end
 % size(dot1GreenPaths, 3)
 % which plot_paths -all
 
-plot_paths(dot1GreenPaths, 'Title', sprintf('Dot 1 paths %s', conditionSuffix));
-plot_paths(dot2YellowPaths, 'Title', sprintf('Dot 2 paths %s', conditionSuffix));
-
 % plot_position_distribution(dot1GreenPaths, ...
 %     'Title', sprintf('Dot 1 dot position distribution %s', conditionSuffix));
 % plot_position_distribution(dot2YellowPaths, ...
@@ -171,56 +206,52 @@ plot_paths(dot2YellowPaths, 'Title', sprintf('Dot 2 paths %s', conditionSuffix))
 %     'Title', sprintf('Dot 2 distance from center %s', conditionSuffix), ...
 %     'RectSize', rectSize);
 
-%% Optional wannabe deviant position diagnostics (deviant only)
-% Data flow: wannabe deviant file -> dot paths -> debug plots and model inputs.
-dot1TrialsWannabe = [];
-dot2TrialsWannabe = [];
-wannabeSimulationFile = '';
-if useWannabeModels
-    wannabeInputFile = fullfile(repoRoot, 'experiment', 'input_files', ...
-        sprintf('MovDot_Sub%02d_wannabeDev.mat', participantNumber));
-    build_movdot_simulation_inputs(wannabeInputFile, ...
+    %% Optional predicted deviant position diagnostics (deviant only)
+    % Data flow: predicted deviant file -> center-relative paths -> debug plots and model inputs.
+dot1TrialsPredicted = [];
+dot2TrialsPredicted = [];
+predictedSimulationFile = '';
+if usePredictedModels
+    predictedInputFile = fullfile(repoRoot, 'experiment', 'input_files', ...
+        sprintf('MovDot_Sub%02d_predicted.mat', participantNumber));
+    build_movdot_simulation_inputs(predictedInputFile, ...
         'OutputDir', simulationInputDir, ...
         'MoveDotScript', moveDotScript, ...
         'AllowMissingConditions', true);
-    wannabeSimulationFile = fullfile(simulationInputDir, ...
-        sprintf('MovDot_Sub%02d_wannabeDev_deviant.mat', participantNumber));
-    if ~isfile(wannabeSimulationFile)
-        error('Wannabe deviant input file not found: %s', wannabeSimulationFile);
+    predictedSimulationFile = fullfile(simulationInputDir, ...
+        sprintf('MovDot_Sub%02d_predicted_deviant.mat', participantNumber));
+    if ~isfile(predictedSimulationFile)
+        error('Predicted deviant input file not found: %s', predictedSimulationFile);
     end
-    wannabeData = load(wannabeSimulationFile);
-    if ~isfield(wannabeData, 'dot1GreenPaths') || ~isfield(wannabeData, 'dot2YellowPaths')
-        error('Wannabe deviant file lacks expected dot paths: %s', wannabeSimulationFile);
-    end
-    dot1TrialsWannabe = wannabeData.dot1GreenPaths;
-    dot2TrialsWannabe = wannabeData.dot2YellowPaths;
-    if ~isequal(size(dot1TrialsWannabe), size(dot1Trials)) || ...
-            ~isequal(size(dot2TrialsWannabe), size(dot2Trials))
-        error(['Wannabe deviant trials do not match deviant trials size. ' ...
+        predictedData = load(predictedSimulationFile);
+        if ~isfield(predictedData, 'dot1GreenPathsCenterRelative') ...
+                || ~isfield(predictedData, 'dot2YellowPathsCenterRelative')
+            error('Predicted deviant file lacks center-relative paths: %s', predictedSimulationFile);
+        end
+        dot1TrialsPredicted = predictedData.dot1GreenPathsCenterRelative;
+        dot2TrialsPredicted = predictedData.dot2YellowPathsCenterRelative;
+    if ~isequal(size(dot1TrialsPredicted), size(dot1Trials)) || ...
+            ~isequal(size(dot2TrialsPredicted), size(dot2Trials))
+        error(['Predicted deviant trials do not match deviant trials size. ' ...
             'Expected %s, got %s.'], mat2str(size(dot1Trials)), ...
-            mat2str(size(dot1TrialsWannabe)));
+            mat2str(size(dot1TrialsPredicted)));
     end
 
-    plot_paths(dot1TrialsWannabe, ...
-        'Title', sprintf('Dot 1 wannabe paths %s', conditionSuffix));
-    plot_paths(dot2TrialsWannabe, ...
-        'Title', sprintf('Dot 2 wannabe paths %s', conditionSuffix));
-
-    % plot_position_distribution(dot1TrialsWannabe, ...
-    %     'Title', sprintf('Dot 1 wannabe position distribution %s', conditionSuffix));
-    % plot_position_distribution(dot2TrialsWannabe, ...
-    %     'Title', sprintf('Dot 2 wannabe position distribution %s', conditionSuffix));
+    % plot_position_distribution(dot1TrialsPredicted, ...
+    %     'Title', sprintf('Dot 1 predicted position distribution %s', conditionSuffix));
+    % plot_position_distribution(dot2TrialsPredicted, ...
+    %     'Title', sprintf('Dot 2 predicted position distribution %s', conditionSuffix));
     %
-    % plot_position_time_distance(dot1TrialsWannabe, ...
-    %     'Title', sprintf('Dot 1 wannabe distance %s', conditionSuffix));
-    % plot_position_time_distance(dot2TrialsWannabe, ...
-    %     'Title', sprintf('Dot 2 wannabe distance %s', conditionSuffix));
+    % plot_position_time_distance(dot1TrialsPredicted, ...
+    %     'Title', sprintf('Dot 1 predicted distance %s', conditionSuffix));
+    % plot_position_time_distance(dot2TrialsPredicted, ...
+    %     'Title', sprintf('Dot 2 predicted distance %s', conditionSuffix));
     %
-    % plot_position_distribution(dot1TrialsWannabe, ...
-    %     'Title', sprintf('Dot 1 wannabe distance from center %s', conditionSuffix), ...
+    % plot_position_distribution(dot1TrialsPredicted, ...
+    %     'Title', sprintf('Dot 1 predicted distance from center %s', conditionSuffix), ...
     %     'RectSize', rectSize);
-    % plot_position_distribution(dot2TrialsWannabe, ...
-    %     'Title', sprintf('Dot 2 wannabe distance from center %s', conditionSuffix), ...
+    % plot_position_distribution(dot2TrialsPredicted, ...
+    %     'Title', sprintf('Dot 2 predicted distance from center %s', conditionSuffix), ...
     %     'RectSize', rectSize);
 end
 
@@ -233,11 +264,11 @@ dataPosition = dRSA_concatenate(dot1Trials); %see documentation with help dRSA_c
 % Position models (per dot).
 modelPositionDot1 = dataPosition;
 modelPositionDot2 = dRSA_concatenate(dot2Trials);
-modelPositionDot1Wannabe = [];
-modelPositionDot2Wannabe = [];
-if useWannabeModels
-    modelPositionDot1Wannabe = dRSA_concatenate(dot1TrialsWannabe);
-    modelPositionDot2Wannabe = dRSA_concatenate(dot2TrialsWannabe);
+modelPositionDot1Predicted = [];
+modelPositionDot2Predicted = [];
+if usePredictedModels
+    modelPositionDot1Predicted = dRSA_concatenate(dot1TrialsPredicted);
+    modelPositionDot2Predicted = dRSA_concatenate(dot2TrialsPredicted);
 end
 
 % Build a trigger mask at the first sample of each trial (trial-locked dRSA)
@@ -291,30 +322,30 @@ end
 %% Simulations dRSA (position-only data)
 % Data flow: dot1 position data -> dRSA against position models.
 Y = dataPosition; % position data from dot 1
-if useWannabeModels
+if usePredictedModels
     model = {modelPositionDot1, modelPositionDot2, ...
-        modelPositionDot1Wannabe, modelPositionDot2Wannabe};
+        modelPositionDot1Predicted, modelPositionDot2Predicted};
     modelNames = {'position dot1', 'position dot2', ...
-        'wannabe position dot1', 'wannabe position dot2'};
+        'predicted position dot1', 'predicted position dot2'};
 else
     model = {modelPositionDot1, modelPositionDot2};
     modelNames = {'position dot1', 'position dot2'};
 end
-
+params.modelNames = modelNames; % human-readable labels for diagnostics/plots.
 % In case we do the PCR, it is better to calculate the border outside, because otherwise we would need to recalculate it
 % for each iteration
 params.nIter = size(subsamples, 3);  % how many iterations?
-params.fs = 120; %framerate or how many samples fit into 1 second
+params.fs = plotSampleRateHz; % framerate or how many samples fit into 1 second
 % Use an integer sample window for averaging to avoid non-integer sizes.
 avgHalfWindowSamples = floor((trialLen - 1) / 2);
 params.AverageTime = avgHalfWindowSamples / params.fs; %in s
-if useWannabeModels
+if usePredictedModels
     params.modelToTest = [1 2 3 4];  %array of models to test
 else
     params.modelToTest = [1 2];  %array of models to test
 end
 params.Var = 0.1; % how much variance? 
-if useWannabeModels
+if usePredictedModels
     params.modelDistMeasure = {'euclidean', 'euclidean', 'euclidean', 'euclidean'};
 else
     params.modelDistMeasure = {'euclidean', 'euclidean'};
@@ -323,7 +354,7 @@ params.neuralDistMeasure = 'euclidean'; % pdist expects a string/char or functio
 
 %For the PCR
 params.dRSAtype = 'corr';% 'PCR';% 'corr'; %
-if useWannabeModels
+if usePredictedModels
     params.modeltoRegressout = {[2 3 4] [1 3 4] [1 2 4] [1 2 3]};
 else
     params.modeltoRegressout = {[2] [1]};
@@ -404,79 +435,82 @@ xlabel('Time (samples)');
 ylabel('dRSA (diagonal)');
 legend(modelNames, 'Location', 'best');
 
-%% Save matrices, plots, and reproducibility metadata (300 dpi)
-% Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
-outputDir = fullfile(scriptDir, 'output');
-subjectOutputDir = fullfile(outputDir, subjectLabel);
-if ~exist(subjectOutputDir, 'dir')
-    mkdir(subjectOutputDir);
-end
-
-dRSAtypeLabel = lower(paramsCore.dRSAtype);
-shuffleTag = 'noShufDot2';
-if shuffleDot2Trials
-    shuffleTag = 'shufDot2';
-end
-resampleTag = 'rsNone';
-if resampleSubsamples
-    resampleMode = 'sub';
-    if resampleWithReplacement
-        resampleMode = 'boot';
-    end
-    resampleTag = sprintf('rs%d_i%d_%s', ...
-        resampleSubsampleCount, resampleIterations, resampleMode);
-end
-runTagParts = {subjectLabel, conditionLabel, dRSAtypeLabel, ...
-    sprintf('fs%d', paramsCore.fs), sprintf('avg%d', avgHalfWindowSamples), ...
-    shuffleTag, resampleTag};
-resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
-resultsBase = regexprep(resultsBase, '\s+', '');
-
-repro = struct();
-repro.timestamp = datestr(now, 'yyyymmddTHHMMSS');
-repro.scriptPath = mfilename('fullpath');
-repro.repoRoot = repoRoot;
-repro.matlabVersion = version;
-repro.participantNumber = participantNumber;
-repro.subjectLabel = subjectLabel;
-repro.inputCondition = inputCondition;
-repro.conditionLabel = conditionLabel;
-repro.simulationInputFile = simulationInputFile;
-repro.rawInputFile = inputFile;
-repro.shuffleDot2Trials = shuffleDot2Trials;
-repro.shuffleOrder = shuffleOrder;
-repro.resampleSubsamples = resampleSubsamples;
-repro.resampleIterations = resampleIterations;
-repro.resampleSubsampleCount = resampleSubsampleCount;
-repro.resampleWithReplacement = resampleWithReplacement;
-repro.trialLen = trialLen;
-repro.totalTime = totalTime;
-repro.nTrials = size(dot1Trials, 1);
-repro.nModels = nModels;
-repro.modelNames = modelNames;
-repro.paramsCore = paramsCore;
-repro.paramsDiagonal = paramsDiagonal;
-repro.triggerOptions = opt;
-repro.maskSubsampling = maskSubsampling;
-repro.maskTrigger = maskTrigger;
-repro.subsamples = subsamples;
-repro.rectSize = rectSize;
-repro.dot1Trials = dot1Trials;
-repro.dot2Trials = dot2Trials;
-repro.dot1TrialsWannabe = dot1TrialsWannabe;
-repro.dot2TrialsWannabe = dot2TrialsWannabe;
-repro.dataPosition = dataPosition;
-repro.models = model;
-repro.autocorrBorder = Autocorrborder;
-repro.wannabeSimulationFile = wannabeSimulationFile;
-
-save(fullfile(subjectOutputDir, [resultsBase '_results.mat']), ...
-    'dRSA_position', ...
-    'dRSA_diagonal_position', ...
-    'params', 'paramsDiagonal', 'repro');
-
-print(figMatrices, fullfile(subjectOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
-print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+% %% Save matrices, plots, and reproducibility metadata (300 dpi)
+% % Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
+% outputDir = fullfile(scriptDir, 'output');
+% subjectOutputDir = fullfile(outputDir, subjectLabel);
+% if ~exist(subjectOutputDir, 'dir')
+%     mkdir(subjectOutputDir);
+% end
+% 
+% dRSAtypeLabel = lower(paramsCore.dRSAtype);
+% optionalTags = {};
+% if shuffleDot2Trials
+%     optionalTags{end + 1} = 'shufDot2';
+% end
+% if resampleSubsamples
+%     resampleMode = 'sub';
+%     if resampleWithReplacement
+%         resampleMode = 'boot';
+%     end
+%     optionalTags{end + 1} = sprintf('rs%d_i%d_%s', ...
+%         resampleSubsampleCount, resampleIterations, resampleMode);
+% end
+% runTagParts = [{subjectLabel, conditionLabel, dRSAtypeLabel}, optionalTags];
+% resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
+% resultsBase = regexprep(resultsBase, '\s+', '');
+% 
+% repro = struct();
+% repro.timestamp = datestr(now, 'yyyymmddTHHMMSS');
+% repro.scriptPath = mfilename('fullpath');
+% repro.repoRoot = repoRoot;
+% repro.matlabVersion = version;
+% repro.participantNumber = participantNumber;
+% repro.subjectLabel = subjectLabel;
+% repro.inputCondition = inputCondition;
+% repro.conditionLabel = conditionLabel;
+% repro.simulationInputFile = simulationInputFile;
+% repro.rawInputFile = inputFile;
+% repro.shuffleDot2Trials = shuffleDot2Trials;
+% repro.shuffleOrder = shuffleOrder;
+% repro.resampleSubsamples = resampleSubsamples;
+% repro.resampleIterations = resampleIterations;
+% repro.resampleSubsampleCount = resampleSubsampleCount;
+% repro.resampleWithReplacement = resampleWithReplacement;
+% repro.trialLen = trialLen;
+% repro.totalTime = totalTime;
+% repro.nTrials = size(dot1Trials, 1);
+% repro.nModels = nModels;
+% repro.modelNames = modelNames;
+% repro.paramsCore = paramsCore;
+% repro.paramsDiagonal = paramsDiagonal;
+% repro.triggerOptions = opt;
+% repro.maskSubsampling = maskSubsampling;
+% repro.maskTrigger = maskTrigger;
+% repro.subsamples = subsamples;
+% repro.rectSize = rectSize;
+% repro.dot1Trials = dot1Trials;
+% repro.dot2Trials = dot2Trials;
+% repro.dot1TrialsPredicted = dot1TrialsPredicted;
+% repro.dot2TrialsPredicted = dot2TrialsPredicted;
+% repro.dataPosition = dataPosition;
+% repro.models = model;
+% repro.autocorrBorder = Autocorrborder;
+% repro.predictedSimulationFile = predictedSimulationFile;
+% 
+% save(fullfile(subjectOutputDir, [resultsBase '_results.mat']), ...
+%     'dRSA_position', ...
+%     'dRSA_diagonal_position', ...
+%     'params', 'paramsDiagonal', 'repro');
+% 
+% print(figMatrices, fullfile(subjectOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
+% print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+% if iCond == 1
+%     pathsBase = strjoin({'paths', subjectLabel, 'allConditions'}, '_');
+%     pathsBase = regexprep(pathsBase, '\s+', '');
+%     print(figAllPaths, fullfile(subjectOutputDir, [pathsBase '_all_conditions.png']), ...
+%         '-dpng', '-r300');
+% end
 
 end
 

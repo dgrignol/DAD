@@ -33,11 +33,11 @@
 %       'suppressDispText' : 0/1 to suppress console output (default: 0).
 %       'AllowMissingConditions' : true to allow files with only deviant or
 %                         nondeviant trials (default: false). This is useful
-%                         for MovDot_SubXX_wannabeDev.mat inputs that only
+%                         for MovDot_SubXX_predicted.mat inputs that only
 %                         contain the deviant condition.
 %       'XySeqsField'  : override the struct field name containing xySeqs
 %                         (default: ''). If empty, auto-detects xySeqs or
-%                         xySeqsWannabeDev.
+%                         xySeqsPredicted.
 %       'RectSize'     : optional [width height] in degrees to use when
 %                         recentering (default: []). If empty, uses
 %                         Cfg.rectSize from the stimulus file; errors if
@@ -102,13 +102,13 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     if isempty(strtrim(xySeqsField))
         if isfield(data, 'xySeqs')
             xySeqsField = 'xySeqs';
-        elseif isfield(data, 'xySeqsWannabeDev')
-            xySeqsField = 'xySeqsWannabeDev';
+        elseif isfield(data, 'xySeqsPredicted')
+            xySeqsField = 'xySeqsPredicted';
             if ~suppressDispText
-                fprintf('Using xySeqsWannabeDev from %s\n', stimuliPath);
+                fprintf('Using xySeqsPredicted from %s\n', stimuliPath);
             end
         else
-            error('Stimulus file does not contain xySeqs or xySeqsWannabeDev: %s', stimuliPath);
+            error('Stimulus file does not contain xySeqs or xySeqsPredicted: %s', stimuliPath);
         end
     else
         if ~isfield(data, xySeqsField)
@@ -134,8 +134,8 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     dot2Name = rgb_to_name(dot2Rgb);
 
     xyAllRaw = data.(xySeqsField);
-    % Special-case wannabe deviant inputs: keep row 2 (condition 45) trials.
-    if strcmp(xySeqsField, 'xySeqsWannabeDev') && ndims(xyAllRaw) >= 2 ...
+    % Special-case predicted deviant inputs: keep row 2 (condition 45) trials.
+    if strcmp(xySeqsField, 'xySeqsPredicted') && ndims(xyAllRaw) >= 2 ...
             && size(xyAllRaw, 1) >= 2
         [~, baseName, ~] = fileparts(stimuliPath);
         outputFiles = struct('condition', {}, 'file', {});
@@ -153,8 +153,8 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     end
     xyAll = xyAllRaw(:);
     conditions = [xyAll.condition];
-    if strcmp(xySeqsField, 'xySeqsWannabeDev')
-        % Wannabe deviant files use condition==45 for the deviant-only paths.
+    if strcmp(xySeqsField, 'xySeqsPredicted')
+        % Predicted deviant files use condition==45 for the deviant-only paths.
         deviantMask = conditions == 45;
         nonDeviantMask = conditions == 0;
     else
@@ -261,7 +261,7 @@ function entry = save_trials(baseName, conditionLabel, trials, outputDir, ...
         return;
     end
 
-    % Drop empty/zero-frame trials (e.g., wannabe files with only one condition).
+    % Drop empty/zero-frame trials (e.g., predicted files with only one condition).
     % Data flow: raw trial list -> valid trials with non-empty xy.
     hasFrames = arrayfun(@(s) ~isempty(s.xy) && size(s.xy, 1) > 0, trials);
     if ~all(hasFrames)

@@ -2,7 +2,7 @@ classdef Config
     properties(Constant)
     
         %general
-        trialsPerCondition = 20; %10000;  %nSeq in their code
+        trialsPerCondition = 1000;%20 %10000;  %nSeq in their code
         trialDuration = 2.67;       %in seconds
         trialRepetetion = 1;
         %general - pc settings
@@ -14,8 +14,8 @@ classdef Config
         % stimulusType = Utils.path_duration;
 
         %curvyness
-        curvFactor = 0.5;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
-        isCurvValenceRand = false;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
+        curvFactor = 0.45;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
+        isCurvValenceRand = true;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
         isCurvFactorRand = false;    %if set the curvFactor will be multiplied by a rand before added
 
         %dot settings
@@ -74,7 +74,7 @@ classdef Config
         dialogPrompts = {'Enter the viewing distance (in millimeters):', ...
             'Enter the subject ID:'};
         dialogDimensions = [1 100];
-        dialogDefaults = {'600', '1'};
+        dialogDefaults = {'1000', '1'};
 
         %screen settings
         screenRect = [800 50 2300 1550]; %was before [0 0 800 800]
