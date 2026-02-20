@@ -7,11 +7,11 @@
 %
 % Example usage (from repo root in MATLAB):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
-%   run('simulations/build_simulation_report_assets.m');
+%   run('simulations/functions/build_simulation_report_assets.m');
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/build_simulation_report_assets.m');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/functions');
+%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/functions/build_simulation_report_assets.m');
 %
 % Inputs:
 %   - experiment/input_files/MovDot_SubXX.mat (raw dot-motion paths)
@@ -32,10 +32,11 @@ scriptPath = mfilename('fullpath');
 if isempty(scriptPath)
     scriptPath = which('build_simulation_report_assets.m');
 end
-simDir = fileparts(scriptPath);
+scriptDir = fileparts(scriptPath);
+simDir = fileparts(scriptDir);
 repoRoot = fileparts(simDir);
+addpath(scriptDir);
 addpath(simDir);
-addpath(fullfile(simDir, 'functions'));
 addpath(fullfile(simDir, 'debug'));
 addpath(repoRoot);
 

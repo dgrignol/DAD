@@ -49,11 +49,11 @@
 %
 % Usage examples:
 %   % Example 1: run from this folder.
-%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/hypothesis_testing');
+%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   PE_simulation_diff;
 %
 %   % Example 2: run from anywhere.
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/hypothesis_testing');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   PE_simulation_diff;
 %
 % Inputs:

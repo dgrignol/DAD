@@ -1,3 +1,46 @@
+# 20 Feb 2026 11:53
+
+## Simulation folder reorganization
+
+### `simulations/build_movdot_simulation_inputs.m` -> `simulations/functions/build_movdot_simulation_inputs.m`
+- Move the simulation-input builder into `simulations/functions` and keep it callable by name from all simulation scripts.
+- Update internal path bootstrap (`scriptDir` -> `simDir` -> `repoRoot`) so default output still targets `simulations/input` and repository-relative path resolution remains unchanged after the move.
+- Refresh header usage examples so they point to the new function location.
+
+### `simulations/build_simulation_report_assets.m` -> `simulations/functions/build_simulation_report_assets.m`
+- Move report-asset generation logic into `simulations/functions` as requested.
+- Adjust startup path wiring to add the moved script directory plus `simulations` and `simulations/debug`, preserving access to dRSA/debug helpers and stable repo-root resolution.
+- Update usage examples in the header to the new path.
+
+### `simulations/generate_PIPELINE_simulation_report.m` -> `simulations/report/generate_PIPELINE_simulation_report.m`
+- Move report generation into `simulations/report` and keep output under `simulations/report/subXX`.
+- Fix moved-script path resolution by setting `simDir` to the parent `simulations` folder and re-adding `simulations/functions` so dependencies remain discoverable.
+- Update help text/error guidance to reference `simulations/functions/build_simulation_report_assets.m`.
+
+### `simulations/hypothesis_testing/PE_simulation_RDM_level_PE.m` -> `simulations/scripts/PE_simulation_RDM_level_PE.m`
+- Relocate the RDM-level PE hypothesis-testing script under the new `simulations/scripts` folder with no behavior changes.
+
+### `simulations/hypothesis_testing/PE_simulation_diff.m` -> `simulations/scripts/PE_simulation_diff.m`
+- Relocate the signal-level PE simulation script into `simulations/scripts`.
+- Update usage examples to replace `simulations/hypothesis_testing` with `simulations/scripts`.
+
+### `simulations/hypothesis_testing/counterfactual_simulation.m` -> `simulations/scripts/counterfactual_simulation.m`
+- Relocate the counterfactual simulation script into `simulations/scripts` with logic unchanged.
+
+### `simulations/pipeline_recursive.m` -> `simulations/scripts/pipeline_recursive.m`
+- Move the recursive pipeline script into `simulations/scripts`.
+- Patch moved-script dependency wiring to use `simDir` for `input`, `output`, `functions`, and `debug` folders so runs still resolve the same resources after relocation.
+
+### `simulations/scripts/pipeline_recursive_backup.m`
+- Add the backup recursive pipeline script under `simulations/scripts` and align its path bootstrap with the moved-folder structure (`scriptDir` -> `simDir` -> `repoRoot`).
+
+### `simulations/hypothesis_testing/toy_PE_diff.m` -> `simulations/scripts/toy_PE_diff.m`
+- Relocate the toy PE visualization script into `simulations/scripts`.
+- Update usage examples to the new folder while keeping execution logic unchanged.
+
+### `simulations/toy_direction.m` -> `simulations/scripts/toy_direction.m`
+- Relocate the toy direction modeling script into `simulations/scripts` without changing computation behavior.
+
 # 20 Feb 2026 11:20
 
 ## Hypothesis testing scripts

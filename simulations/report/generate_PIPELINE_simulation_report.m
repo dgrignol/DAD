@@ -3,17 +3,17 @@
 % Purpose:
 %   Generate a PDF report using MATLAB Report Generator from precomputed
 %   simulation assets. This script does not recompute dRSA; it loads
-%   metadata and figures saved by simulations/build_simulation_report_assets.m.
+%   metadata and figures saved by simulations/functions/build_simulation_report_assets.m.
 %
 % Example usage (from repo root in MATLAB):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
-%   run('simulations/build_simulation_report_assets.m');
-%   run('simulations/generate_PIPELINE_simulation_report.m');
+%   run('simulations/functions/build_simulation_report_assets.m');
+%   run('simulations/report/generate_PIPELINE_simulation_report.m');
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/build_simulation_report_assets.m');
-%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/generate_PIPELINE_simulation_report.m');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/report');
+%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/functions/build_simulation_report_assets.m');
+%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/report/generate_PIPELINE_simulation_report.m');
 %
 % Inputs:
 %   - simulations/output/subXX/report_assets_subXX.mat
@@ -34,9 +34,10 @@ if isempty(scriptPath)
     scriptPath = which('generate_PIPELINE_simulation_report.m');
 end
 scriptDir = fileparts(scriptPath);
-simDir = scriptDir;
+simDir = fileparts(scriptDir);
 repoRoot = fileparts(simDir);
 addpath(simDir);
+addpath(fullfile(simDir, 'functions'));
 addpath(repoRoot);
 
 %% Report configuration
@@ -44,6 +45,7 @@ addpath(repoRoot);
 participantNumber = 98;
 subjectLabel = sprintf('sub%02d', participantNumber);
 reportDir = fullfile(scriptDir, 'report', subjectLabel);
+reportDir = fullfile(scriptDir, subjectLabel);
 if ~exist(reportDir, 'dir')
     mkdir(reportDir);
 end
@@ -51,7 +53,7 @@ reportOutput = fullfile(reportDir, sprintf('PIPELINE_simulation_report_RG_%s.pdf
 assetsFile = fullfile(simDir, 'output', subjectLabel, ...
     sprintf('report_assets_%s.mat', subjectLabel));
 if ~exist(assetsFile, 'file')
-    error(['Report assets not found. Run simulations/build_simulation_report_assets.m ', ...
+    error(['Report assets not found. Run simulations/functions/build_simulation_report_assets.m ', ...
         'before generating the report. Missing file: %s'], assetsFile);
 end
 assets = load(assetsFile);

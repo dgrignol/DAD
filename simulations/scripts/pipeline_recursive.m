@@ -7,12 +7,12 @@
 %   minimum max correlation is re-used to run a full dRSA analysis (position
 %   + direction models) once, with plots for inspection.
 %
-% Example usage (from simulations/ in MATLAB):
-%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
+% Example usage (from simulations/scripts in MATLAB):
+%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   pipeline_recursive;
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   pipeline_recursive;
 %
 % Configuration (edit at the start of the script):
@@ -58,12 +58,14 @@ clear all
 close all
 
 %% Resolve repo paths and add dependencies
-% Data flow: script location -> repo root -> addpath for simulation helpers.
+% Data flow: script location -> simulations dir -> repo root -> addpath for helpers.
 scriptDir = fileparts(mfilename('fullpath'));
-repoRoot = fileparts(scriptDir);
-addpath(fullfile(scriptDir, 'functions'));
+simDir = fileparts(scriptDir);
+repoRoot = fileparts(simDir);
 addpath(scriptDir);
-addpath(fullfile(scriptDir, 'debug'));
+addpath(simDir);
+addpath(fullfile(simDir, 'functions'));
+addpath(fullfile(simDir, 'debug'));
 addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 
 %% Participant configuration
@@ -106,8 +108,8 @@ end
 if ~isscalar(nPlotBest) || nPlotBest < 1 || nPlotBest ~= floor(nPlotBest)
     error('nPlotBest must be a positive integer.');
 end
-simulationInputDir = fullfile(scriptDir, 'input');
-outputDir = fullfile(scriptDir, 'output', sprintf('sub%d', participantNumber));
+simulationInputDir = fullfile(simDir, 'input');
+outputDir = fullfile(simDir, 'output', sprintf('sub%d', participantNumber));
 bestSubsampleFile = fullfile(outputDir, ...
     sprintf('best_subsample_%d_%s_%s.mat', participantNumber, inputCondition, scoreOption));
 reportPattern = 'settings_report_*.md';

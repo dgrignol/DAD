@@ -8,7 +8,7 @@
 %   the dot colors defined by MoveDot1_experiment_vX.m.
 %
 % Example usage (from repo root in MATLAB):
-%   addpath('simulations');
+%   addpath('simulations/functions');
 %   build_movdot_simulation_inputs('experiment/input_files/MovDot_Sub98.mat');
 %
 % Example usage (custom output folder and MoveDot script):
@@ -66,8 +66,9 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     parser.addRequired('stimuliPath', @(x) ischar(x) || isstring(x));
 
     scriptDir = fileparts(mfilename('fullpath'));
-    repoRoot = fileparts(scriptDir);
-    defaultOutputDir = fullfile(scriptDir, 'input');
+    simDir = fileparts(scriptDir);
+    repoRoot = fileparts(simDir);
+    defaultOutputDir = fullfile(simDir, 'input');
     defaultMoveDotScript = fullfile(repoRoot, 'experiment', 'MoveDot1_experiment_vX.m');
 
     parser.addParameter('OutputDir', defaultOutputDir, @(x) ischar(x) || isstring(x));

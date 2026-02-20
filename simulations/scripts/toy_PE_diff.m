@@ -22,11 +22,11 @@
 %   components on the same axes with dynamic limits for easier inspection.
 %
 % Example usage (from this folder):
-%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/hypothesis_testing');
+%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   toy_PE_diff;
 %
 % Example usage (from anywhere):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/hypothesis_testing');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   toy_PE_diff;
 %
 % Inputs:
