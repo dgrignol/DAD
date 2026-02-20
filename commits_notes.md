@@ -1,5 +1,16 @@
 # 20 Feb 2026 11:20
 
+## Hypothesis testing scripts
+
+### `simulations/hypothesis_testing/counterfactual_simulation.m`
+- Add optional post-deviance truncation (`cutPostDev`, `deviantOnset`) and apply it consistently to condition-level path previews, observed trial streams, and deviant predicted streams.
+- Move exports to structured output folders with explicit matrix subgrouping: nondeviant (`commCbar`, `sepCbar`) and deviant (`base` vs `predicted`, each with `commCbar`/`sepCbar`).
+- Add backward-compatible reuse checks that can load legacy flat results files while writing new exports to the organized directory layout.
+- Persist new repro metadata (`cutPostDev`, `deviantOnset`, `cutFrame`) and include these fields in existing-results parameter matching diagnostics.
+- Add local safety helpers for directory creation and guarded figure export to avoid crashes when optional figure handles are invalid.
+
+# 20 Feb 2026 11:20
+
 ## Simulation pipeline scripts
 
 ### `simulations/PIPELINE_simulation.m`

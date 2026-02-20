@@ -36,8 +36,14 @@
 %     reduce memory use; resampleIterations, resampleSubsampleCount, and
 %     resampleWithReplacement control the resampling behavior.
 %   - suppressDispText silences function-level status text (0 = show, 1 = suppress).
+%   - cutPostDev keeps only the post-deviant portion of each trial; deviantOnset
+%     (fraction of trial duration, 0-1) sets where the cut begins.
 %   - output filenames include subject/condition, dRSA type, and (only when
 %     enabled) shuffle/resampling tags.
+%   - output directories are organized by subject/condition/dRSAtype with
+%     subfolders for results, matrices, and diagonals; deviant predicted
+%     models are stored under matrices/predicted (never "wannabe"). When
+%     cutPostDev is enabled, outputs are stored under subXX/postDev.
 %   Example configuration:
 %     participantNumber = 98;
 %     inputConditions = {'nondeviant', 'deviant'};
@@ -48,13 +54,16 @@
 %   - experiment/input_files/MovDot_SubXX_predicted.mat (deviant-only)
 %       used to build additional position models for deviant analyses.
 %
-% Outputs:
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
-%     containing dRSA matrices, diagonal summaries, parameters, trigger masks,
-%     subsamples, and input dot-trial data needed to reproduce the run.
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices_<commCbar|sepCbar>.png
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
-%   - simulations/output/paths_<subject>_allConditions_all_conditions.png
+% Outputs (organized):
+%   - simulations/output/subXX/paths/paths_subXX_allConditions_all_conditions.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/results/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
+%   - simulations/output/subXX/<condition>/<dRSAtype>/diagonal/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/matrices/
+%       nondeviant: commCbar/ and sepCbar/
+%       deviant: base/commCbar, base/sepCbar, predicted/commCbar, predicted/sepCbar
+%   - simulations/output/subXX/postDev/... (same structure, when cutPostDev = true)
 %   - Debug plots in simulations/debug (paths, time-distance, center-distance).
 %
 % Key assumptions:
@@ -93,8 +102,11 @@ resampleSubsamples = false; % true to use per-iteration trial subsets for dRSA
 resampleIterations = 100; % number of resampled iterations (only if resampleSubsamples)
 resampleSubsampleCount = 100; % number of triggers per iteration (only if resampleSubsamples)
 resampleWithReplacement = false; % true = bootstrap-style resampling, false = unique subset per iteration
+% Data flow: deviantOnset fraction -> cut frame -> optional post-deviant-only trials.
+cutPostDev = false; % true to keep only post-deviant samples in each trial
+deviantOnset = 0.5; % fraction of trial duration marking deviant onset (0-1)
 textScaleFactor = 2; % multiply axes/title/label text size across generated figures.
-dRSAtypeToRun = 'PCR'; % 'PCR' or 'corr'
+dRSAtypeToRun = 'corr'; % 'PCR' or 'corr'
 suppressDispText = 1; % 1 to suppress function-level status text, 0 to show.
 validConditions = {'nondeviant', 'deviant'};
 if ~all(ismember(inputConditions, validConditions))
@@ -140,6 +152,13 @@ for iCond = 1:numel(allConditions)
     end
     pathsByCondition.(condName).dot1 = condData.dot1GreenPathsCenterRelative;
     pathsByCondition.(condName).dot2 = condData.dot2YellowPathsCenterRelative;
+    if cutPostDev
+        % Data flow: full paths -> deviant onset fraction -> post-deviant-only paths.
+        [pathsByCondition.(condName).dot1, ~] = local_cut_postdeviant( ...
+            pathsByCondition.(condName).dot1, deviantOnset);
+        [pathsByCondition.(condName).dot2, ~] = local_cut_postdeviant( ...
+            pathsByCondition.(condName).dot2, deviantOnset);
+    end
 end
 
 figAllPaths = plot_paths_wrap( ...
@@ -158,6 +177,7 @@ for iCond = 1:numel(inputConditions)
     usePredictedModels = strcmp(inputCondition, 'deviant');
     reuseExistingResults = false;
     loadedResults = struct();
+    cutFrame = [];
 
     %% Resolve condition labels and output paths
     % Data flow: condition -> labels -> deterministic output filenames.
@@ -175,11 +195,48 @@ for iCond = 1:numel(inputConditions)
     else
         conditionLabel = 'unknown';
     end
-    conditionSuffix = sprintf('(%s)', conditionLabel);
-    subjectOutputDir = fullfile(outputDir, subjectLabel);
-    if ~exist(subjectOutputDir, 'dir')
-        mkdir(subjectOutputDir);
+    % Normalize output labels by dropping run_default tokens and cleanup underscores.
+    conditionLabel = regexprep(conditionLabel, '(^|_)run_default(_|$)', '$1');
+    conditionLabel = regexprep(conditionLabel, '^_|_$', '');
+    conditionLabel = regexprep(conditionLabel, '_+', '_');
+    if isempty(conditionLabel)
+        conditionLabel = 'unknown';
     end
+    conditionSuffix = sprintf('(%s)', conditionLabel);
+    dRSAtypeLabel = lower(dRSAtypeToRun);
+    subjectOutputDir = fullfile(outputDir, subjectLabel);
+    if cutPostDev
+        subjectOutputDir = fullfile(subjectOutputDir, 'postDev');
+    end
+    conditionOutputDir = fullfile(subjectOutputDir, conditionLabel);
+    analysisOutputDir = fullfile(conditionOutputDir, dRSAtypeLabel);
+    pathsOutputDir = fullfile(subjectOutputDir, 'paths');
+    resultsOutputDir = fullfile(analysisOutputDir, 'results');
+    diagonalOutputDir = fullfile(analysisOutputDir, 'diagonal');
+    matricesOutputDir = fullfile(analysisOutputDir, 'matrices');
+    % Data flow: model-group flag -> concrete matrix folders for export.
+    if usePredictedModels
+        baseMatricesDir = fullfile(matricesOutputDir, 'base');
+        predictedMatricesDir = fullfile(matricesOutputDir, 'predicted');
+        matricesBaseCommDir = fullfile(baseMatricesDir, 'commCbar');
+        matricesBaseSepDir = fullfile(baseMatricesDir, 'sepCbar');
+        matricesPredCommDir = fullfile(predictedMatricesDir, 'commCbar');
+        matricesPredSepDir = fullfile(predictedMatricesDir, 'sepCbar');
+    else
+        matricesBaseCommDir = fullfile(matricesOutputDir, 'commCbar');
+        matricesBaseSepDir = fullfile(matricesOutputDir, 'sepCbar');
+        matricesPredCommDir = '';
+        matricesPredSepDir = '';
+    end
+    local_ensure_dir(resultsOutputDir);
+    local_ensure_dir(diagonalOutputDir);
+    local_ensure_dir(matricesBaseCommDir);
+    local_ensure_dir(matricesBaseSepDir);
+    if usePredictedModels
+        local_ensure_dir(matricesPredCommDir);
+        local_ensure_dir(matricesPredSepDir);
+    end
+    local_ensure_dir(pathsOutputDir);
 
     optionalTags = {};
     if shuffleDot2Trials
@@ -196,20 +253,26 @@ for iCond = 1:numel(inputConditions)
     runTagParts = [{subjectLabel, conditionLabel, lower(dRSAtypeToRun)}, optionalTags];
     resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
     resultsBase = regexprep(resultsBase, '\s+', '');
-    resultsFile = fullfile(subjectOutputDir, [resultsBase '_results.mat']);
+    resultsFile = fullfile(resultsOutputDir, [resultsBase '_results.mat']);
+    legacyResultsFile = fullfile(subjectOutputDir, [resultsBase '_results.mat']);
+    resultsFileToCheck = resultsFile;
+    if ~isfile(resultsFile) && isfile(legacyResultsFile)
+        % Backward-compat: allow reuse of flat outputs but write new plots to folders.
+        resultsFileToCheck = legacyResultsFile;
+    end
 
     %% Optional reuse of existing results
     % Data flow: existing results file -> parameter summary -> user-selected run mode.
-    if isfile(resultsFile)
-        existingMeta = load(resultsFile, 'repro', 'params');
+    if isfile(resultsFileToCheck)
+        existingMeta = load(resultsFileToCheck, 'repro', 'params');
         local_print_existing_match_summary( ...
-            resultsFile, participantNumber, inputCondition, dRSAtypeToRun, ...
+            resultsFileToCheck, participantNumber, inputCondition, dRSAtypeToRun, ...
             shuffleDot2Trials, resampleSubsamples, resampleIterations, ...
             resampleSubsampleCount, resampleWithReplacement, ...
-            usePredictedModels, plotSampleRateHz, existingMeta);
+        usePredictedModels, plotSampleRateHz, cutPostDev, deviantOnset, existingMeta);
         userChoice = local_prompt_existing_results_action();
         if userChoice == 1
-            loadedResults = load(resultsFile);
+            loadedResults = load(resultsFileToCheck);
             requiredVars = {'dRSA_position', 'dRSA_direction', ...
                 'dRSA_diagonal_position', 'dRSA_diagonal_direction', 'params'};
             missingVars = requiredVars(~isfield(loadedResults, requiredVars));
@@ -299,6 +362,17 @@ for iCond = 1:numel(inputConditions)
             error(['Predicted deviant trials do not match deviant trials size. ' ...
                 'Expected %s, got %s.'], mat2str(size(dot1Trials)), ...
                 mat2str(size(dot1TrialsPredicted)));
+        end
+    end
+
+    %% Optional post-deviant truncation
+    % Data flow: full trial paths -> deviant onset -> post-deviant-only trials.
+    if cutPostDev
+        [dot1Trials, cutFrame] = local_cut_postdeviant(dot1Trials, deviantOnset);
+        [dot2Trials, ~] = local_cut_postdeviant(dot2Trials, deviantOnset);
+        if usePredictedModels
+            [dot1TrialsPredicted, ~] = local_cut_postdeviant(dot1TrialsPredicted, deviantOnset);
+            [dot2TrialsPredicted, ~] = local_cut_postdeviant(dot2TrialsPredicted, deviantOnset);
         end
     end
 
@@ -551,6 +625,9 @@ for iCond = 1:numel(inputConditions)
         repro.resampleIterations = resampleIterations;
         repro.resampleSubsampleCount = resampleSubsampleCount;
         repro.resampleWithReplacement = resampleWithReplacement;
+        repro.cutPostDev = cutPostDev;
+        repro.deviantOnset = deviantOnset;
+        repro.cutFrame = cutFrame;
         repro.trialLen = trialLen;
         repro.totalTime = totalTime;
         repro.nTrials = size(dot1Trials, 1);
@@ -596,32 +673,52 @@ for iCond = 1:numel(inputConditions)
         local_prepare_figure_for_export(figAllPaths);
     end
 
-    % Save both colorbar variants.
+    % Save both colorbar variants (guard against invalid figure handles).
     if numel(figLabels) == 1
-        print(figMatricesCommon(1), fullfile(subjectOutputDir, [resultsBase '_matrices_commCbar.png']), ...
-            '-dpng', '-r300');
-        print(figMatricesSeparate(1), fullfile(subjectOutputDir, [resultsBase '_matrices_sepCbar.png']), ...
-            '-dpng', '-r300');
+        local_safe_print(figMatricesCommon(1), ...
+            fullfile(matricesBaseCommDir, [resultsBase '_matrices_commCbar.png']));
+        local_safe_print(figMatricesSeparate(1), ...
+            fullfile(matricesBaseSepDir, [resultsBase '_matrices_sepCbar.png']));
     else
-        print(figMatricesCommon(1), fullfile(subjectOutputDir, [resultsBase '_matrices_base_commCbar.png']), ...
-            '-dpng', '-r300');
-        print(figMatricesCommon(2), fullfile(subjectOutputDir, [resultsBase '_matrices_predicted_commCbar.png']), ...
-            '-dpng', '-r300');
-        print(figMatricesSeparate(1), fullfile(subjectOutputDir, [resultsBase '_matrices_base_sepCbar.png']), ...
-            '-dpng', '-r300');
-        print(figMatricesSeparate(2), fullfile(subjectOutputDir, [resultsBase '_matrices_predicted_sepCbar.png']), ...
-            '-dpng', '-r300');
+        local_safe_print(figMatricesCommon(1), ...
+            fullfile(matricesBaseCommDir, [resultsBase '_matrices_base_commCbar.png']));
+        local_safe_print(figMatricesCommon(2), ...
+            fullfile(matricesPredCommDir, [resultsBase '_matrices_predicted_commCbar.png']));
+        local_safe_print(figMatricesSeparate(1), ...
+            fullfile(matricesBaseSepDir, [resultsBase '_matrices_base_sepCbar.png']));
+        local_safe_print(figMatricesSeparate(2), ...
+            fullfile(matricesPredSepDir, [resultsBase '_matrices_predicted_sepCbar.png']));
     end
-    print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+    local_safe_print(figLag, fullfile(diagonalOutputDir, [resultsBase '_diagonal.png']));
     if iCond == 1
         pathsBase = strjoin({'paths', subjectLabel, 'allConditions'}, '_');
         pathsBase = regexprep(pathsBase, '\s+', '');
-        print(figAllPaths, fullfile(subjectOutputDir, [pathsBase '_all_conditions.png']), ...
+        print(figAllPaths, fullfile(pathsOutputDir, [pathsBase '_all_conditions.png']), ...
             '-dpng', '-r300');
     end
 end
 
 %% Local helpers
+function local_ensure_dir(dirPath)
+% LOCAL_ENSURE_DIR Create the directory if it is missing (including parents).
+if isempty(dirPath)
+    return;
+end
+if ~exist(dirPath, 'dir')
+    mkdir(dirPath);
+end
+end
+
+function local_safe_print(figHandle, outPath)
+% LOCAL_SAFE_PRINT Print a figure if the handle is valid (avoid print errors).
+% Data flow: figure handle -> validity check -> print to disk.
+if isempty(figHandle) || ~isgraphics(figHandle, 'figure')
+    warning('Skipping print; invalid figure handle for %s', outPath);
+    return;
+end
+print(figHandle, outPath, '-dpng', '-r300');
+end
+
 function figMatrices = local_plot_dRSA_matrices( ...
         dRSAAll, modelNames, rowNames, timeSeconds, figLabels, ...
         baseModelIdx, predictedModelIdx, useCommonCbarLimits, cbarLimits, figVisibility)
@@ -798,7 +895,7 @@ function local_print_existing_match_summary( ...
         resultsFile, participantNumber, inputCondition, dRSAtypeToRun, ...
         shuffleDot2Trials, resampleSubsamples, resampleIterations, ...
         resampleSubsampleCount, resampleWithReplacement, ...
-        usePredictedModels, plotSampleRateHz, existingMeta)
+        usePredictedModels, plotSampleRateHz, cutPostDev, deviantOnset, existingMeta)
 % LOCAL_PRINT_EXISTING_MATCH_SUMMARY Print parameter-by-parameter reuse summary.
 % Data flow: current config + existing metadata -> one-line comparison per parameter.
 fprintf('\nExisting results file found:\n  %s\n', resultsFile);
@@ -813,6 +910,8 @@ existingResampleCount = [];
 existingResampleReplacement = [];
 existingUsePredicted = [];
 existingFs = [];
+existingCutPostDev = [];
+existingDeviantOnset = [];
 
 if isfield(existingMeta, 'repro')
     repro = existingMeta.repro;
@@ -840,6 +939,12 @@ if isfield(existingMeta, 'repro')
     if isfield(repro, 'nModels')
         existingUsePredicted = repro.nModels > 4;
     end
+    if isfield(repro, 'cutPostDev')
+        existingCutPostDev = repro.cutPostDev;
+    end
+    if isfield(repro, 'deviantOnset')
+        existingDeviantOnset = repro.deviantOnset;
+    end
     if isfield(repro, 'paramsCore')
         if isfield(repro.paramsCore, 'dRSAtype')
             existingType = repro.paramsCore.dRSAtype;
@@ -866,6 +971,8 @@ local_print_match_line('resampleSubsampleCount', resampleSubsampleCount, existin
 local_print_match_line('resampleWithReplacement', resampleWithReplacement, existingResampleReplacement);
 local_print_match_line('usePredictedModels', usePredictedModels, existingUsePredicted);
 local_print_match_line('plotSampleRateHz', plotSampleRateHz, existingFs);
+local_print_match_line('cutPostDev', cutPostDev, existingCutPostDev);
+local_print_match_line('deviantOnset', deviantOnset, existingDeviantOnset);
 end
 
 function local_print_match_line(paramName, currentValue, existingValue)
@@ -912,6 +1019,41 @@ while ~ismember(userChoice, [1, 2])
         '(2) rerun + overwrite dataset and plots: '], 's');
     userChoice = str2double(strtrim(userInput));
 end
+end
+
+function [pathsCut, cutFrame] = local_cut_postdeviant(paths, deviantOnset)
+% LOCAL_CUT_POSTDEVIANT Keep the post-deviant portion of each trial.
+%
+% Usage example:
+%   [pathsCut, cutFrame] = local_cut_postdeviant(paths, 0.5);
+%
+% Inputs:
+%   paths        : trials x features x time center-relative positions.
+%   deviantOnset : fraction of trial duration (0-1) marking deviant onset.
+%
+% Outputs:
+%   pathsCut     : paths sliced from deviant onset to the end.
+%   cutFrame     : 1-based frame index where the cut begins.
+%
+% Data flow:
+%   paths -> onset fraction -> frame index -> post-deviant-only paths.
+if isempty(paths)
+    pathsCut = paths;
+    cutFrame = [];
+    return;
+end
+if ~isscalar(deviantOnset) || deviantOnset < 0 || deviantOnset > 1
+    error('deviantOnset must be a scalar between 0 and 1.');
+end
+trialLen = size(paths, 3);
+if trialLen < 1
+    pathsCut = paths;
+    cutFrame = [];
+    return;
+end
+cutFrame = round(deviantOnset * trialLen);
+cutFrame = max(1, min(trialLen, cutFrame));
+pathsCut = paths(:, :, cutFrame:end);
 end
 
 function modelNames = local_default_model_names(nModels)
