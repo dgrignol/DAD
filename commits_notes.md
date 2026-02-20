@@ -2,6 +2,24 @@
 
 ## Hypothesis testing scripts
 
+### `simulations/hypothesis_testing/PE_simulation_diff.m`
+- Add a full signal-level PE pipeline where PE is computed as observed minus predicted streams before dRSA (`PE_signal = observed - predicted`), keeping standard counterfactual outputs in the same run.
+- Add deviant-only PE model families (position/direction, dot1/dot2) evaluated against three neural targets (`neuralPE`, `neuralPredicted`, `neuralObserved`) with dedicated matrix exports.
+- Enforce post-deviance handling for PE analyses even when global `cutPostDev` is disabled, and track PE-specific cut diagnostics in reproducibility metadata.
+- Add non-interactive existing-results behavior control (`existingResultsAction`) for batch rerun/reuse/error workflows.
+
+### `simulations/hypothesis_testing/PE_simulation_RDM_level_PE.m`
+- Add an RDM-level PE analysis variant that complements the signal-level workflow and expands hypothesis-testing coverage with a separate, documented script entry point.
+- Preserve the organized output conventions and reproducibility-oriented script structure used across the updated simulation stack.
+
+### `simulations/hypothesis_testing/toy_PE_diff.m`
+- Add a compact visualization utility that overlays observed, predicted, centered-PE, origin-anchored PE, and PE vector fields for a small deviant trial subset.
+- Include optional post-deviance cropping and deterministic export under `simulations/output/subXX/paths` to support quick geometric sanity checks of PE behavior.
+
+# 20 Feb 2026 11:20
+
+## Hypothesis testing scripts
+
 ### `simulations/hypothesis_testing/counterfactual_simulation.m`
 - Add optional post-deviance truncation (`cutPostDev`, `deviantOnset`) and apply it consistently to condition-level path previews, observed trial streams, and deviant predicted streams.
 - Move exports to structured output folders with explicit matrix subgrouping: nondeviant (`commCbar`, `sepCbar`) and deviant (`base` vs `predicted`, each with `commCbar`/`sepCbar`).
