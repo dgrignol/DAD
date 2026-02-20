@@ -1,3 +1,23 @@
+# 20 Feb 2026 11:20
+
+## Simulation pipeline scripts
+
+### `simulations/PIPELINE_simulation.m`
+- Reorganize outputs into a nested subject/condition/dRSA folder tree (`results`, `matrices`, `diagonal`) and store all-condition path overviews under `subXX/paths`.
+- Normalize parsed condition labels by stripping `run_default` tokens so output filenames/folders remain stable across generated input naming variants.
+- Add a local directory-creation helper and route every save/print call through the new structured output paths.
+
+### `simulations/PIPELINE_simulation_posOnly.m`
+- Re-enable the previously disabled save block and gate it behind `saveOutputs` so runs can be compute-only or export-enabled without editing code blocks.
+- Apply the same structured output layout and condition-label cleanup used by the full pipeline, including consistent optional shuffle/resample tags.
+- Persist reproducibility metadata to the organized results path while keeping all-condition path exports in subject-level `paths` folders.
+
+## Simulation input building and diagnostics
+
+### `simulations/build_movdot_simulation_inputs.m`
+- Cast dot-path arrays and center shifts to `double` before center-relative recentering to avoid mixed-class arithmetic failures in `bsxfun`.
+- Document the recentering type-conversion assumption directly in the function header assumptions list.
+
 # 20 Feb 2026 11:19
 
 ## Experiment configuration and stimuli generation

@@ -58,6 +58,8 @@
 %   - All trials within a condition share the same number of frames.
 %   - Center-relative paths are produced by subtracting rectSize/2 so that
 %     fixation (center of the stimulus rect) aligns to (0,0) in degrees.
+%   - Path arrays are cast to double before recentering to avoid integer
+%     arithmetic constraints when bsxfun applies the center shift.
 function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     %% Parse inputs and establish default paths
     parser = inputParser;
@@ -307,7 +309,10 @@ function entry = save_trials(baseName, conditionLabel, trials, outputDir, ...
     dot1GreenPathsCenterRelative = [];
     dot2YellowPathsCenterRelative = [];
     if centerOptions.enabled
-        centerShift = reshape(centerOptions.centerShift, 1, 2, 1);
+        % Ensure double precision for recentering to avoid mixed integer class errors.
+        dot1GreenPaths = double(dot1GreenPaths);
+        dot2YellowPaths = double(dot2YellowPaths);
+        centerShift = double(reshape(centerOptions.centerShift, 1, 2, 1));
         dot1GreenPathsCenterRelative = bsxfun(@minus, dot1GreenPaths, centerShift);
         dot2YellowPathsCenterRelative = bsxfun(@minus, dot2YellowPaths, centerShift);
     end

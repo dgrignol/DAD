@@ -28,6 +28,9 @@
 %     resampleWithReplacement control the resampling behavior.
 %   - output filenames include subject/condition, dRSA type, and (only when
 %     enabled) shuffle/resampling flags.
+%   - output directories are organized by subject/condition/dRSAtype with
+%     subfolders for results, matrices, and diagonals; dot-path overviews
+%     are stored under subject-level paths/.
 %   Example configuration:
 %     participantNumber = 98;
 %     inputCondition = 'deviant';
@@ -38,13 +41,14 @@
 %     The file must also contain:
 %       dot1GreenPathsCenterRelative and dot2YellowPathsCenterRelative
 %
-% Outputs:
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
-%     containing dRSA matrices, diagonal summaries, parameters, trigger masks,
-%     subsamples, and input dot-trial data needed to reproduce the run.
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices.png
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
-%   - simulations/output/paths_<subject>_<condition>_[<shuffle>][_<resample>]_all_conditions.png
+% Outputs (organized):
+%   - simulations/output/subXX/paths/paths_<subject>_<condition>_[<shuffle>][_<resample>]_all_conditions.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/results/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
+%   - simulations/output/subXX/<condition>/<dRSAtype>/diagonal/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/matrices/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices.png
 %   - Debug plots in simulations/debug (paths, time-distance, center-distance).
 %
 % Key assumptions:
@@ -112,6 +116,13 @@ subjectLabel = sprintf('sub%02d', str2double(tokens{1}));
 if numel(tokens) > 1 && ~isempty(tokens{2})
     conditionLabel = tokens{2};
 else
+    conditionLabel = 'unknown';
+end
+% Normalize output labels by dropping run_default tokens and cleanup underscores.
+conditionLabel = regexprep(conditionLabel, '(^|_)run_default(_|$)', '$1');
+conditionLabel = regexprep(conditionLabel, '^_|_$', '');
+conditionLabel = regexprep(conditionLabel, '_+', '_');
+if isempty(conditionLabel)
     conditionLabel = 'unknown';
 end
 simulationData = load(simulationInputFile);
@@ -477,11 +488,18 @@ legend(rowNames, 'Location', 'best');
 % Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
 outputDir = fullfile(scriptDir, 'output');
 subjectOutputDir = fullfile(outputDir, subjectLabel);
-if ~exist(subjectOutputDir, 'dir')
-    mkdir(subjectOutputDir);
-end
-
+conditionOutputDir = fullfile(subjectOutputDir, conditionLabel);
 dRSAtypeLabel = lower(paramsCore.dRSAtype);
+analysisOutputDir = fullfile(conditionOutputDir, dRSAtypeLabel);
+resultsOutputDir = fullfile(analysisOutputDir, 'results');
+diagonalOutputDir = fullfile(analysisOutputDir, 'diagonal');
+matricesOutputDir = fullfile(analysisOutputDir, 'matrices');
+pathsOutputDir = fullfile(subjectOutputDir, 'paths');
+local_ensure_dir(resultsOutputDir);
+local_ensure_dir(diagonalOutputDir);
+local_ensure_dir(matricesOutputDir);
+local_ensure_dir(pathsOutputDir);
+
 % Build compact filename tags: include shuffle/resample only when enabled.
 optionalTags = {};
 if shuffleDot2Trials
@@ -539,15 +557,26 @@ repro.dataDirection = dataDirection;
 repro.models = model;
 repro.autocorrBorder = Autocorrborder;
 
-save(fullfile(subjectOutputDir, [resultsBase '_results.mat']), ...
+save(fullfile(resultsOutputDir, [resultsBase '_results.mat']), ...
     'dRSA_position', 'dRSA_direction', ...
     'dRSA_diagonal_position', 'dRSA_diagonal_direction', ...
     'params', 'paramsDiagonal', 'repro');
 
-print(figMatrices, fullfile(subjectOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
-print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
-print(figAllPaths, fullfile(subjectOutputDir, [pathsBase '_all_conditions.png']), '-dpng', '-r300');
+print(figMatrices, fullfile(matricesOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
+print(figLag, fullfile(diagonalOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+print(figAllPaths, fullfile(pathsOutputDir, [pathsBase '_all_conditions.png']), '-dpng', '-r300');
 
 % matrices
 % lag plots
 %
+
+%% Local helpers
+function local_ensure_dir(dirPath)
+% LOCAL_ENSURE_DIR Create the directory if it is missing (including parents).
+if isempty(dirPath)
+    return;
+end
+if ~exist(dirPath, 'dir')
+    mkdir(dirPath);
+end
+end

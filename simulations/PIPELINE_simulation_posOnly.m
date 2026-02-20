@@ -26,8 +26,14 @@
 %   - resampleSubsamples toggles trial subsampling across iterations to
 %     reduce memory use; resampleIterations, resampleSubsampleCount, and
 %     resampleWithReplacement control the resampling behavior.
+%   - saveOutputs toggles whether .mat/.png outputs are written (true by default).
+%   - output filenames strip any "run_default" token from condition labels
+%     (e.g., run_default_deviant -> deviant) for cleaner naming.
 %   - output filenames include subject/condition, dRSA type, and (only when
 %     enabled) shuffle/resampling flags.
+%   - output directories are organized by subject/condition/dRSAtype with
+%     subfolders for results, matrices, and diagonals; dot-path overviews
+%     are stored under subject-level paths/.
 %   Example configuration:
 %     participantNumber = 98;
 %     inputConditions = {'nondeviant', 'deviant'};
@@ -38,13 +44,14 @@
 %   - experiment/input_files/MovDot_SubXX_predicted.mat (deviant-only)
 %       used to build additional position models for deviant analyses.
 %
-% Outputs:
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
-%     containing dRSA matrices, diagonal summaries, parameters, trigger masks,
-%     subsamples, and input dot-trial data needed to reproduce the run.
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices.png
-%   - simulations/output/dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
-%   - simulations/output/paths_<subject>_allConditions_all_conditions.png
+% Outputs (organized, when saveOutputs = true):
+%   - simulations/output/subXX/paths/paths_subXX_allConditions_all_conditions.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/results/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_results.mat
+%   - simulations/output/subXX/<condition>/<dRSAtype>/diagonal/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_diagonal.png
+%   - simulations/output/subXX/<condition>/<dRSAtype>/matrices/
+%       dRSA_<subject>_<condition>_<dRSAtype>_[<shuffle>][_<resample>]_matrices.png
 %   - Debug plots in simulations/debug (paths, time-distance, center-distance).
 %
 % Key assumptions:
@@ -82,6 +89,7 @@ resampleSubsamples = false; % true to use per-iteration trial subsets for dRSA
 resampleIterations = 100; % number of resampled iterations (only if resampleSubsamples)
 resampleSubsampleCount = 100; % number of triggers per iteration (only if resampleSubsamples)
 resampleWithReplacement = false; % true = bootstrap-style resampling, false = unique subset per iteration
+saveOutputs = true; % true to save outputs into simulations/output; false to compute only.
 validConditions = {'nondeviant', 'deviant'};
 if ~all(ismember(inputConditions, validConditions))
     error('inputConditions must be drawn from: %s', strjoin(validConditions, ', '));
@@ -435,85 +443,105 @@ xlabel('Time (samples)');
 ylabel('dRSA (diagonal)');
 legend(modelNames, 'Location', 'best');
 
-% %% Save matrices, plots, and reproducibility metadata (300 dpi)
-% % Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
-% outputDir = fullfile(scriptDir, 'output');
-% subjectOutputDir = fullfile(outputDir, subjectLabel);
-% if ~exist(subjectOutputDir, 'dir')
-%     mkdir(subjectOutputDir);
-% end
-% 
-% dRSAtypeLabel = lower(paramsCore.dRSAtype);
-% optionalTags = {};
-% if shuffleDot2Trials
-%     optionalTags{end + 1} = 'shufDot2';
-% end
-% if resampleSubsamples
-%     resampleMode = 'sub';
-%     if resampleWithReplacement
-%         resampleMode = 'boot';
-%     end
-%     optionalTags{end + 1} = sprintf('rs%d_i%d_%s', ...
-%         resampleSubsampleCount, resampleIterations, resampleMode);
-% end
-% runTagParts = [{subjectLabel, conditionLabel, dRSAtypeLabel}, optionalTags];
-% resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
-% resultsBase = regexprep(resultsBase, '\s+', '');
-% 
-% repro = struct();
-% repro.timestamp = datestr(now, 'yyyymmddTHHMMSS');
-% repro.scriptPath = mfilename('fullpath');
-% repro.repoRoot = repoRoot;
-% repro.matlabVersion = version;
-% repro.participantNumber = participantNumber;
-% repro.subjectLabel = subjectLabel;
-% repro.inputCondition = inputCondition;
-% repro.conditionLabel = conditionLabel;
-% repro.simulationInputFile = simulationInputFile;
-% repro.rawInputFile = inputFile;
-% repro.shuffleDot2Trials = shuffleDot2Trials;
-% repro.shuffleOrder = shuffleOrder;
-% repro.resampleSubsamples = resampleSubsamples;
-% repro.resampleIterations = resampleIterations;
-% repro.resampleSubsampleCount = resampleSubsampleCount;
-% repro.resampleWithReplacement = resampleWithReplacement;
-% repro.trialLen = trialLen;
-% repro.totalTime = totalTime;
-% repro.nTrials = size(dot1Trials, 1);
-% repro.nModels = nModels;
-% repro.modelNames = modelNames;
-% repro.paramsCore = paramsCore;
-% repro.paramsDiagonal = paramsDiagonal;
-% repro.triggerOptions = opt;
-% repro.maskSubsampling = maskSubsampling;
-% repro.maskTrigger = maskTrigger;
-% repro.subsamples = subsamples;
-% repro.rectSize = rectSize;
-% repro.dot1Trials = dot1Trials;
-% repro.dot2Trials = dot2Trials;
-% repro.dot1TrialsPredicted = dot1TrialsPredicted;
-% repro.dot2TrialsPredicted = dot2TrialsPredicted;
-% repro.dataPosition = dataPosition;
-% repro.models = model;
-% repro.autocorrBorder = Autocorrborder;
-% repro.predictedSimulationFile = predictedSimulationFile;
-% 
-% save(fullfile(subjectOutputDir, [resultsBase '_results.mat']), ...
-%     'dRSA_position', ...
-%     'dRSA_diagonal_position', ...
-%     'params', 'paramsDiagonal', 'repro');
-% 
-% print(figMatrices, fullfile(subjectOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
-% print(figLag, fullfile(subjectOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
-% if iCond == 1
-%     pathsBase = strjoin({'paths', subjectLabel, 'allConditions'}, '_');
-%     pathsBase = regexprep(pathsBase, '\s+', '');
-%     print(figAllPaths, fullfile(subjectOutputDir, [pathsBase '_all_conditions.png']), ...
-%         '-dpng', '-r300');
-% end
+%% Save matrices, plots, and reproducibility metadata (300 dpi)
+% Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
+if saveOutputs
+    outputDir = fullfile(scriptDir, 'output');
+    subjectOutputDir = fullfile(outputDir, subjectLabel);
+    conditionOutputDir = fullfile(subjectOutputDir, conditionLabel);
+    dRSAtypeLabel = lower(paramsCore.dRSAtype);
+    analysisOutputDir = fullfile(conditionOutputDir, dRSAtypeLabel);
+    resultsOutputDir = fullfile(analysisOutputDir, 'results');
+    diagonalOutputDir = fullfile(analysisOutputDir, 'diagonal');
+    matricesOutputDir = fullfile(analysisOutputDir, 'matrices');
+    pathsOutputDir = fullfile(subjectOutputDir, 'paths');
+    local_ensure_dir(resultsOutputDir);
+    local_ensure_dir(diagonalOutputDir);
+    local_ensure_dir(matricesOutputDir);
+    local_ensure_dir(pathsOutputDir);
+
+    optionalTags = {};
+    if shuffleDot2Trials
+        optionalTags{end + 1} = 'shufDot2';
+    end
+    if resampleSubsamples
+        resampleMode = 'sub';
+        if resampleWithReplacement
+            resampleMode = 'boot';
+        end
+        optionalTags{end + 1} = sprintf('rs%d_i%d_%s', ...
+            resampleSubsampleCount, resampleIterations, resampleMode);
+    end
+    runTagParts = [{subjectLabel, conditionLabel, dRSAtypeLabel}, optionalTags];
+    resultsBase = strjoin([{'dRSA'}, runTagParts], '_');
+    resultsBase = regexprep(resultsBase, '\s+', '');
+
+    repro = struct();
+    repro.timestamp = datestr(now, 'yyyymmddTHHMMSS');
+    repro.scriptPath = mfilename('fullpath');
+    repro.repoRoot = repoRoot;
+    repro.matlabVersion = version;
+    repro.participantNumber = participantNumber;
+    repro.subjectLabel = subjectLabel;
+    repro.inputCondition = inputCondition;
+    repro.conditionLabel = conditionLabel;
+    repro.simulationInputFile = simulationInputFile;
+    repro.rawInputFile = inputFile;
+    repro.shuffleDot2Trials = shuffleDot2Trials;
+    repro.shuffleOrder = shuffleOrder;
+    repro.resampleSubsamples = resampleSubsamples;
+    repro.resampleIterations = resampleIterations;
+    repro.resampleSubsampleCount = resampleSubsampleCount;
+    repro.resampleWithReplacement = resampleWithReplacement;
+    repro.trialLen = trialLen;
+    repro.totalTime = totalTime;
+    repro.nTrials = size(dot1Trials, 1);
+    repro.nModels = nModels;
+    repro.modelNames = modelNames;
+    repro.paramsCore = paramsCore;
+    repro.paramsDiagonal = paramsDiagonal;
+    repro.triggerOptions = opt;
+    repro.maskSubsampling = maskSubsampling;
+    repro.maskTrigger = maskTrigger;
+    repro.subsamples = subsamples;
+    repro.rectSize = rectSize;
+    repro.dot1Trials = dot1Trials;
+    repro.dot2Trials = dot2Trials;
+    repro.dot1TrialsPredicted = dot1TrialsPredicted;
+    repro.dot2TrialsPredicted = dot2TrialsPredicted;
+    repro.dataPosition = dataPosition;
+    repro.models = model;
+    repro.autocorrBorder = Autocorrborder;
+    repro.predictedSimulationFile = predictedSimulationFile;
+
+    save(fullfile(resultsOutputDir, [resultsBase '_results.mat']), ...
+        'dRSA_position', ...
+        'dRSA_diagonal_position', ...
+        'params', 'paramsDiagonal', 'repro');
+
+    print(figMatrices, fullfile(matricesOutputDir, [resultsBase '_matrices.png']), '-dpng', '-r300');
+    print(figLag, fullfile(diagonalOutputDir, [resultsBase '_diagonal.png']), '-dpng', '-r300');
+    if iCond == 1
+        pathsBase = strjoin({'paths', subjectLabel, 'allConditions'}, '_');
+        pathsBase = regexprep(pathsBase, '\s+', '');
+        print(figAllPaths, fullfile(pathsOutputDir, [pathsBase '_all_conditions.png']), ...
+            '-dpng', '-r300');
+    end
+end
 
 end
 
 % matrices
 % lag plots
 %
+
+%% Local helpers
+function local_ensure_dir(dirPath)
+% LOCAL_ENSURE_DIR Create the directory if it is missing (including parents).
+if isempty(dirPath)
+    return;
+end
+if ~exist(dirPath, 'dir')
+    mkdir(dirPath);
+end
+end
