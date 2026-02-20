@@ -1,3 +1,22 @@
+# 20 Feb 2026 11:19
+
+## Experiment configuration and stimuli generation
+
+### `experiment/lib/Config.m`
+- Enable `isCurvFactorRand` by default so per-trial curvature magnitude can vary without script-level edits.
+- Add `randomizeCurvatureOnDeviant` and `deviantCurvatureRange` to support configurable post-deviant curvature resampling in the canonical config path.
+
+### `experiment/stimuli_generation_v12.m`
+- Add a new v12 generator that keeps the v10 data contract (`xySeqs`, `xySeqsPredicted`, `Cfg`, `repro`) while introducing a random post-deviant curvature mode.
+- Implement explicit deviant-curvature precedence (`randomizeCurvatureOnDeviant` over `flipCurvatureOnDeviant`) and keep no-deviant predicted baselines free of deviant-only curvature/direction changes.
+- Expand script-level documentation and section comments with usage examples, data-flow notes, assumptions, and output semantics aligned to the experiment/simulation pipeline.
+
+## Stimuli generation documentation
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the input-file parameter table with `isCurvFactorRand` so stored stimuli can be compared by both curvature magnitude and curvature-randomization behavior.
+- Add the v12 capability profile and update the parameter-effects section to document random post-deviant curvature controls (`randomizeCurvatureOnDeviant`, `deviantCurvatureRange`).
+
 # 05 Feb 2026 16:06
 
 ## Experiment configuration and stimuli generation

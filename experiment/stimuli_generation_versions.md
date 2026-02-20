@@ -8,22 +8,22 @@ for `pathDuration`/`directionVariance`) when available; if missing, the lookup
 falls back to `repro` and then to the top-level `Cfg`. When none of these
 structures expose a field (currently Subj 04 and 05), the cell is left as `—`.
 
-| Input file | Subj | Source | curvFactor | trialsPerCondition | trialDuration | pathDuration | directionVariance | dotSpeedDegPerFrame | minDistanceBetweenDots | flipCurvatureOnDeviant | dotWidth |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| `experiment/input_files/MovDot_Sub98.mat` | 98 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub97.mat` | 97 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub96.mat` | 96 | inferred_repro | 1.05 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub95.mat` | 95 | inferred_repro | 1.05 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub94.mat` | 94 | inferred_repro | 1.088 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub93.mat` | 93 | inferred_repro | 1.05 | 10000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub92.mat` | 92 | inferred_repro | 0.9 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub91.mat` | 91 | inferred_repro | 0.4 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub90.mat` | 90 | inferred_repro | 0.9 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub89.mat` | 89 | inferred_repro | 0.85 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub88.mat` | 88 | inferred_repro | 0.85 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub87.mat` | 87 | repro | 0.45 | 20 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0.5144 |
-| `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — | — |
-| `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — | — |
+| Input file | Subj | Source | curvFactor | isCurvFactorRand | trialsPerCondition | trialDuration | pathDuration | directionVariance | dotSpeedDegPerFrame | minDistanceBetweenDots | flipCurvatureOnDeviant | dotWidth |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `experiment/input_files/MovDot_Sub98.mat` | 98 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub97.mat` | 97 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub96.mat` | 96 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub95.mat` | 95 | inferred_repro | 1.05 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub94.mat` | 94 | inferred_repro | 1.088 | 1 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub93.mat` | 93 | inferred_repro | 1.05 | 0 | 10000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub92.mat` | 92 | inferred_repro | 0.9 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub91.mat` | 91 | inferred_repro | 0.4 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub90.mat` | 90 | inferred_repro | 0.9 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub89.mat` | 89 | inferred_repro | 0.85 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub88.mat` | 88 | inferred_repro | 0.85 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub87.mat` | 87 | repro | 0.45 | 0 | 20 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0.5144 |
+| `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — | — | — |
+| `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — | — | — |
 
 This document summarizes how each `stimuli_generation_vXX.m` script differs in the
 kinds of dot-motion paths it can generate. It focuses on *capabilities* and how
@@ -72,6 +72,7 @@ parameter options affect the output paths, not on any specific parameter values.
   use **v08**.
 - **Curvature flips after deviant onset** (S-shaped deviant paths): use **v09**.
 - **Export no-deviant baseline paths for deviant conditions**: use **v10**.
+- **Random post-deviant curvature in configurable +/- range**: use **v12**.
 
 ## Version differences from the base
 
@@ -184,6 +185,23 @@ parameter options affect the output paths, not on any specific parameter values.
 - **No additional path-generation omissions beyond v09** (v10 retains v09
   options, including curvature flip).
 
+### v12 — `stimuli_generation_v12.m`
+
+**Adds**
+- **Randomized post-deviant curvature option**: `randomizeCurvatureOnDeviant`
+  can replace the post-onset curvature with a newly sampled value for each dot
+  in the `[-deviantCurvatureRange, +deviantCurvatureRange]` interval, applied
+  from deviant onset onward on the deviant path only. *Example*: a path that
+  begins with gentle clockwise curvature can switch to a stronger or weaker
+  curvature (including opposite sign) after the deviant frame.
+- **Explicit precedence between deviant-curvature modes**: when both options are
+  enabled, randomization takes precedence over `flipCurvatureOnDeviant`; the
+  no-deviant baseline still keeps the original curvature profile.
+
+**Omits (relative to other versions)**
+- **No additional path-generation omissions beyond v10** (v12 retains v10
+  options, including predicted no-deviant baseline export).
+
 ## Notes on parameter effects that change paths
 
 These parameters exist across versions, but *only matter* when the version uses
@@ -196,6 +214,8 @@ that capability:
 - **`directionChange` (path_duration_norm)**: wider distributions yield larger
   early-trial direction changes.
 - **`curvFactor` + `isCurvValenceRand` / `isCurvFactorRand`**: increase curvature
-  magnitude and/or randomize curvature sign (v05, v06, v08–v10 only).
+  magnitude and/or randomize curvature sign (v05, v06, v08-v10, v12).
+- **`randomizeCurvatureOnDeviant` + `deviantCurvatureRange`**: in v12, replace
+  post-deviant curvature with a random value in a configurable interval.
 - **`minDistanceBetweenDots`**: enforces separation when the version checks it
-  (v05 and v08–v10); larger values yield more separated trajectories.
+  (v05, v08-v10, and v12); larger values yield more separated trajectories.

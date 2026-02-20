@@ -16,7 +16,7 @@ classdef Config
         %curvyness
         curvFactor = 0.45;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
         isCurvValenceRand = true;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
-        isCurvFactorRand = false;    %if set the curvFactor will be multiplied by a rand before added
+        isCurvFactorRand = true;    %if set the curvFactor will be multiplied by a rand before added
 
         %dot settings
         dotRectSize = [10, 10]; %[14, 14]                 %rect size where the dot can move in visual degrees
@@ -33,6 +33,8 @@ classdef Config
         deviantOnset = 0.5; %midway the path duration
         deviantOnsetVariance = 0;
         flipCurvatureOnDeviant = true; %set true to flip curvature sign at deviant onset
+        randomizeCurvatureOnDeviant = false; %set true to sample a new post-deviant curvature value (deviant path only)
+        deviantCurvatureRange = 0.45; %post-deviant curvature is sampled uniformly in [-range, +range]
 
         numXGrids = 2;              %num of grids in the rect of the dot
         numYGrids = 2;
