@@ -10,7 +10,7 @@
 %   toy_direction;
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   toy_direction;
 %
 % Inputs:

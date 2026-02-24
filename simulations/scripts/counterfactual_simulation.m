@@ -2,8 +2,8 @@
 %
 % Purpose:
 %   Run counterfactual dRSA simulations on dot-motion inputs by combining
-%   position-only dRSA (as in simulations/PIPELINE_simulation_posOnly.m)
-%   with direction-based models (as in simulations/PIPELINE_simulation.m).
+%   position-only dRSA (as in simulations/scripts/PIPELINE_simulation_posOnly.m)
+%   with direction-based models (as in simulations/scripts/PIPELINE_simulation.m).
 %   The script loads center-relative dot-path data (dot 1 + dot 2, visual
 %   degrees) for nondeviant and deviant conditions, prepares concatenated
 %   inputs, and executes dRSA for both position and direction data. For the
@@ -17,7 +17,7 @@
 %   counterfactual_simulation;
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
 %   counterfactual_simulation;
 %
 % Configuration (edit at the start of the script):

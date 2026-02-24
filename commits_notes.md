@@ -1,3 +1,33 @@
+# 24 Feb 2026 10:59
+
+## Simulation folder reorganization
+
+### `simulations/compute_avg_path_distance.m` -> `simulations/functions/compute_avg_path_distance.m`
+- Move the path-distance helper into `simulations/functions` to align with the function/script split.
+- Keep function signature and implementation unchanged so existing callers preserve identical outputs and assumptions.
+
+### `simulations/PIPELINE_simulation.m` -> `simulations/scripts/PIPELINE_simulation.m`
+- Move the full pipeline script into `simulations/scripts` and update top-level usage examples to the new location.
+- Patch dependency/data path resolution to `scriptDir -> simDir -> repoRoot`, then use `simDir` for `input`, `output`, `functions`, and `debug` paths so runtime behavior remains stable after relocation.
+- Keep `compute_avg_path_distance(...)` usage unchanged while resolving it via `addpath(fullfile(simDir, 'functions'))`.
+
+### `simulations/PIPELINE_simulation_posOnly.m` -> `simulations/scripts/PIPELINE_simulation_posOnly.m`
+- Move the position-only pipeline script into `simulations/scripts` and update header usage examples accordingly.
+- Apply the same `scriptDir -> simDir -> repoRoot` path bootstrap and route `input/output/functions/debug` lookups through `simDir` to preserve previous behavior from the new folder.
+
+## Cross-script reference cleanup
+
+### `simulations/scripts/counterfactual_simulation.m`
+- Update documentation references to the new pipeline paths under `simulations/scripts`.
+- Update addpath example to use the scripts folder location.
+
+### `simulations/scripts/PE_simulation_RDM_level_PE.m`
+- Update documentation references to `simulations/scripts/PIPELINE_simulation*.m`.
+- Update addpath example to `simulations/scripts`.
+
+### `simulations/scripts/toy_direction.m`
+- Update addpath example to `simulations/scripts` to match the new script location.
+
 # 20 Feb 2026 11:53
 
 ## Simulation folder reorganization

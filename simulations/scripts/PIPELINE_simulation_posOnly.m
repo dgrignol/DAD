@@ -1,4 +1,4 @@
-% messy_PIPELINE_simulation_posOnly.m
+% PIPELINE_simulation_posOnly.m
 %
 % Purpose:
 %   Run position-only dRSA simulations on dot-motion inputs. This script
@@ -9,13 +9,13 @@
 %   deviant condition, it can also add "predicted deviant" position models
 %   from MovDot_SubXX_predicted.mat (deviant-only paths without deviation).
 %
-% Example usage (from simulations/ in MATLAB):
-%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   messy_PIPELINE_simulation_posOnly;
+% Example usage (from simulations/scripts in MATLAB):
+%   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
+%   PIPELINE_simulation_posOnly;
 %
 % Example usage (from anywhere in MATLAB):
-%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations');
-%   messy_PIPELINE_simulation_posOnly;
+%   addpath('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/scripts');
+%   PIPELINE_simulation_posOnly;
 %
 % Configuration (edit at the start of the script):
 %   - participantNumber selects MovDot_SubXX.mat and the derived simulation
@@ -70,13 +70,15 @@ clear all
 close all
 
 %% Resolve repo paths and add dependencies
-% Data flow: script location -> repo root -> addpath for simulation helpers.
+% Data flow: script location -> simulations dir -> repo root -> addpath for helpers.
 scriptDir = fileparts(mfilename('fullpath'));
-repoRoot = fileparts(scriptDir);
+simDir = fileparts(scriptDir);
+repoRoot = fileparts(simDir);
 moveDotScript = fullfile(repoRoot, 'experiment', 'MoveDot1_experiment_vX.m');
-addpath(fullfile(scriptDir, 'functions'));
 addpath(scriptDir);
-addpath(fullfile(scriptDir, 'debug'));
+addpath(simDir);
+addpath(fullfile(simDir, 'functions'));
+addpath(fullfile(simDir, 'debug'));
 addpath '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD'
 %% Participant configuration
 % Data flow: participant number + condition list -> input filenames -> simulation data.
@@ -94,7 +96,7 @@ validConditions = {'nondeviant', 'deviant'};
 if ~all(ismember(inputConditions, validConditions))
     error('inputConditions must be drawn from: %s', strjoin(validConditions, ', '));
 end
-simulationInputDir = fullfile(scriptDir, 'input');
+simulationInputDir = fullfile(simDir, 'input');
 
 %% Create input file needed from paths
 % Data flow: MovDot_SubXX.mat -> split into condition-specific dot paths.
@@ -446,7 +448,7 @@ legend(modelNames, 'Location', 'best');
 %% Save matrices, plots, and reproducibility metadata (300 dpi)
 % Data flow: dRSA outputs + run metadata -> descriptive filenames -> .mat/.png outputs.
 if saveOutputs
-    outputDir = fullfile(scriptDir, 'output');
+    outputDir = fullfile(simDir, 'output');
     subjectOutputDir = fullfile(outputDir, subjectLabel);
     conditionOutputDir = fullfile(subjectOutputDir, conditionLabel);
     dRSAtypeLabel = lower(paramsCore.dRSAtype);
