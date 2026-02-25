@@ -428,8 +428,9 @@ for iRow = 1:numel(dRSAAll)
     axis image;
     colorbar;
     title(sprintf('dRSA %s', modelNames{iModel}));
-    xlabel(sprintf('Time in %s (s)', modelNames{iModel}));
-    ylabel(sprintf('Time in %s (s)', rowNames{iRow}));
+    % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+    xlabel(sprintf('Time in %s (s)', rowNames{iRow}));
+    ylabel(sprintf('Time in %s (s)', modelNames{iModel}));
     currXTicks = xticks;
     currYTicks = yticks;
     xticks(sort([currXTicks(:); midTimeSeconds]));

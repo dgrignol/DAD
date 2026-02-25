@@ -1126,8 +1126,9 @@ for iFig = 1:numel(figLabels)
                 colorbar;
             end
             title(sprintf('dRSA %s', modelNames{modelCol}));
-            xlabel(sprintf('Time in %s (s)', modelNames{modelCol}));
-            ylabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+            xlabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            ylabel(sprintf('Time in %s (s)', modelNames{modelCol}));
             xticks(timeTicks);
             yticks(timeTicks);
             xticklabels(timeTickLabels);
@@ -1214,8 +1215,9 @@ for iTarget = 1:numel(targetOrder)
                 colorbar;
             end
             title(sprintf('%s | %s', local_pe_target_title(targetLabel), peModelNames{iModel}));
-            xlabel(sprintf('Time in %s (s)', peModelNames{iModel}));
-            ylabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+            xlabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            ylabel(sprintf('Time in %s (s)', peModelNames{iModel}));
             xticks(timeTicks);
             yticks(timeTicks);
             xticklabels(timeTickLabels);

@@ -1241,8 +1241,9 @@ for iFig = 1:numel(figLabels)
                 colorbar;
             end
             title(sprintf('dRSA %s', modelNames{modelCol}));
-            xlabel(sprintf('Time in %s (s)', modelNames{modelCol}));
-            ylabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+            xlabel(sprintf('Time in %s (s)', rowNames{iRow}));
+            ylabel(sprintf('Time in %s (s)', modelNames{modelCol}));
             xticks(timeTicks);
             yticks(timeTicks);
             xticklabels(timeTickLabels);

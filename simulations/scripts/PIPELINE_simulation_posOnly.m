@@ -421,8 +421,9 @@ for iModel = 1:nModels
     axis image;
     colorbar;
     title(sprintf('dRSA %s', modelNames{iModel}));
-    xlabel(sprintf('Time in %s (samples)', modelNames{iModel}));
-    ylabel(sprintf('Time in %s (samples)', rowName));
+    % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+    xlabel(sprintf('Time in %s (samples)', rowName));
+    ylabel(sprintf('Time in %s (samples)', modelNames{iModel}));
     hold on;
     plot(1:nTime, 1:nTime, 'w-', 'LineWidth', 1);
     hold off;

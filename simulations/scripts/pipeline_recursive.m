@@ -581,8 +581,9 @@ for iPlot = 1:nPlot
             axis image;
             colorbar;
             title(sprintf('dRSA %s', modelNames{iModel}));
-            xlabel(sprintf('Time in %s (samples)', modelNames{iModel}));
-            ylabel(sprintf('Time in %s (samples)', rowNames{iRow}));
+            % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+            xlabel(sprintf('Time in %s (samples)', rowNames{iRow}));
+            ylabel(sprintf('Time in %s (samples)', modelNames{iModel}));
             hold on;
             plot(1:nTime, 1:nTime, 'w-', 'LineWidth', 1);
             hold off;
@@ -631,8 +632,9 @@ for iRow = 1:numel(dRSAAllAvg)
         axis image;
         colorbar;
         title(sprintf('dRSA %s', modelNames{iModel}));
-        xlabel(sprintf('Time in %s (samples)', modelNames{iModel}));
-        ylabel(sprintf('Time in %s (samples)', rowNamesAvg{iRow}));
+        % dRSA uses corr(modelRDM, neuralRDM): x = neural/data time, y = model time.
+        xlabel(sprintf('Time in %s (samples)', rowNamesAvg{iRow}));
+        ylabel(sprintf('Time in %s (samples)', modelNames{iModel}));
         hold on;
         plot(1:nTime, 1:nTime, 'w-', 'LineWidth', 1);
         hold off;

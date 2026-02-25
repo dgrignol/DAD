@@ -1,5 +1,35 @@
 # 25 Feb 2026 01:08
 
+## Simulation plotting semantics
+
+### `simulations/scripts/PE_simulation_RDM_level_PE.m`
+- Correct dRSA matrix axis labels so x now reports neural/data time and y reports model time, matching the `corr(modelRDM, neuralRDM)` convention used by the computation.
+- Add an inline clarification comment at the plotting point to keep future matrix-layout edits aligned with the intended axis semantics.
+
+### `simulations/scripts/PE_simulation_diff.m`
+- Apply the same axis-label correction to both the main dRSA matrix plots and the PE-target matrix plots so figure annotations match the underlying matrix dimensions.
+- Add matching inline comments documenting the x/y convention in both plotting blocks to reduce interpretation mistakes when comparing figures across scripts.
+
+### `simulations/scripts/PIPELINE_simulation.m`
+- Swap the dRSA x/y label assignment to align axis text with neural-time on x and model-time on y.
+- Add the same matrix-orientation comment used in the other scripts for consistent plotting semantics.
+
+### `simulations/scripts/PIPELINE_simulation_posOnly.m`
+- Correct the sample-based dRSA axis labels so x refers to neural/data time samples and y refers to model-time samples.
+- Add an inline orientation note to keep the pos-only pipeline aligned with the full pipeline's dRSA interpretation.
+
+### `simulations/scripts/counterfactual_simulation.m`
+- Update dRSA matrix labels to the neural-time-x/model-time-y convention and document the convention inline.
+
+### `simulations/scripts/pipeline_recursive.m`
+- Correct dRSA axis labels in both per-condition and averaged matrix plotting blocks to prevent swapped-time interpretation in recursive outputs.
+- Add inline comments in both blocks describing the `corr(modelRDM, neuralRDM)` axis mapping.
+
+### `simulations/scripts/pipeline_recursive_backup.m`
+- Apply the same dRSA axis-label correction and inline orientation comment in the backup recursive plotting path.
+
+# 25 Feb 2026 01:08
+
 ## Experiment configuration and stimuli generation
 
 ### `experiment/lib/Config.m`
