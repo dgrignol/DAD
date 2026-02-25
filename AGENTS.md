@@ -11,3 +11,14 @@
   covering inputs, outputs, and key assumptions.
 - For trigger logic, align commentary with the canonical definitions in
   `experiment/trigger_codes.md` and `experiment/MoveDot1_experiment_vX.m`.
+
+## Local Tooling
+- MATLAB is installed on this machine at:
+  `/Applications/MATLAB_R2020a.app/bin/matlab`
+- Always invoke MATLAB via the absolute binary path. Do not use `matlab`
+  from `PATH` in commands.
+- Example non-interactive test run (preferred):
+  `/Applications/MATLAB_R2020a.app/bin/matlab -batch "run('experiment/stimuli_generation_v12.m')"`
+- If host architecture detection fails on Apple Silicon, force Intel-arch
+  startup for R2020a:
+  `arch -x86_64 /Applications/MATLAB_R2020a.app/bin/matlab -batch "run('experiment/stimuli_generation_v12.m')"`

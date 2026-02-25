@@ -1,3 +1,12 @@
+# 25 Feb 2026 05:21
+
+## Agent workflow documentation
+
+### `AGENTS.md`
+- Add a local-tooling section that documents the absolute MATLAB R2020a binary path on this machine and makes absolute-path invocation the canonical command style.
+- Provide non-interactive MATLAB execution examples for standard runs and Apple Silicon fallback (`arch -x86_64`) so scripted checks use a deterministic launch path.
+- Keep the new guidance adjacent to existing documentation/commenting requirements so agent runs follow repo-specific constraints in one place.
+
 # 25 Feb 2026 01:09
 
 ## Control-center docs and repo hygiene
