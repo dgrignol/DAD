@@ -96,7 +96,7 @@ addpath '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD'
 
 %% Participant configuration
 % Data flow: participant number + condition list -> input filenames -> simulation data.
-participantNumber = 87;
+participantNumber = 80;
 inputConditions = {'nondeviant', 'deviant'}; % conditions to run.
 inputConditions = cellfun(@lower, inputConditions, 'UniformOutput', false);
 shuffleDot2Trials = false; % true to shuffle dot2 trials relative to dot1 before dRSA

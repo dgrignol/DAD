@@ -1,3 +1,11 @@
+# 25 Feb 2026 01:09
+
+## Hypothesis testing script defaults
+
+### `simulations/scripts/PE_simulation_diff.m`
+- Change the local default `participantNumber` from 87 to 80 so quick runs target the Sub80 dataset without manual edits.
+- Keep all other participant/configuration defaults unchanged.
+
 # 25 Feb 2026 01:08
 
 ## Simulation plotting semantics
