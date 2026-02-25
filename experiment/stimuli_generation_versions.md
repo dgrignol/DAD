@@ -8,26 +8,51 @@ for `pathDuration`/`directionVariance`) when available; if missing, the lookup
 falls back to `repro` and then to the top-level `Cfg`. When none of these
 structures expose a field (currently Subj 04 and 05), the cell is left as `—`.
 
-| Input file | Subj | Source | curvFactor | isCurvFactorRand | trialsPerCondition | trialDuration | pathDuration | directionVariance | dotSpeedDegPerFrame | minDistanceBetweenDots | flipCurvatureOnDeviant | dotWidth |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| `experiment/input_files/MovDot_Sub98.mat` | 98 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub97.mat` | 97 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub96.mat` | 96 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub95.mat` | 95 | inferred_repro | 1.05 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub94.mat` | 94 | inferred_repro | 1.088 | 1 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub93.mat` | 93 | inferred_repro | 1.05 | 0 | 10000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub92.mat` | 92 | inferred_repro | 0.9 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub91.mat` | 91 | inferred_repro | 0.4 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub90.mat` | 90 | inferred_repro | 0.9 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub89.mat` | 89 | inferred_repro | 0.85 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub88.mat` | 88 | inferred_repro | 0.85 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | 0.5144 |
-| `experiment/input_files/MovDot_Sub87.mat` | 87 | repro | 0.45 | 0 | 20 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0.5144 |
-| `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — | — | — |
-| `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — | — | — |
+| Input file | Subj | Source | curvFactor | isCurvFactorRand | trialsPerCondition | trialDuration | pathDuration | directionVariance | dotSpeedDegPerFrame | minDistanceBetweenDots | flipCurvatureOnDeviant | randomizeCurvatureOnDeviant | deviantCurvatureRange | dotWidth |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| `experiment/input_files/MovDot_Sub98.mat` | 98 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub97.mat` | 97 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub96.mat` | 96 | inferred_repro | 1.05 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub95.mat` | 95 | inferred_repro | 1.05 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub94.mat` | 94 | inferred_repro | 1.088 | 1 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub93.mat` | 93 | inferred_repro | 1.05 | 0 | 10000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub92.mat` | 92 | inferred_repro | 0.9 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub91.mat` | 91 | inferred_repro | 0.4 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub90.mat` | 90 | inferred_repro | 0.9 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub89.mat` | 89 | inferred_repro | 0.85 | 0 | 1000 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub88.mat` | 88 | inferred_repro | 0.85 | 0 | 20 | 2.667 | 2.667 | [0, 45] | 0.03108 | — | — | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub87.mat` | 87 | repro | 0.45 | 0 | 20 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub85.mat` | 85 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
+| `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — | — | — | — | — |
+| `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — | — | — | — | — |
+| `experiment/input_files/MovDot_Sub86.mat` | 86 | repro | 0.45 | 0 | 1000 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | — | — | 0.5144 |
+| `experiment/input_files/MovDot_Sub83.mat` | 83 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
+| `experiment/input_files/MovDot_Sub84.mat` | 84 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
+| `experiment/input_files/MovDot_Sub80.mat` | 80 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
+| `experiment/input_files/MovDot_Sub81.mat` | 81 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
+| `experiment/input_files/MovDot_Sub82.mat` | 82 | repro | 0.45 | 1 | 100 | 2.67 | 2.667 | [0, 45] | 0.03108 | 1.029 | 1 | 0 | 0.45 | 0.5144 |
 
 This document summarizes how each `stimuli_generation_vXX.m` script differs in the
 kinds of dot-motion paths it can generate. It focuses on *capabilities* and how
 parameter options affect the output paths, not on any specific parameter values.
+
+## Table parameter guide
+
+This section documents each parameter currently included in the input-file table.
+Descriptions emphasize path consequences and include examples when useful.
+
+- **`curvFactor`**: Scales curvature magnitude for versions that use factor-based curvature updates. Example: a higher factor yields more strongly bending trajectories frame to frame.
+- **`isCurvFactorRand`**: Toggles whether curvature magnitude is resampled stochastically instead of fixed by the configured factor. Example: when enabled, trial-to-trial paths show wider bend-strength variability.
+- **`trialsPerCondition`**: Controls how many trajectories are generated per condition combination. Example: increasing it gives denser sampling for analysis while any single path shape is unchanged.
+- **`trialDuration`**: Sets the total path length in time, which determines how many motion updates occur per trial. Example: longer duration creates longer trajectories with more accumulated curvature.
+- **`pathDuration`**: Defines the segment duration for segmented versions or condition metadata for single-path versions. Example: in segmented scripts, shorter values produce more within-trial direction-change segments.
+- **`directionVariance`**: Defines deviant-turn magnitude options in likelihood conditions. Example: larger variance levels produce larger trajectory deflections at deviant onset.
+- **`dotSpeedDegPerFrame`**: Sets spatial step size per frame in visual degrees. Example: higher speed stretches the path farther each frame and can increase boundary pressure.
+- **`minDistanceBetweenDots`**: Minimum inter-dot separation for versions that enforce distance constraints. Example: increasing it rejects close approaches and yields more separated paired trajectories.
+- **`flipCurvatureOnDeviant`**: Toggles post-deviant curvature sign inversion on the deviant path. Example: a clockwise pre-deviant bend can become counterclockwise after deviant onset, creating an S-like turn.
+- **`randomizeCurvatureOnDeviant`**: Toggles post-deviant curvature resampling on the deviant path. Example: after onset, a gentle bend can switch to a stronger, weaker, or opposite-sign curvature.
+- **`deviantCurvatureRange`**: Sets the symmetric sampling interval for randomized post-deviant curvature. Example: wider ranges permit larger curvature jumps after the deviant frame.
+- **`dotWidth`**: Defines dot size used for rendering and geometric constraints. Example: larger dots reduce usable interior area and can increase boundary or distance-based rejections.
 
 ## Base behavior (all versions)
 
@@ -73,6 +98,10 @@ parameter options affect the output paths, not on any specific parameter values.
 - **Curvature flips after deviant onset** (S-shaped deviant paths): use **v09**.
 - **Export no-deviant baseline paths for deviant conditions**: use **v10**.
 - **Random post-deviant curvature in configurable +/- range**: use **v12**.
+- **Reduce boundary-selection bias while keeping v12-style deviant curvature
+  options**: use **v13**.
+- **Reduce residual position-direction coupling while preserving constant
+  within-trial curvature**: use **v14**.
 
 ## Version differences from the base
 
@@ -201,21 +230,56 @@ parameter options affect the output paths, not on any specific parameter values.
 **Omits (relative to other versions)**
 - **No additional path-generation omissions beyond v10** (v12 retains v10
   options, including predicted no-deviant baseline export).
+- **Boundary-safe feasible placement and curvature-floor safeguards** (v13).
 
-## Notes on parameter effects that change paths
+### v13 — `stimuli_generation_v13.m`
 
-These parameters exist across versions, but *only matter* when the version uses
-that capability:
+**Adds**
+- **Boundary-safe feasible placement with relative paths**: trajectories are
+  generated around the origin, then start positions are sampled from feasible
+  ranges so both deviant and no-deviant baseline paths remain in bounds.
+  *Example*: boundary validity is achieved by construction instead of selecting
+  rare start points that survive full-trial boundary rejection.
+- **Geometry-aware curvature floor option**: a local switch can clamp
+  near-zero per-trial curvature magnitudes to a rectangle-derived minimum when
+  needed. *Example*: very straight trajectories that cannot fit the full trial
+  are suppressed before placement, reducing regeneration loops.
+- **Optional baseline min-distance enforcement**: the analysis-only no-deviant
+  baseline path can be checked against `minDistanceBetweenDots` in addition to
+  the observed path. *Example*: predicted paths can be kept within the same
+  geometric separation regime as presented paths.
+- **Attempt guard for incompatible settings**: generation aborts after a
+  configurable maximum attempts per trial, which adds explicit failure behavior
+  when constraints are mutually incompatible (no direct path-shape effect).
 
-- **`directionVariance` (likelihood)**: larger values produce larger deviant
-  turns at the deviant onset frame.
-- **`deviantOnset` / `deviantOnsetVariance`**: shift the deviant turn earlier or
-  later within the trial (likelihood only).
-- **`directionChange` (path_duration_norm)**: wider distributions yield larger
-  early-trial direction changes.
-- **`curvFactor` + `isCurvValenceRand` / `isCurvFactorRand`**: increase curvature
-  magnitude and/or randomize curvature sign (v05, v06, v08-v10, v12).
-- **`randomizeCurvatureOnDeviant` + `deviantCurvatureRange`**: in v12, replace
-  post-deviant curvature with a random value in a configurable interval.
-- **`minDistanceBetweenDots`**: enforces separation when the version checks it
-  (v05, v08-v10, and v12); larger values yield more separated trajectories.
+**Omits (relative to other versions)**
+- **Whole-trial boundary-hit rejection as the primary bounds mechanism** (v06,
+  v08-v12).
+- **dRSA-proxy-aware trial-selection gate** (v14).
+
+### v14 — `stimuli_generation_v14.m`
+
+**Adds**
+- **dRSA-proxy-aware trial gate**: candidate trials are evaluated with a
+  reduced dRSA proxy that matches the target cross-model branch
+  (position-RDM euclidean vs direction-RDM cosine), and non-improving
+  candidates are regenerated. *Example*: trajectories remain smooth, but the
+  accepted trial bank is explicitly shaped to reduce position-dot1 vs
+  direction-dot1 coupling in corr-style matrices.
+- **Relative-improvement acceptance rule with optional hard cap**: the gate can
+  require a minimum score improvement over the current accepted-trial proxy,
+  plus an optional absolute score ceiling. *Example*: generation can enforce a
+  monotonic decline in the proxy score instead of only filtering out extreme
+  outliers.
+- **Condition-scoped and frame-strided proxy control**: gating can be limited
+  to nondeviant likelihood conditions and evaluated on sampled frames to
+  control compute load. *Example*: nondeviant trajectories can be decorrelated
+  more aggressively while deviant manipulations remain unchanged.
+- **Expanded reproducibility metadata for proxy-gate parameters and failures**:
+  saved repro fields include proxy-gate settings and rejection counts.
+  *Example*: downstream analyses can separate boundary/min-distance failures
+  from dRSA-proxy gate pressure.
+
+**Omits (relative to other versions)**
+- **Within-trial piecewise curvature updates** (not used; curvature remains
+  constant within each trial except optional deviant-point modulation).

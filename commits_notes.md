@@ -1,3 +1,27 @@
+# 25 Feb 2026 01:08
+
+## Experiment configuration and stimuli generation
+
+### `experiment/lib/Config.m`
+- Reduce `trialsPerCondition` from 1000 to 100 to shorten local generation/runtime loops while preserving the existing parameter structure.
+
+### `experiment/stimuli_generation_v13.m`
+- Add a new v13 generator that keeps the v12 output contract (`xySeqs`, `xySeqsPredicted`, `Cfg`, `repro`) while replacing whole-trial boundary rejection with relative-path generation plus feasible start-position placement.
+- Add geometry-aware curvature-floor protection, optional no-deviant-baseline min-distance enforcement, and hard attempt limits so incompatible parameter sets fail explicitly instead of looping indefinitely.
+- Expand script-level documentation and section comments with usage examples, data-flow notes, assumptions, and explicit output semantics aligned with experiment/runtime and simulation input builders.
+
+### `experiment/stimuli_generation_v14.m`
+- Add a new v14 generator that builds on v13 and introduces an optional dRSA-proxy-aware trial gate to reduce position-vs-direction cross-model coupling by accepting only candidates that improve a configurable proxy score.
+- Keep within-trial curvature constant (except optional deviant-point modulation), expose proxy-gate tuning parameters, and persist the gate settings/failure counts into reproducibility metadata.
+- Preserve the same saved artifacts (`xySeqs`, predicted deviant baselines, `Cfg`, `repro`) so downstream experiment and simulation workflows continue to load the expected structure.
+
+## Stimuli generation documentation
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the input-file parameter table with `randomizeCurvatureOnDeviant` and `deviantCurvatureRange`, and add additional subject rows (including Sub80-Sub86) so stored inputs can be audited against deviant-curvature settings.
+- Add a dedicated table parameter guide section documenting path-level effects for each tracked parameter, with concrete examples to align documentation with generation behavior.
+- Document new capability guidance for selecting v13 (boundary-safe placement and feasibility safeguards) vs v14 (dRSA-proxy-gated selection for reduced residual position-direction coupling).
+
 # 24 Feb 2026 10:59
 
 ## Simulation folder reorganization
