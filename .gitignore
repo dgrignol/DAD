@@ -1,4 +1,5 @@
 .DS_Store
+control-center/presentation/
 experiment/input_files/
 experiment/output_files/
 experiment/output/

@@ -1,5 +1,20 @@
 # 25 Feb 2026 01:09
 
+## Control-center docs and repo hygiene
+
+### `.gitignore`
+- Add `control-center/presentation/` to keep generated slides, figure artifacts, and temporary office-lock files out of version control by default.
+- Preserve the existing ignore rules for other experiment/simulation generated outputs.
+
+### `control-center/experiment_blueprint.md`
+- Add a comprehensive experiment work guide that links scientific hypotheses to concrete implementation files, trigger references, stimulus constraints, and analysis commitments.
+- Document decision points, quality gates, and canonical source-of-truth paths so future design changes can be traced directly to code/config files.
+
+### `control-center/experiment_description.md`
+- Add an early-stage brainstorming companion note that captures theoretical motivation and open design questions while pointing readers to the blueprint as the maintained canonical document.
+
+# 25 Feb 2026 01:09
+
 ## Hypothesis testing script defaults
 
 ### `simulations/scripts/PE_simulation_diff.m`
