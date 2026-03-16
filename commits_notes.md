@@ -1,5 +1,13 @@
 # 16 Mar 2026 15:44
 
+## Report generator archive
+
+### `simulations/report/generate_PIPELINE_simulation_report.m` -> `simulations/report_old/generate_PIPELINE_simulation_report.m`
+- Move the MATLAB Report Generator entry point out of the active `simulations/report` tree into `simulations/report_old` without changing its implementation.
+- Preserve the script source in the archive location so older report-generation workflows remain recoverable while signaling that the file is no longer part of the active reporting path.
+
+# 16 Mar 2026 15:44
+
 ## Diagnostic and tutorial scripts
 
 ### `simulations/scripts/autocorr_leakage_sweep.m`
