@@ -1,3 +1,12 @@
+# 16 Mar 2026 15:41
+
+## Repo hygiene
+
+### `.gitignore`
+- Add ignore rules for generated mock-presentation outputs so source slide materials can be tracked without pulling `.pptx` exports, figure renders, or temporary Office lock files into commits.
+- Ignore dRSA test snapshot and derivative export folders under `simulations/scripts/tests` to keep local debugging runs from polluting the working tree with generated PNG and MP4 artifacts.
+- Ignore archived report PDFs under `simulations/report_old` and local shell history files so only source documents and report-generation scripts remain visible to git.
+
 # 25 Feb 2026 05:21
 
 ## Agent workflow documentation

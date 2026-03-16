@@ -17,3 +17,14 @@ simulations/pipeline_recursive_backup.m
 input/
 experiment/lib/Config.m~
 *~
+
+# Generated presentation outputs and Office lock files
+control-center/mock_presentation/*.pptx
+control-center/mock_presentation/figures/
+**/~$*.pptx
+
+# Generated analysis/test artifacts
+simulations/scripts/tests/RDMs_snapshots/
+simulations/scripts/tests/derivatives/
+simulations/report_old/**/*.pdf
+**/.Rhistory
