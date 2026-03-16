@@ -1,5 +1,46 @@
 # 16 Mar 2026 15:41
 
+## dRSA PCR backends and one-dot workflow
+
+### `simulations/functions/dRSA_PCR.m`
+- Replace the legacy PCR-only implementation with a strategy-driven autocorrelation-removal backend that supports the existing PCR+border path plus `ridge_full_autocorr`, `ridge_tapered_autocorr`, and `ar1_prewhite_ridge`.
+- Add helper blocks for explicit autocorrelation-regressor construction, lag-weighted ridge penalties, pooled AR(1) estimation/prewhitening, and first-predictor extraction so the target dRSA regressor is estimated consistently across strategies.
+- Expand the function header and section comments to document the strategy options, parameter semantics, and the row-wise regression flow used when converting model/neural RDM streams into dRSA matrices.
+
+### `simulations/functions/dRSA_coreFunction.m`
+- Extend the PCR parameter contract with strategy-selection and regularization controls (`RegressStrategy`, `RidgeLambdaFactor`, `TaperSigmaFactor`, `StandardizePredictors`, `AR1Clip`, `AutoPenaltyStrength`, `NormalizeAutoPenaltyPerRow`).
+- Validate the new strategy names and guard the weighted-penalty settings so downstream PCR calls fail early on unsupported configurations instead of silently reverting to legacy behavior.
+
+### `simulations/functions/dRSA_computeRDM.m`
+- Add an optional debug path that reconstructs and plots one square RDM sample from the condensed vector form, with configurable sample index and optional PNG export.
+- Keep the debug branch gated behind `params.debug` so standard pipeline runs preserve the original computation path unless debugging is explicitly enabled.
+
+### `simulations/scripts/PE_simulation_diff.m`
+- Broaden the script from corr-only usage to a `dRSAtypeToRun` switch that accepts both `corr` and `PCR`, while keeping the shared simulation and export path intact.
+- Add top-level debug parameters for the new `dRSA_computeRDM` snapshot path and keep the PCR parameter struct populated so the updated core functions can be exercised from the legacy PE workflow.
+- Update the script commentary to reflect the new branch selection semantics and keep the existing-results rerun path compatible with the expanded dRSA modes.
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot.m`
+- Add a dedicated one-dot PE simulation pipeline with full script-level documentation, explicit usage examples, and section comments that trace data flow from input loading through dRSA/PE computation to organized output export.
+- Support both `corr` and `PCR` execution, including the new PCR regression strategies, deviant-only analysis controls, and separate plotting control via `cutPostDevPlot` so analysis cropping and visualization cropping can diverge cleanly.
+- Persist the expanded reproducibility metadata and strategy tags into output naming so one-dot comparison runs can coexist without overwriting each other.
+
+### `simulations/scripts/one-dot/run_pipeline.m`
+- Add a documented helper that batch-runs the one-dot PCR workflow across participants and regression strategies using explicit parameter overrides.
+- Keep the helper in function form so the script-level `clearvars -except` in the main pipeline does not wipe the outer batch-loop variables during repeated runs.
+
+## Documentation
+
+### `simulations/documentation/dRSA_autocorr_regression_strategies.md`
+- Add a focused write-up of the available PCR autocorrelation-removal strategies, their expected artifact behavior, and the rationale for choosing ridge-based implementations over lasso/elastic-net variants in this repo.
+- Tie the conceptual explanation back to the concrete code paths so the strategy behavior can be audited against the current implementation.
+
+### `simulations/documentation/dRSA_type_PCR_explained.md`
+- Add a beginner-oriented, code-referenced walkthrough of `dRSAtype='PCR'` versus `dRSAtype='corr'`, including purpose, data flow, and the main parameter switches that affect behavior.
+- Include follow-the-code guidance so readers can trace the high-level conceptual differences down to the specific simulation and function entry points.
+
+# 16 Mar 2026 15:41
+
 ## Repo hygiene
 
 ### `.gitignore`

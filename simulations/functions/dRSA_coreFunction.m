@@ -35,6 +35,17 @@ function [dRSAmat] = dRSA_coreFunction (Y, model, params, varargin)
             % 'ExplainedVar' Take all component that explain more than n amount an variance, e.g. n = 0.1
             % 'CumulativeVar' Take all components until n of summed variance is explained, e.g. n = 0.99
 %params.PCR.Methodfactor: depending on which method we choose, it can be 71,0.85, 0.1, 0.99..... see explanation before
+%params.PCR.RegressStrategy: which regression backend to use for dRSAtype='PCR'
+            % 'baseline_pcr_border'      = original PCR + autocorr border
+            % 'ridge_full_autocorr'      = ridge regression with full-window autocorr regressors
+            % 'ridge_tapered_autocorr'   = ridge regression with tapered autocorr regressors
+            % 'ar1_prewhite_ridge'       = AR(1) prewhitening + ridge regression
+%params.PCR.RidgeLambdaFactor: ridge penalty factor, lambda = factor * nObservations
+%params.PCR.TaperSigmaFactor: Gaussian taper width as fraction of local window
+%params.PCR.StandardizePredictors: 1/0 to standardize predictor columns before ridge solve
+%params.PCR.AR1Clip: scalar in (0,1], clipping bound for pooled AR(1) estimate
+%params.PCR.AutoPenaltyStrength: non-negative strength for lag-dependent autocorr penalties
+%params.PCR.NormalizeAutoPenaltyPerRow: 1/0 to normalize mean autocorr penalty to 1 per row
 
 
 
@@ -78,6 +89,13 @@ defaultParams.PCR.Methodfactor = 0.1;
 defaultParams.PCR.AdditionalPCA = 0;
 defaultParams.PCR.RegressAutocor = 1;
 defaultParams.PCR.RessModel = 1;
+defaultParams.PCR.RegressStrategy = 'baseline_pcr_border';
+defaultParams.PCR.RidgeLambdaFactor = 0.06;
+defaultParams.PCR.TaperSigmaFactor = 0.33;
+defaultParams.PCR.StandardizePredictors = 1;
+defaultParams.PCR.AR1Clip = 0.99;
+defaultParams.PCR.AutoPenaltyStrength = 2;
+defaultParams.PCR.NormalizeAutoPenaltyPerRow = 1;
 
 
 %add them if they were not given
@@ -100,6 +118,19 @@ end
 %warning for PCR
 if strcmp(params.dRSAtype, 'PCR') && params.PCR.RegressAutocor == 0 && params.PCR.RessModel == 0
     error('PCR calculation is not possible if both RegressAutocor and RessModel are 0. You need to regress something out.');
+end
+
+% Validate strategy names once at entry so errors are explicit and early.
+if strcmp(params.dRSAtype, 'PCR')
+    validStrategies = {'baseline_pcr_border', 'ridge_full_autocorr', ...
+        'ridge_tapered_autocorr', 'ar1_prewhite_ridge'};
+    if ~any(strcmp(params.PCR.RegressStrategy, validStrategies))
+        error('Unknown params.PCR.RegressStrategy "%s". Valid options: %s.', ...
+            params.PCR.RegressStrategy, strjoin(validStrategies, ', '));
+    end
+    if params.PCR.AutoPenaltyStrength < 0
+        error('params.PCR.AutoPenaltyStrength must be >= 0.');
+    end
 end
 
 
