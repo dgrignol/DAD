@@ -1,3 +1,35 @@
+# 16 Mar 2026 15:44
+
+## Diagnostic and tutorial scripts
+
+### `simulations/scripts/autocorr_leakage_sweep.m`
+- Add a dedicated analysis-side sweep that rescales path extent and curvature dynamics, recomputes position autocorrelation, and summarizes how leakage width changes across the tested parameter grid.
+- Save CSV, Markdown, MAT, and heatmap outputs so stimulus-shape hypotheses can be compared quantitatively before changing generation code.
+
+### `simulations/scripts/barebone_pipeline.m`
+- Add a compact real-stimulus dRSA demo that runs both `corr` and `PCR` on dot-position streams using the original concatenate/subsample/dRSA structure.
+- Keep the script focused on minimal end-to-end data flow so the core dRSA API can be inspected without the complexity of the full PE pipelines.
+
+### `simulations/scripts/step_by_step/pipeline_base.m`
+- Add a stripped-down step-by-step baseline script for inspecting the dRSA building blocks in isolation.
+- Keep it separate from the real-data minimal examples so the introductory walkthrough remains easy to modify during debugging.
+
+### `simulations/scripts/step_by_step/pipeline_base_nondeviant_dot1_minimal.m`
+- Add a documented minimal real-data example that extracts nondeviant dot1 trials, builds position and direction streams, and runs exactly two small dRSA tests for direct inspection.
+- Support both one-dot and two-dot input formats so the walkthrough remains usable across the newer stimulus-generation variants.
+
+### `simulations/scripts/tests/toy_PE_debug.m`
+- Add a compact PE debugging script for inspecting observed, predicted, and PE streams around the deviant segment without running the full production pipeline.
+- Keep the script focused on geometric and representational sanity checks that help diagnose post-deviant behavior before larger batch runs.
+
+### `simulations/scripts/tests/toy_PE_debug_videos.m`
+- Add a video-oriented PE debug script that synchronizes path evolution and matrix-level diagnostics across post-deviant time for richer visual inspection.
+- Separate the video export workflow from the still-image debug script so heavier derivative generation remains optional.
+
+### `simulations/scripts/tests/toy_PE_debug_videos_displacement.m`
+- Add a displacement-aware variant of the PE video debugger so observed-path jump manipulations can be inspected with the same synchronized visual tooling.
+- Keep the displacement-specific logic isolated from the generic PE video debugger to avoid conflating the two test cases.
+
 # 16 Mar 2026 15:43
 
 ## Presentation source
