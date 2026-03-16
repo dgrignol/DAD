@@ -1,5 +1,25 @@
 # 16 Mar 2026 15:43
 
+## Presentation source
+
+### `control-center/mock_presentation/README.md`
+- Add a source-level README that explains the reproducible slide-deck workflow, the expected figure outputs, and the acceptance checks for rebuilding the presentation assets and PowerPoint export.
+- Document the relationship between the markdown deck, figure-generator script, and generated outputs so the presentation can be refreshed from source rather than edited only in binary form.
+
+### `control-center/mock_presentation/build_presentation.sh`
+- Add a one-command build script that regenerates figure assets for a selected subject and renders the markdown deck to a PowerPoint file with `pandoc`.
+- Resolve paths relative to the script directory so the build can be launched from any working directory without hand-editing output paths.
+
+### `control-center/mock_presentation/generate_expected_figures.py`
+- Add the figure-generation script that builds both real trajectory-derived assets and synthetic expected-pattern illustrations for the MEG meeting deck.
+- Keep the figure generation separate from the markdown slides so presentation assets can be refreshed independently when the source data or expected-pattern sketches change.
+
+### `control-center/mock_presentation/meg_meeting_slides.md`
+- Add the markdown source for the meeting presentation, covering literature framing, hypotheses, design, trigger mapping, planned dRSA analysis, and the expected result figures.
+- Reference the local `figures/` assets directly so the deck content remains editable in text form while the binary presentation output stays reproducible.
+
+# 16 Mar 2026 15:43
+
 ## Planning documents
 
 ### `control-center/experiment_blueprint.md`
