@@ -1,7 +1,7 @@
 # MoveDot1 Experiment Blueprint (Work Guide)
 
 Status: Draft (living document)
-Last updated: 2026-02-24
+Last updated: 2026-02-26
 
 ## Why This Document Exists
 
@@ -64,24 +64,41 @@ mid-trial. This allows dissociating:
 - representation of the new (deviant) trajectory,
 - and a candidate "prediction error" (PE) representation driven by mismatch.
 
-### Hypotheses (draft, refine before preregistration)
+### Hypotheses (draft)
 
-H1: Within predictable trials, the timing of the strongest stimulus-brain match
-shifts toward smaller positive lags and/or negative lags across trial time
-(stronger prior -> more anticipatory representation).
+In the predictable condition (non-deviant):
 
-Competing H1a (sharpening): lagged sensory representations strengthen over trial
-time (stronger encoding of what is observed as the system becomes tuned).
+H1a prediction: after the first few hundreds milliseconds of only lagged representation, the brain starts to figure out the the trajectory parameters and form a stronger prior, consequently we should observe a predictive peak emerging. 
+Concrete example (illustrative):
+Early in the trial: best brain/stimulus match at lag ≈ +80 ms
+Later in the same trial: match emerges at lag ≈ +20 ms or even lag < 0 indexing a predictive representation.
+Interpretation: as the trajectory parameters become more certain within a trial, the brain forms an internal model (“stronger prior”), so anticipatory representations will emerge.
 
 Competing H1b (no prediction): representations remain primarily lagged and stable
 over trial time.
 
-H2: After the deviant onset, there is a transient PE-like representation before
-the representation switches to the new (deviant) trajectory.
+H2a (dampening): As a stronger prior is formed and anticipatory representations emerges, lagged representations starts to fade, as they are explained away by the prediction. Lagged peak reduces intensity over the course of the trial.
 
-H3 (attention check / optional scientific target): Attended-dot representations
-are stronger and/or earlier than unattended-dot representations (block-level
-attention manipulation).
+Competing H2b (sharpening): lagged sensory representations strengthen over trial
+time (stronger encoding of what is observed as the system becomes tuned to the upcoming stimulation).
+
+
+In the non-predictable condition (deviant):
+
+H2 (vanilla PC): After the deviant onset, there is a transient PE-like lagged representation before
+the predictive representation switches to the new (deviant) trajectory.
+
+Competing H2a (Sharpened representation): After the deviant onset, brain continue representing predicted path for a small period and then swithces to the new (deviant) trajectory.
+
+-TODO: complete the attention manipulation-related hyphotheses:
+    Attention manipulation (trial-by-trial with two dots or one dot and central task): 
+
+    H3 (Attention strengthen representation): Attended-dot predictive representations
+    are stronger and/or earlier than unattended-dot.
+
+    H3b (vanilla PC): worse lagged representations for predictable unattended, than predictable attended; ...
+
+
 
 Each hypothesis must be linked to a concrete analysis metric (see "Analysis
 Plan") and a pre-specified contrast.
@@ -90,9 +107,9 @@ Plan") and a pre-specified contrast.
 
 These are the manipulations currently implemented in code:
 
-1. Predictability condition (likelihood stimulus type)
-   - Non-deviant / more predictable: `directionVariance = 0`
-   - Deviant / less predictable: `directionVariance = 45`
+1. Deviance condition (likelihood stimulus type)
+   - Non-deviant: no deviant turn at the deviant onset (implemented as `directionVariance = 0`)
+   - Deviant: deviant turn at the deviant onset (implemented as `directionVariance = 45` in current defaults)
    - Implemented in `experiment/lib/Config.m` and `experiment/stimuli_generation_v14.m`
 
 2. Attention block condition (which dot is task-relevant)
@@ -143,7 +160,7 @@ Key parameters (verify in `experiment/lib/Config.m`):
 - Dot rectangle size: `Config.dotRectSize = [10, 10]` deg
 - Dot speed: `Config.dotSpeedDegPerSec = 3.73` deg/s
 - Deviant onset: `Config.deviantOnset = 0.5` (fraction of trial)
-- Predictability levels: `Config.likelihood.directionVariance = [0, 45]`
+- Deviance levels: `Config.likelihood.directionVariance = [0, 45]` (non-deviant, deviant)
 - Two-dot separation: `Config.minDistanceBetweenDots = Config.dotWidth * 2`
 
 Important v14-specific property:
@@ -156,27 +173,95 @@ Important v14-specific property:
 
 The theoretical goals impose constraints on the stimuli.
 
-1. Smooth motion with simple latent parameters
+1. We might need to add an intertrial period for baseline correction! https://www.sciencedirect.com/science/article/pii/S0165027021000157
+
+2. Smooth motion with simple latent parameters
    - Constant speed per trial: supports stable inference and a strong prior.
    - Mostly constant curvature within trial: supports prediction of trajectory
      evolution after early frames.
 
-2. Deviant mid-trial (predictability break)
+3. Deviant mid-trial (predictability break)
    - Provides a controlled "unexpected event" to probe prediction error and
      switching dynamics.
-   - Implemented by an instantaneous direction change at deviant onset; v14 can
-     also flip or randomize curvature post-onset for the deviant path only.
+   - Implemented by an instantaneous direction change at deviant onset; v14 can also flip or randomize curvature post-onset for the deviant path only.
 
-3. Two dots with block-level attention
+4. Two dots with block-level attention
    - Supports an attention manipulation without changing stimulus statistics
      across blocks (only task relevance changes).
    - Requires enforcing a minimum inter-dot distance to avoid near-overlaps.
 
-4. Analysis-driven constraint: model separability
+5. Analysis-driven constraint: model separability
    - For dRSA (and for regression/PCR that partials out correlated models),
      position and direction model RDMs must not be too collinear.
    - v14 explicitly shapes the accepted trial bank to reduce cross-model
      coupling, rather than hoping random sampling produces enough separability.
+
+6. Deviance schedule across blocks/runs (**design choice under consideration**)
+   - Motivation: a stable environment (only non-deviant paths) should let the
+     trajectory prior keep strengthening across trials; a volatile environment
+     (deviants can occur) should reduce confidence in the non-deviant path.
+     This is expected to affect H1, including whether dRSA peak strength
+     increases monotonically over within-trial time.
+   - Option A (fully mixed, current default): deviant and non-deviant trials are
+     interleaved within each attention block.
+   - Option B (stable vs volatile contexts):
+     - Stable blocks/runs: 100% non-deviant trials.
+     - Volatile blocks/runs: deviant and non-deviant trials mixed (tentative:
+       50/50).
+   - Practical note: because blocks are already used for attention (attend
+     DotColor1 vs DotColor2), adding stable/volatile as an additional *block*
+     factor likely requires either (a) 4 blocks per run (attention x context),
+     or (b) implementing stable vs volatile at the *run* level while keeping
+     the existing two attention blocks per run.
+   - Analysis implication: compare H1 within non-deviant trials between stable
+     vs volatile contexts (e.g., slope/trend of dRSA peak lag/amplitude across
+     within-trial time).
+   - Tradeoff: a 50/50 deviant probability reduces "oddball surprise" and may
+     reduce PE magnitude; if H2 is primary, consider lowering deviant
+     probability in volatile blocks.
+
+7. Inter-trial masking (**design choice under consideration**)
+   - Consider adding a brief mask between trials to reduce sensory
+     carryover from the previous trajectory (aftereffects).
+   - Key tradeoff: stronger masking can reduce carryover but increases trial
+     length and may alter participant state/arousal.
+   - If adopted, lock mask type and duration in runtime code and document the
+     expected impact on H1/H2 contrasts.
+
+8. Deviant definition: direction-only vs direction+curvature
+   (**design choice under consideration**)
+   - Current framework supports either a pure direction change or a combined
+     direction+curvature change at deviant onset.
+   - Direction-only simplifies the formation of a new prior for participants, but adding curvature should not complicate that much.
+   - Consistency with free parameter at the start of trial.
+   - Adding curvature may increase ecological richness and decrease autocorrelation and cross-correlation.
+   - Currently adopted the direction+curvature.
+
+9. Catch role: enforcement-only vs scientific manipulation
+   (**design choice under consideration**)
+   - Option A: keep catch trials as compliance/engagement checks only.
+   - Option B: treat catch effects as a hypothesis-driven factor (requires
+     explicit preregistered contrasts and power planning).
+   - This choice affects both participant instructions and the inferential
+     scope of behavioral + MEG analyses.
+
+10. Fixation catch policy (currently disabled)
+   (**design choice under consideration**)
+   - Fixation catches are currently disabled (`Catch.CatchRatioFix = 0`), while
+     occlusion catches are used.
+   - Re-enabling fixation catches may improve fixation monitoring but can alter
+     attentional state and task demands.
+   - If enabled, define target frequency/timing constraints and verify trigger
+     behavior for mixed catch types.
+
+11. Speed policy: fixed vs variable speed
+    (**design choice under consideration**)
+    - Fixed speed (current) supports cleaner latent-parameter inference and
+      simpler model separability.
+    - Variable speed may broaden generalization but can introduce extra
+      covariance between direction, position, and time-varying kinematics.
+    - If variable speed is introduced, predefine the speed distribution and the
+      strategy for controlling added model coupling in analysis.
 
 If a stimulus change improves one goal but harms another, record it in the
 "Decision Log" with the expected impact on hypotheses.
@@ -319,16 +404,30 @@ For interpretability, plan for controlling shared variance between models:
 
 - dRSA peak lag (sign and magnitude): does neural representation lead or lag?
 - dRSA peak amplitude: strength of representation
-- Evolution of peak lag/amplitude over trial time (pre-deviant)
-- Post-deviant time course: PE transient, then switch to deviant encoding
+- Evolution of peak lag/amplitude over trial time
+- Post-deviant time course only: PE
 
-### Minimal Prereg Items To Lock (before real data)
+### Minimal Items To Lock (before real data)
 
-- Exact condition contrasts (predictable vs deviant; attended vs unattended)
-- Primary time windows of interest (pre-registered or justified)
-- The operational definition of "predictive" vs "lagged" representation
-- The regression/partialing strategy across correlated stimulus models
-- Handling of gaze breaks/replays and catch trials (exclude vs model separately)
+- [ ] Exact condition contrasts (non-deviant vs deviant; attended vs unattended):
+  Deviance and volatility context (H1/H2):
+  - H1 (within non-deviant trials): contrast the evolution of dRSA peak lag/amplitude across within-trial time in the pre-deviant portion of the trial (early vs late pre-deviant windows, justified), or test a monotonic trend (e.g., peak amplitude increasing over within-trial time).
+  - H1 (context modulation; if using stable vs volatile blocks/runs): use only non-deviant trials and contrast stable context (all non-deviant) vs volatile context (mixed deviant/non-deviant, tentative 50/50) on the H1 readout (e.g., slope/trend of dRSA peak lag/amplitude across within-trial time). Working prediction: stable context shows a stronger monotonic increase in peak strength and/or a stronger shift toward predictive lags.
+  - Optional H1 between-trial-type check (in matched pre-onset windows): non-deviant vs deviant to test whether the *possibility* of a deviant (and/or the deviant trial type itself) reduces anticipatory shift even before the onset.
+  - H2 (deviant response): time-lock to deviant onset and test a post-onset sequence in deviant trials:
+    - predicted-path model (no-deviant baseline) vs deviant-path model (observed) vs PE model (predicted minus observed).
+    - primary contrasts: early post-onset PE > (predicted, deviant); later post-onset deviant > predicted; and deviant vs non-deviant differences in the same post-onset windows (use a pseudo-onset in non-deviant trials for alignment).
+
+  Attention (H3, optional):
+  - attended vs unattended dot: compare dRSA peak lag/amplitude for the attended vs unattended dot as a function of block instruction (attend DotColor1 vs attend DotColor2), collapsing across deviance unless an interaction is explicitly targeted.
+  - Optional interaction: (attended minus unattended) differs between deviant and non-deviant trials, especially post-onset.
+
+- [x] Operational definition of "predictive" vs "lagged" representation (via dRSA peak lag, where `lag = t_brain - t_stim`):
+  *predictive = peak lag < 0 ms, or peak lag < +100 ms (timing incompatible with a purely feedforward sensory delay);*
+  *lagged = peak lag > +100 ms.*
+- [ ] The regression/partialing strategy across correlated stimulus models
+- [x] Handling of gaze breaks/replays and catch trials: 
+  *exclude gaze-break trials; treat replayed trials as normal trials.*
 
 ## Quality Gates Before Collecting Real MEG Data
 
@@ -348,8 +447,8 @@ Trigger sanity (end-to-end):
 
 Behavior sanity:
 
-- Verify catch trials are perceivable and response collection works.
-- Decide whether missed catches are acceptable and how they affect analysis.
+- Verify catch trials are perceivable and response collection works. Run small Pilot with lab members.
+- Decide which missed catches rate is acceptable.
 
 ## Open Decisions / Questions (Keep Short, Resolve Early)
 
@@ -359,6 +458,12 @@ These should be resolved before committing to a full data-collection campaign:
   stable dRSA estimates? (`Config.trialsPerCondition` and trial struct runs)
 - Deviant definition: direction change only vs direction + curvature modulation
   (v14 supports both; pick one and justify).
+- Deviance schedule / block context: keep a fully mixed design, or add stable
+  contexts (all non-deviant) plus volatile contexts (mixed deviant/non-deviant;
+  tentative 50/50). If adopted, decide whether context is implemented as blocks
+  (attention x context implies 4 blocks per run) or as run types, and decide how
+  many stable/volatile blocks or runs per subject (tentative minimum: 1 stable
+  run + 1 volatile run; better: 2+2, counterbalanced order).
 - Catch trials: purely engagement vs a scientific manipulation (then prereg).
 - Whether fixation catches should be re-enabled (currently disabled in v11).
 - Whether speed should be fixed (current) or varied (adds complexity and model

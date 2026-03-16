@@ -1,3 +1,16 @@
+# 16 Mar 2026 15:43
+
+## Planning documents
+
+### `control-center/experiment_blueprint.md`
+- Expand the blueprint from a short work guide into a broader design document that separates non-deviant and deviant hypotheses, adds concrete interpretation examples, and records multiple open design choices that still need to be locked before data collection.
+- Rename the primary manipulation framing from "predictability" to explicit non-deviant versus deviant trial structure, and connect that framing to the current Config defaults and analysis constraints.
+- Flesh out the "minimal items to lock" section with more concrete hypothesis/contrast definitions, including matched post-onset deviant comparisons and optional context/attention extensions.
+
+### `control-center/objectives.md`
+- Add a standalone project checklist that separates experiment definition, presentation preparation, implementation, piloting, and full data collection milestones.
+- Include a long-form "Deep Research" prompt that formalizes the current theory-audit request, expected terminology, and the boundary conditions for rewriting the hypothesis set without redesigning the paradigm.
+
 # 16 Mar 2026 15:42
 
 ## Stimulus generation controls and version expansion
