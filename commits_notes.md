@@ -1,3 +1,36 @@
+# 16 Mar 2026 15:42
+
+## Stimulus generation controls and version expansion
+
+### `experiment/lib/Config.m`
+- Update the current generation defaults toward a smaller local batch size and a higher baseline curvature, while also switching the deviant-curvature path to random post-onset curvature sampling.
+- Add explicit interval-based controls for baseline curvature, post-deviant curvature, signed deviant turns, and deviant displacement geometry so newer generators can constrain path families directly from Config instead of hard-coding ranges in each script.
+- Extend the `likelihood` config struct with the new signed-turn and displacement fields so existing stimulus-type selection code can access the added controls through the same configuration object.
+
+### `experiment/stimuli_generation_v14.m`
+- Extend v14 to support explicit signed deviant-turn windows for likelihood-mode generation while preserving the existing proxy-gated, boundary-safe generation structure.
+- Keep the saved reproducibility metadata aligned with the new turn-window controls so generated inputs can be audited against the configured deviant schedule.
+
+### `experiment/stimuli_generation_v15.m`
+- Add a new boundary-safe two-dot generator that introduces explicit initial/deviant curvature windows on top of the v14 signed-turn and dRSA-proxy-gate logic.
+- Preserve the predicted no-deviant export path and the existing output contract so downstream experiment and simulation code can consume v15 outputs without loader changes.
+
+### `experiment/stimuli_generation_v15_experimentalPathScale.m`
+- Add an experimental v15 variant that shortens path geometry through a local path-scaling manipulation while keeping the same broad generation pipeline and saved outputs.
+- Keep the variant separate from the main v15 script so experimental geometry changes do not silently alter the canonical generator.
+
+### `experiment/stimuli_generation_v16_Displacement.m`
+- Add a v16 generator that layers deviant-onset displacement control onto the existing turn and curvature manipulations, with configurable annular-sector sampling and mode-based overrides.
+- Preserve the dRSA-proxy gate and no-deviant predicted export so displacement can be tested without breaking the analysis-oriented output structure.
+
+### `experiment/stimuli_generation_v17.m`
+- Add a one-dot generator that carries forward the v16 deviant controls and proxy gate while collapsing the path representation to a single observed dot.
+- Document and export the one-dot output shape explicitly so downstream one-dot analyses can rely on a stable `frames x 2` coordinate contract.
+
+### `experiment/stimuli_generation_versions.md`
+- Expand the input-file audit table with the newer curvature, turn, displacement, gate, and onset fields so subject-level generation settings can be compared from the saved inputs alone.
+- Add capability notes for v15, v15 experimental path scaling, v16 displacement, and v17 one-dot generation to explain when each generator should be used and what each adds relative to the base behavior.
+
 # 16 Mar 2026 15:41
 
 ## dRSA PCR backends and one-dot workflow

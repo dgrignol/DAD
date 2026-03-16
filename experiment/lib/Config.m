@@ -2,7 +2,7 @@ classdef Config
     properties(Constant)
     
         %general
-        trialsPerCondition = 100;%20 %10000;  %nSeq in their code
+        trialsPerCondition = 50;%20 %10000;  %nSeq in their code
         trialDuration = 2.67;       %in seconds
         trialRepetetion = 1;
         %general - pc settings
@@ -14,7 +14,7 @@ classdef Config
         % stimulusType = Utils.path_duration;
 
         %curvyness
-        curvFactor = 0.45;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant
+        curvFactor = 0.8;%0.4%0.9 %1.05 %new parameter for 120Hz. Old parameter 2.1;            %added to the direction angle in case of constant #HERE 0.45
         isCurvValenceRand = true;   %if set the curvyness valence (ie +/- will be random from one path to the other), else will alternate
         isCurvFactorRand = true;    %if set the curvFactor will be multiplied by a rand before added
 
@@ -33,8 +33,41 @@ classdef Config
         deviantOnset = 0.5; %midway the path duration
         deviantOnsetVariance = 0;
         flipCurvatureOnDeviant = true; %set true to flip curvature sign at deviant onset
-        randomizeCurvatureOnDeviant = false; %set true to sample a new post-deviant curvature value (deviant path only)
-        deviantCurvatureRange = 0.45; %post-deviant curvature is sampled uniformly in [-range, +range]
+        randomizeCurvatureOnDeviant = true; %set true to sample a new post-deviant curvature value (deviant path only) #HERE flase
+        deviantCurvatureRange = 0.35; %post-deviant curvature is sampled uniformly in [-range, +range]
+        % Explicit curvature windows (deg/frame) for stimuli_generation_v15.m.
+        % Format: one row per allowed interval [minCurvature, maxCurvature].
+        % These defaults enforce |curvature| >= 0.3755 and <= 0.8.
+        initialCurvatureWindows = [-0.8, -0.3755; 0.3755, 0.8];
+        deviantCurvatureWindows = [-0.8, -0.3755; 0.3755, 0.8];
+        % Optional explicit deviant-turn windows (signed degrees) for
+        % likelihood stimulus generation in stimuli_generation_v14.m.
+        % Format: one row per allowed interval [minSignedTurn, maxSignedTurn].
+        % Example below enforces |turn| >= 45 deg and allows both CW/CCW:
+        %   [-180, -45] U [45, 180]
+        % Set to [] to keep legacy generation from directionVariance.
+        deviantSignedTurnWindows = [-80, -20; 20, 80];
+        % Optional deviant displacement region for stimuli_generation_v16_Displacement.m.
+        % Radius is [innerRadius, outerRadius] in visual degrees.
+        % Angles are signed degrees relative to pre-deviant heading.
+        % Displacement mode selects how radius/angle controls are interpreted:
+        %   - 'off': disable displacement.
+        %   - 'constrained': use radius + angle windows as configured.
+        %   - 'freeStart': ignore configured radius and angle windows by
+        %     forcing full-circle angles [-180, 0; 0, 180] and a
+        %     screen-scale radius [0, max(dotRectSize)].
+        % Set radius to [0, 0] or angle windows to [] to disable displacement
+        % when using 'constrained'.
+        deviantDisplacementMode = 'freeStart';
+        deviantDisplacementRadiusRangeDeg = [0.5, 1.8];
+        deviantDisplacementAngleWindowsDeg = [-140, -40; 40, 140];
+        % dRSA proxy-gate controls for stimuli_generation_v14+/v17 style
+        % acceptance filtering.
+        % - enableDrsaProxyGate toggles gate use in all conditions.
+        % - applyDrsaProxyGateToNondeviantOnly limits the gate to
+        %   nondeviant conditions when enabled.
+        enableDrsaProxyGate = true;
+        applyDrsaProxyGateToNondeviantOnly = false;
 
         numXGrids = 2;              %num of grids in the rect of the dot
         numYGrids = 2;
@@ -58,7 +91,11 @@ classdef Config
         %was before 'pathDuration', 1.0, ... 'directionVariance', [0, 10, 20, 30]
         likelihood = struct('pathDuration', 2.6667, ...    %in seconds
             'directionVariance', [0, 45], ...   %represents the predictability
-            'directionChange', 30); %not used in this type
+            'directionChange', 30, ... %not used in this type
+            'deviantSignedTurnWindows', Config.deviantSignedTurnWindows, ... %explicit signed deviant turns (optional)
+            'deviantDisplacementMode', Config.deviantDisplacementMode, ... %off|constrained|freeStart
+            'deviantDisplacementRadiusRangeDeg', Config.deviantDisplacementRadiusRangeDeg, ... %annulus bounds (optional)
+            'deviantDisplacementAngleWindowsDeg', Config.deviantDisplacementAngleWindowsDeg); %signed angle windows (optional)
 
         %dot settings - path_duration
         % was before [0.2, 0.4, 0.6, 0.8, 1, 1.2, 1.6, 2, 2.5, 3.2]

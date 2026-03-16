@@ -1,6 +1,6 @@
 %% Stimuli Generation (uniform starts, boundary-safe placement, dRSA-proxy trial gate)
-% Script: stimuli_generation_v14.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v14 updates by Codex
+% Script: stimuli_generation_v15_experimentalPathScale.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v15 updates by Codex
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -21,10 +21,6 @@
 %     - one constant curvature value per dot at trial start,
 %     - optional deviant-only curvature change at deviant onset,
 %     - no additional within-trial curvature updates.
-%   Deviant turn angles can be configured in two ways:
-%     - legacy: generated from directionVariance as linspace(dirVar, 360-dirVar),
-%     - explicit signed windows from Config.deviantSignedTurnWindows
-%       (e.g., [-180 -45; 45 180]) for direct threshold-style control.
 %
 %   To reduce residual dRSA position-direction cross-correlation without
 %   changing trajectory smoothness, v14 adds a dRSA-proxy-aware gate:
@@ -38,6 +34,11 @@
 %   This preserves path smoothness while shaping the trial ensemble directly
 %   toward lower position-dot1 vs direction-dot1 dRSA coupling.
 %
+%   v15 keeps the same constant-curvature rules and deviant-point behavior as
+%   v14, but adds a local `pathScale` multiplier on step size so path spatial
+%   extent can be reduced without changing frames-per-trial or deviant timing.
+%   By default, `pathScale = 0.5` produces half-length paths.
+%
 %   Optionally plots a random subset of paths per condition after generation.
 %   This version also saves the no-deviant baseline paths for deviant
 %   conditions to a separate analysis-only file.
@@ -48,13 +49,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v15_experimentalPathScale;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v15_experimentalPathScale;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -64,6 +65,8 @@
 % Outputs:
 %   - Saves xySeqs, Cfg, and repro to Config.inputDirectory using Config.stimuliFileName.
 %   - repro captures Config, script settings, and RNG state needed to reproduce paths.
+%   - Cfg.dpf stores the effective (scaled) per-frame displacement and
+%     Cfg.pathScale stores the local spatial scaling factor.
 %   - xySeqs(...).xy is frames x 4 with columns [x1 y1 x2 y2] in visual degrees.
 %   - Saves xySeqsPredicted and Cfg to input_files/MovDot_SubXX_predicted.mat.
 %     The "predicted" file stores no-deviant baseline paths for deviant conditions
@@ -77,6 +80,8 @@
 %   - Curvature modulation affects only the deviant path after deviant onset.
 %   - If both deviant-curvature options are enabled, randomization takes
 %     precedence over sign flipping.
+%   - `pathScale` applies only to per-frame displacement, so it changes path
+%     spatial extent while preserving frame count and deviant timing.
 %   - Curvature stays constant within each trial except optional deviant-point
 %     modulation in deviant conditions.
 %   - No-deviant baselines reuse the same start points and pre-deviant
@@ -97,6 +102,7 @@ renderPreview = false; % set true to draw stimuli during generation
 plotPathsAtEnd = true; % set true to plot path samples after generation
 plotPathsPerCondition = 20; % number of paths to plot per condition (randomly sampled)
 plotPathConditions = [0 45]; % directionVariance values to plot as conditions
+pathScale = 0.5; % local path-length scale on dotSpeedDegPerFrame (0.5 -> half-length paths)
 flipCurvatureOnDeviant = Config.flipCurvatureOnDeviant; % set true to flip curvature sign at deviant onset
 randomizeCurvatureOnDeviant = Config.randomizeCurvatureOnDeviant; % set true to sample a new curvature at deviant onset
 deviantCurvatureRange = Config.deviantCurvatureRange; % sampled post-deviant curvature range is [-range, +range]
@@ -112,6 +118,9 @@ drsaProxyGateMinScoreImprovement = 0.0005; % candidate must improve proxy score 
 drsaProxyGateMaxMeanAbsCorr = inf; % optional absolute cap (set finite to enforce hard maximum)
 if deviantCurvatureRange < 0
     error('Config.deviantCurvatureRange must be >= 0.');
+end
+if ~isscalar(pathScale) || ~isfinite(pathScale) || pathScale <= 0
+    error('pathScale must be a finite scalar > 0.');
 end
 if drsaProxyGateMinAcceptedTrials < 0 || ...
         floor(drsaProxyGateMinAcceptedTrials) ~= drsaProxyGateMinAcceptedTrials
@@ -135,6 +144,8 @@ userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, 
     Config.dialogPrompts, Config.dialogDefaults);
 viewingDistance = userDoubles(1);
 subjectID = userDoubles(2);
+% Centralized scaled step used by all trajectory updates in v15.
+scaledDotSpeedDegPerFrame = Config.dotSpeedDegPerFrame * pathScale;
 
 % Seed RNG for reproducibility (per subject)
 rng(subjectID);
@@ -232,7 +243,7 @@ if ~skipGeneration
     if maxTurnRadiusDeg <= 0
         error('Dot rectangle minus dot width must be > 0 to generate paths.');
     end
-    curvatureFeasibilityFloorDeg = rad2deg(Config.dotSpeedDegPerFrame / maxTurnRadiusDeg);
+    curvatureFeasibilityFloorDeg = rad2deg(scaledDotSpeedDegPerFrame / maxTurnRadiusDeg);
     effectiveCurvatureFloorDeg = min(curvatureFeasibilityFloorDeg, abs(Config.curvFactor));
     if enforceCurvatureFeasibilityFloor && abs(Config.curvFactor) < curvatureFeasibilityFloorDeg
         warning(['Config.curvFactor (%.4f) is below geometry feasibility floor (%.4f). ' ...
@@ -246,10 +257,7 @@ if ~skipGeneration
 
         for pathDurIndex = 1:length(stimulusTypeConfig.pathDuration)
             pathDuration = stimulusTypeConfig.pathDuration(pathDurIndex);
-            % Build per-trial deviant turn schedule (degrees).
-            % Data flow: Config likelihood settings -> turn vector -> deviant frame angle update.
-            trialDeviances = local_build_likelihood_deviant_turns(stimulusTypeConfig, ...
-                dirVar, Config.trialsPerCondition);
+            trialDeviances = linspace(dirVar, 360 - dirVar, Config.trialsPerCondition);
             isNondeviantCondition = (Config.stimulusType ~= Utils.likelihood || dirVar == 0);
             useDrsaProxyGate = enableDrsaProxyGate && ...
                 (~applyDrsaProxyGateToNondeviantOnly || isNondeviantCondition);
@@ -378,8 +386,8 @@ if ~skipGeneration
                     relativePathsFrameDotXY = zeros(framesPerTrial, 4);
                     relativeDummyPathsFrameDotXY = zeros(framesPerTrial, 4);
                     if numSteps > 0
-                        stepVectors = directionVectors(2:end, :) * Config.dotSpeedDegPerFrame;
-                        dummyStepVectors = dummyDirectionVectors(2:end, :) * Config.dotSpeedDegPerFrame;
+                        stepVectors = directionVectors(2:end, :) * scaledDotSpeedDegPerFrame;
+                        dummyStepVectors = dummyDirectionVectors(2:end, :) * scaledDotSpeedDegPerFrame;
                         relativePathsFrameDotXY(2:end, :) = cumsum(stepVectors, 1);
                         relativeDummyPathsFrameDotXY(2:end, :) = cumsum(dummyStepVectors, 1);
                     end
@@ -659,17 +667,17 @@ if ~skipSave
     repro = struct();
     repro.script = struct( ...
         'name', mfilename, ...
-        'version', 'v14', ...
+        'version', 'v15_experimentalPathScale', ...
         'parameters', struct( ...
             'renderPreview', renderPreview, ...
             'plotPathsAtEnd', plotPathsAtEnd, ...
             'plotPathsPerCondition', plotPathsPerCondition, ...
             'plotPathConditions', plotPathConditions, ...
+            'pathScale', pathScale, ...
+            'scaledDotSpeedDegPerFrame', scaledDotSpeedDegPerFrame, ...
             'flipCurvatureOnDeviant', flipCurvatureOnDeviant, ...
             'randomizeCurvatureOnDeviant', randomizeCurvatureOnDeviant, ...
             'deviantCurvatureRange', deviantCurvatureRange, ...
-            'deviantSignedTurnWindows', local_get_struct_field_or_default(stimulusTypeConfig, ...
-                'deviantSignedTurnWindows', []), ...
             'enforceCurvatureFeasibilityFloor', enforceCurvatureFeasibilityFloor, ...
             'enforceMinDistanceOnNoDevBaseline', enforceMinDistanceOnNoDevBaseline, ...
             'enableDrsaProxyGate', enableDrsaProxyGate, ...
@@ -692,13 +700,16 @@ if ~skipSave
         'framesPerTrial', framesPerTrial, ...
         'minPos', minPos, ...
         'maxPos', maxPos, ...
+        'pathScale', pathScale, ...
+        'scaledDotSpeedDegPerFrame', scaledDotSpeedDegPerFrame, ...
         'drsaProxyFrameIndices', savedDrsaProxyFrameIndices, ...
         'curvatureFeasibilityFloorDeg', curvatureFeasibilityFloorDeg, ...
         'effectiveCurvatureFloorDeg', effectiveCurvatureFloorDeg, ...
         'generationAttemptStats', generationAttemptStats);
 
     Cfg = struct();
-    Cfg.dpf = Config.dotSpeedDegPerFrame;
+    Cfg.dpf = scaledDotSpeedDegPerFrame;
+    Cfg.pathScale = pathScale;
     Cfg.fps = Config.frameFrequency;
     Cfg.Stimulitype = Config.stimulusType;
     Cfg.dot_w = Config.dotWidth;
@@ -718,135 +729,13 @@ if renderPreview
     sca;
 end
 
-%% Local helpers (deviant turn scheduling)
-function trialDeviances = local_build_likelihood_deviant_turns(stimulusTypeConfig, ...
-        dirVar, nTrials)
-% LOCAL_BUILD_LIKELIHOOD_DEVIANT_TURNS Build per-trial deviant turn angles.
-%
-% Purpose:
-%   Build the deviant turn values (degrees) used at the deviant onset frame
-%   for likelihood stimuli. This helper supports two behaviors:
-%     1) Legacy behavior (default): linspace(dirVar, 360-dirVar, nTrials).
-%     2) Explicit signed-turn windows from
-%        stimulusTypeConfig.deviantSignedTurnWindows, e.g.:
-%           [-180 -45; 45 180]
-%        for threshold-style control in signed degrees.
-%
-% Example usage:
-%   turns = local_build_likelihood_deviant_turns(stimulusTypeConfig, 45, 50);
-%
-% Inputs:
-%   - stimulusTypeConfig: likelihood config struct.
-%   - dirVar: current directionVariance condition value.
-%   - nTrials: number of trials to generate in this condition.
-%
-% Output:
-%   - trialDeviances: [1 x nTrials] turn angles in degrees.
-%
-% Data flow:
-%   Config likelihood fields -> validated windows (optional) ->
-%   deterministic coverage across allowed ranges -> per-trial turn vector.
-    if nTrials < 1 || floor(nTrials) ~= nTrials
-        error('nTrials must be a positive integer.');
-    end
-
-    trialDeviances = zeros(1, nTrials);
-
-    % Nondeviant conditions never inject a turn at deviant onset.
-    if dirVar == 0
-        return;
-    end
-
-    signedTurnWindows = local_get_struct_field_or_default(stimulusTypeConfig, ...
-        'deviantSignedTurnWindows', []);
-    if isempty(signedTurnWindows)
-        % Backward-compatible behavior used in earlier versions.
-        trialDeviances = linspace(dirVar, 360 - dirVar, nTrials);
-        return;
-    end
-
-    turnWindows = local_parse_signed_turn_windows(signedTurnWindows);
-    windowWidths = turnWindows(:, 2) - turnWindows(:, 1);
-    totalWidth = sum(windowWidths);
-    cumulativeWidth = [0; cumsum(windowWidths)];
-
-    % Deterministic, evenly spaced coverage over the union of allowed windows.
-    % Trial order is still randomized later by TrialOrder in CreateInputFiles.
-    samplePositions = ((1:nTrials)' - 0.5) / nTrials * totalWidth;
-    for trialIndex = 1:nTrials
-        windowIndex = find(samplePositions(trialIndex) <= cumulativeWidth(2:end), 1, 'first');
-        offsetWithinWindow = samplePositions(trialIndex) - cumulativeWidth(windowIndex);
-        trialDeviances(trialIndex) = turnWindows(windowIndex, 1) + offsetWithinWindow;
-    end
-end
-
-function turnWindows = local_parse_signed_turn_windows(rawTurnWindows)
-% LOCAL_PARSE_SIGNED_TURN_WINDOWS Validate and normalize signed turn windows.
-%
-% Purpose:
-%   Normalize user-configured signed windows to an [N x 2] numeric matrix
-%   and validate domain constraints for likelihood deviant turns.
-%
-% Inputs:
-%   - rawTurnWindows: either [N x 2] matrix or 1D vector with pairwise
-%     boundaries [min1, max1, min2, max2, ...].
-%
-% Output:
-%   - turnWindows: sorted [N x 2] intervals in signed degrees.
-%
-% Assumptions:
-%   - Signed angle domain is [-180, 180].
-%   - Each row is [min, max] with min < max.
-%   - Windows do not overlap.
-    if ~isnumeric(rawTurnWindows) || isempty(rawTurnWindows)
-        error(['deviantSignedTurnWindows must be numeric and non-empty when provided. ' ...
-            'Use [] to disable explicit signed windows.']);
-    end
-
-    if isvector(rawTurnWindows)
-        if mod(numel(rawTurnWindows), 2) ~= 0
-            error('Vector deviantSignedTurnWindows must have an even number of elements.');
-        end
-        turnWindows = reshape(rawTurnWindows, 2, [])';
-    elseif size(rawTurnWindows, 2) == 2
-        turnWindows = rawTurnWindows;
-    else
-        error('deviantSignedTurnWindows must be Nx2 or a vector of paired bounds.');
-    end
-
-    if any(~isfinite(turnWindows(:)))
-        error('deviantSignedTurnWindows contains non-finite values.');
-    end
-    if any(turnWindows(:, 1) >= turnWindows(:, 2))
-        error('Each deviantSignedTurnWindows row must satisfy min < max.');
-    end
-    if any(turnWindows(:) < -180 | turnWindows(:) > 180)
-        error('deviantSignedTurnWindows bounds must stay within [-180, 180].');
-    end
-
-    turnWindows = sortrows(turnWindows, 1);
-    if size(turnWindows, 1) > 1
-        if any(turnWindows(2:end, 1) < turnWindows(1:end-1, 2))
-            error('deviantSignedTurnWindows rows must not overlap.');
-        end
-    end
-end
-
-function value = local_get_struct_field_or_default(structValue, fieldName, defaultValue)
-% LOCAL_GET_STRUCT_FIELD_OR_DEFAULT Read an optional struct field safely.
-    value = defaultValue;
-    if isstruct(structValue) && isfield(structValue, fieldName)
-        value = structValue.(fieldName);
-    end
-end
-
 %% Local helpers (dRSA-proxy scoring)
 function meanAbsCorrScore = local_compute_drsa_proxy_score( ...
         dot1Positions, dot1Directions, frameIndices, excludeDiagLagBins)
 % LOCAL_COMPUTE_DRSA_PROXY_SCORE Compute a dRSA-style proxy score.
 %
 % Purpose:
-%   Compute the acceptance-gate proxy used in v14 by mirroring the
+%   Compute the acceptance-gate proxy used in v14/v15 by mirroring the
 %   position-dot1 vs direction-dot1 corr dRSA branch at reduced time
 %   resolution:
 %     - position RDM columns use euclidean pair distances across trials,

@@ -1,6 +1,6 @@
-%% Stimuli Generation (uniform starts, boundary-safe placement, dRSA-proxy trial gate)
-% Script: stimuli_generation_v14.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v14 updates by Codex
+%% Stimuli Generation (deviant displacement + turn/curvature controls, boundary-safe, dRSA-proxy gate)
+% Script: stimuli_generation_v16_Displacement.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v16 updates by Codex
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -17,17 +17,47 @@
 %     - flipping curvature sign (legacy behavior), or
 %     - sampling a new curvature value in a configurable +/- range.
 %
-%   v14 keeps curvature smooth and predictable by design:
+%   v16 keeps curvature smooth and predictable by design:
 %     - one constant curvature value per dot at trial start,
 %     - optional deviant-only curvature change at deviant onset,
 %     - no additional within-trial curvature updates.
+%   In v16, initial and post-deviant curvature can be constrained with
+%   explicit windows from Config:
+%     - Config.initialCurvatureWindows
+%     - Config.deviantCurvatureWindows
+%   Each is an [N x 2] interval list in deg/frame, so curvature sampling can
+%   enforce signed thresholds directly (for example:
+%   [-0.8, -0.3755] U [0.3755, 0.8]).
 %   Deviant turn angles can be configured in two ways:
 %     - legacy: generated from directionVariance as linspace(dirVar, 360-dirVar),
 %     - explicit signed windows from Config.deviantSignedTurnWindows
 %       (e.g., [-180 -45; 45 180]) for direct threshold-style control.
 %
+%   v16 adds an optional deviant displacement layer, applied on top of the
+%   existing turn/curvature deviant logic:
+%     - at deviant onset, the observed path can jump to a new post-onset
+%       start point sampled in an annular-sector region (relative to local
+%       pre-deviant heading),
+%     - post-onset frames preserve the generated shape and are translated by
+%       that sampled displacement vector.
+%   This uses two primary controls:
+%     - Config.likelihood.deviantDisplacementRadiusRangeDeg = [innerRadius, outerRadius]
+%     - Config.likelihood.deviantDisplacementAngleWindowsDeg = [angleMin angleMax; ...]
+%       in signed degrees (e.g., [-140 -40; 40 140]).
+%   A displacement mode toggle can override/disable displacement geometry:
+%     - Config.likelihood.deviantDisplacementMode = 'off' | 'constrained' | 'freeStart'
+%       where:
+%         'off' disables displacement,
+%         'constrained' uses configured radius + angle windows,
+%         'freeStart' ignores configured radius + angle windows and forces
+%         effective controls to full-circle angles [-180, 0; 0, 180] and
+%         a screen-scale radius [0, max(Config.dotRectSize)].
+%   Turn and curvature deviant manipulations remain available and can be
+%   combined with displacement or disabled independently through existing
+%   Config settings.
+%
 %   To reduce residual dRSA position-direction cross-correlation without
-%   changing trajectory smoothness, v14 adds a dRSA-proxy-aware gate:
+%   changing trajectory smoothness, v16 keeps the v14 dRSA-proxy-aware gate:
 %     - generate a candidate trial using the same constant-curvature rules,
 %     - compute a proxy of the target dRSA cross-matrix by correlating
 %       position-RDM columns (euclidean) against direction-RDM columns
@@ -48,13 +78,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v16_Displacement;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v16_Displacement;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -79,6 +109,14 @@
 %     precedence over sign flipping.
 %   - Curvature stays constant within each trial except optional deviant-point
 %     modulation in deviant conditions.
+%   - Deviant displacement, when enabled, shifts only observed-path frames
+%     from deviant onset onward; no-deviant baselines stay unshifted.
+%   - Displacement is configured via Config.likelihood and can be toggled
+%     by deviantDisplacementMode ('off'|'constrained'|'freeStart').
+%   - In 'constrained', displacement can also be disabled by setting
+%     radius to [0, 0] or angle windows to [].
+%   - In 'freeStart', configured displacement radius/angle windows are
+%     ignored and replaced by full-circle controls.
 %   - No-deviant baselines reuse the same start points and pre-deviant
 %     curvature, but remove deviant-only curvature modulation and angle changes.
 %   - Boundary checks are satisfied by construction via feasible placement
@@ -100,6 +138,11 @@ plotPathConditions = [0 45]; % directionVariance values to plot as conditions
 flipCurvatureOnDeviant = Config.flipCurvatureOnDeviant; % set true to flip curvature sign at deviant onset
 randomizeCurvatureOnDeviant = Config.randomizeCurvatureOnDeviant; % set true to sample a new curvature at deviant onset
 deviantCurvatureRange = Config.deviantCurvatureRange; % sampled post-deviant curvature range is [-range, +range]
+% Explicit curvature windows for v16.
+initialCurvatureWindows = local_parse_interval_windows(Config.initialCurvatureWindows, ...
+    'Config.initialCurvatureWindows', false, -inf, inf);
+deviantCurvatureWindows = local_parse_interval_windows(Config.deviantCurvatureWindows, ...
+    'Config.deviantCurvatureWindows', false, -inf, inf);
 enforceCurvatureFeasibilityFloor = true; % set true to avoid near-straight trajectories that cannot fit bounds
 enforceMinDistanceOnNoDevBaseline = true; % set true to apply min-distance checks to the analysis-only no-deviant path too
 maxAttemptsPerTrial = 60000; % hard stop to avoid infinite loops under incompatible parameter sets
@@ -211,6 +254,44 @@ elseif Config.stimulusType == Utils.path_duration_norm
     stimulusTypeConfig = Config.path_duration_norm;
 end
 
+% Deviant displacement controls for v16.
+% Data flow: Config.likelihood settings -> validated controls -> effective mode-specific controls.
+% Minimum control surface:
+%   0) displacement mode ('off'|'constrained'|'freeStart').
+%   1) radius range of the annulus [inner, outer] in visual degrees.
+%   2) signed angle windows (degrees) relative to pre-deviant heading.
+deviantDisplacementModeRaw = local_get_struct_field_or_default( ...
+    stimulusTypeConfig, 'deviantDisplacementMode', ...
+    local_get_struct_field_or_default(Config.likelihood, ...
+    'deviantDisplacementMode', 'constrained'));
+deviantDisplacementMode = local_parse_deviant_displacement_mode( ...
+    deviantDisplacementModeRaw, 'deviantDisplacementMode');
+deviantDisplacementRadiusRangeRaw = local_get_struct_field_or_default( ...
+    stimulusTypeConfig, 'deviantDisplacementRadiusRangeDeg', ...
+    local_get_struct_field_or_default(Config.likelihood, ...
+    'deviantDisplacementRadiusRangeDeg', [0, 0]));
+deviantDisplacementAngleWindowsRaw = local_get_struct_field_or_default( ...
+    stimulusTypeConfig, 'deviantDisplacementAngleWindowsDeg', ...
+    local_get_struct_field_or_default(Config.likelihood, ...
+    'deviantDisplacementAngleWindowsDeg', []));
+deviantDisplacementRadiusRangeDegConfigured = local_parse_radius_range( ...
+    deviantDisplacementRadiusRangeRaw, 'deviantDisplacementRadiusRangeDeg');
+deviantDisplacementAngleWindowsDegConfigured = local_parse_interval_windows( ...
+    deviantDisplacementAngleWindowsRaw, ...
+    'deviantDisplacementAngleWindowsDeg', true, -180, 180);
+deviantDisplacementRadiusRangeDeg = deviantDisplacementRadiusRangeDegConfigured;
+deviantDisplacementAngleWindowsDeg = deviantDisplacementAngleWindowsDegConfigured;
+if strcmp(deviantDisplacementMode, 'off')
+    % Explicit mode override: disable displacement regardless of geometry.
+    deviantDisplacementRadiusRangeDeg = [0, 0];
+elseif strcmp(deviantDisplacementMode, 'freeStart')
+    % Radius/angle-unconstrained mode with feasible board-scale radius.
+    deviantDisplacementRadiusRangeDeg = [0, max(Config.dotRectSize)];
+    deviantDisplacementAngleWindowsDeg = [-180, 0; 0, 180];
+end
+enableDeviantDisplacement = local_is_deviant_displacement_enabled( ...
+    deviantDisplacementRadiusRangeDeg, deviantDisplacementAngleWindowsDeg);
+
 %% Main generation loop
 % Data flow: condition params -> trial loops -> relative paths -> feasible placement -> xySeqs outputs.
 if ~skipGeneration
@@ -290,11 +371,12 @@ if ~skipGeneration
                     % Per-trial parameters: initial directions and baseline curvature.
                     directionAngle = [Utils.RandAngleDegree(), Utils.RandAngleDegree()];
                     directionAngleNoDev = directionAngle;
-                    curvynessFactor = Config.curvFactor * [ ...
-                        Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand), ...
-                        Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand)];
+                    % Baseline curvature sampling for v16:
+                    % Data flow: Config.initialCurvatureWindows -> per-dot constant curvature.
+                    curvynessFactor = local_sample_from_windows(initialCurvatureWindows, 2);
 
                     % Optional anti-bias safeguard: avoid near-zero curvature that cannot fit in-bounds.
+                    % Data flow: sampled baseline curvature -> floor check -> floor-safe curvature.
                     if enforceCurvatureFeasibilityFloor
                         for dotIndex = 1:2
                             curvSign = sign(curvynessFactor(dotIndex));
@@ -303,12 +385,7 @@ if ~skipGeneration
                             end
                             curvMag = abs(curvynessFactor(dotIndex));
                             if curvMag < effectiveCurvatureFloorDeg
-                                if Config.isCurvFactorRand && abs(Config.curvFactor) > effectiveCurvatureFloorDeg
-                                    curvMag = effectiveCurvatureFloorDeg + rand(1) * ...
-                                        (abs(Config.curvFactor) - effectiveCurvatureFloorDeg);
-                                else
-                                    curvMag = effectiveCurvatureFloorDeg;
-                                end
+                                curvMag = effectiveCurvatureFloorDeg;
                                 curvynessFactor(dotIndex) = curvSign * curvMag;
                             end
                         end
@@ -351,7 +428,9 @@ if ~skipGeneration
                         % Deviant curvature mode precedence:
                         % randomizeCurvatureOnDeviant > flipCurvatureOnDeviant.
                         if randomizeCurvatureOnDeviant
-                            deviantCurvynessFactor = (2 * rand(1, 2) - 1) * deviantCurvatureRange;
+                            % Post-deviant curvature sampling for v16:
+                            % Data flow: Config.deviantCurvatureWindows -> deviant-path curvature.
+                            deviantCurvynessFactor = local_sample_from_windows(deviantCurvatureWindows, 2);
                             curvynessPerStep(flipIndex:end, :) = repmat(deviantCurvynessFactor, numFlipSteps, 1);
                         elseif flipCurvatureOnDeviant
                             curvynessPerStep(flipIndex:end, :) = repmat(-curvynessFactor, numFlipSteps, 1);
@@ -382,6 +461,32 @@ if ~skipGeneration
                         dummyStepVectors = dummyDirectionVectors(2:end, :) * Config.dotSpeedDegPerFrame;
                         relativePathsFrameDotXY(2:end, :) = cumsum(stepVectors, 1);
                         relativeDummyPathsFrameDotXY(2:end, :) = cumsum(dummyStepVectors, 1);
+                    end
+
+                    % Optional deviant displacement (v16): translate observed-path
+                    % frames from deviant onset onward by an annular-sector sample.
+                    % Data flow: dev onset + pre-deviant heading + annular-sector
+                    % params -> per-dot displacement -> shifted observed relative path.
+                    displacementOnsetMask = false(max(numSteps, 0), 1);
+                    if enableDeviantDisplacement && ~isempty(devFrameOnset) && numSteps > 0
+                        postDeviantFrameCount = framesPerTrial - devFrameOnset + 1;
+                        preDeviantHeadingDeg = allPathsDirectionAngle(devFrameOnset - 1, :);
+                        displacementDot1 = local_sample_deviant_displacement( ...
+                            deviantDisplacementRadiusRangeDeg, ...
+                            deviantDisplacementAngleWindowsDeg, ...
+                            preDeviantHeadingDeg(1));
+                        displacementDot2 = local_sample_deviant_displacement( ...
+                            deviantDisplacementRadiusRangeDeg, ...
+                            deviantDisplacementAngleWindowsDeg, ...
+                            preDeviantHeadingDeg(2));
+
+                        relativePathsFrameDotXY(devFrameOnset:end, 1:2) = ...
+                            relativePathsFrameDotXY(devFrameOnset:end, 1:2) + ...
+                            repmat(displacementDot1, postDeviantFrameCount, 1);
+                        relativePathsFrameDotXY(devFrameOnset:end, 3:4) = ...
+                            relativePathsFrameDotXY(devFrameOnset:end, 3:4) + ...
+                            repmat(displacementDot2, postDeviantFrameCount, 1);
+                        displacementOnsetMask(devFrameOnset - 1) = true;
                     end
 
                     % Boundary-safe start placement.
@@ -469,7 +574,9 @@ if ~skipGeneration
                     allPathsStartingPoint = zeros(framesPerTrial, 2);
                     allPathsStartingPoint(1, :) = [1, 1];
                     if numSteps > 0
-                        changeMask = any(directionAngleChange, 2);
+                        % Mark deviant onset when either an angle-change or a
+                        % displacement jump is applied on the observed path.
+                        changeMask = any(directionAngleChange, 2) | displacementOnsetMask;
                         allPathsStartingPoint(2:end, :) = repmat(changeMask, 1, 2);
                     end
 
@@ -659,15 +766,23 @@ if ~skipSave
     repro = struct();
     repro.script = struct( ...
         'name', mfilename, ...
-        'version', 'v14', ...
+        'version', 'v16_Displacement', ...
         'parameters', struct( ...
             'renderPreview', renderPreview, ...
             'plotPathsAtEnd', plotPathsAtEnd, ...
             'plotPathsPerCondition', plotPathsPerCondition, ...
             'plotPathConditions', plotPathConditions, ...
+            'initialCurvatureWindows', initialCurvatureWindows, ...
+            'deviantCurvatureWindows', deviantCurvatureWindows, ...
             'flipCurvatureOnDeviant', flipCurvatureOnDeviant, ...
             'randomizeCurvatureOnDeviant', randomizeCurvatureOnDeviant, ...
             'deviantCurvatureRange', deviantCurvatureRange, ...
+            'deviantDisplacementMode', deviantDisplacementMode, ...
+            'deviantDisplacementRadiusRangeDegConfigured', deviantDisplacementRadiusRangeDegConfigured, ...
+            'deviantDisplacementAngleWindowsDegConfigured', deviantDisplacementAngleWindowsDegConfigured, ...
+            'deviantDisplacementRadiusRangeDeg', deviantDisplacementRadiusRangeDeg, ...
+            'deviantDisplacementAngleWindowsDeg', deviantDisplacementAngleWindowsDeg, ...
+            'enableDeviantDisplacement', enableDeviantDisplacement, ...
             'deviantSignedTurnWindows', local_get_struct_field_or_default(stimulusTypeConfig, ...
                 'deviantSignedTurnWindows', []), ...
             'enforceCurvatureFeasibilityFloor', enforceCurvatureFeasibilityFloor, ...
@@ -716,6 +831,232 @@ end
 % Close all onscreens and offscreens
 if renderPreview
     sca;
+end
+
+%% Local helpers (interval-window sampling)
+function mode = local_parse_deviant_displacement_mode(rawMode, variableName)
+% LOCAL_PARSE_DEVIANT_DISPLACEMENT_MODE Validate deviant displacement mode.
+%
+% Purpose:
+%   Parse displacement mode while accepting mixed-case user strings and
+%   canonicalizing to one of the supported values.
+%
+% Example usage:
+%   mode = local_parse_deviant_displacement_mode('freeStart', ...
+%       'deviantDisplacementMode');
+%
+% Inputs:
+%   - rawMode: char/string scalar in {'off','constrained','freeStart'}.
+%   - variableName: label used in error messages.
+%
+% Output:
+%   - mode: canonical mode string ('off'|'constrained'|'freeStart').
+%
+% Assumptions:
+%   - mode names are case-insensitive at input.
+    if isstring(rawMode)
+        if numel(rawMode) ~= 1
+            error('%s must be a scalar string/char value.', variableName);
+        end
+        rawMode = char(rawMode);
+    end
+    if ~ischar(rawMode)
+        error('%s must be a string/char value.', variableName);
+    end
+
+    normalizedMode = lower(strtrim(rawMode));
+    if strcmp(normalizedMode, 'off')
+        mode = 'off';
+    elseif strcmp(normalizedMode, 'constrained')
+        mode = 'constrained';
+    elseif strcmp(normalizedMode, 'freestart')
+        mode = 'freeStart';
+    else
+        error(['%s must be one of: ''off'', ''constrained'', ''freeStart''.'], ...
+            variableName);
+    end
+end
+
+function radiusRange = local_parse_radius_range(rawRange, variableName)
+% LOCAL_PARSE_RADIUS_RANGE Validate [innerRadius, outerRadius] annulus bounds.
+%
+% Purpose:
+%   Validate the deviant displacement annulus radius controls.
+%
+% Example usage:
+%   r = local_parse_radius_range([0.45, 1.25], ...
+%       'deviantDisplacementRadiusRangeDeg');
+%
+% Inputs:
+%   - rawRange: numeric vector with exactly two values [inner, outer].
+%   - variableName: label used in error messages.
+%
+% Output:
+%   - radiusRange: [1 x 2] validated range in degrees.
+%
+% Assumptions:
+%   - 0 <= inner <= outer.
+    if ~isnumeric(rawRange) || numel(rawRange) ~= 2
+        error('%s must be a numeric [inner, outer] vector.', variableName);
+    end
+
+    radiusRange = reshape(rawRange, 1, 2);
+    if any(~isfinite(radiusRange))
+        error('%s contains non-finite values.', variableName);
+    end
+    if any(radiusRange < 0)
+        error('%s values must be >= 0.', variableName);
+    end
+    if radiusRange(1) > radiusRange(2)
+        error('%s must satisfy inner <= outer.', variableName);
+    end
+end
+
+function enabled = local_is_deviant_displacement_enabled(radiusRange, angleWindows)
+% LOCAL_IS_DEVIANT_DISPLACEMENT_ENABLED Decide if deviant displacement is active.
+%
+% Data flow:
+%   radius and angle controls -> activation boolean.
+    enabled = ~isempty(angleWindows) && radiusRange(2) > 0;
+end
+
+function parsedWindows = local_parse_interval_windows(rawWindows, variableName, allowEmpty, minBound, maxBound)
+% LOCAL_PARSE_INTERVAL_WINDOWS Validate and normalize numeric interval windows.
+%
+% Purpose:
+%   Normalize user-configured windows to an [N x 2] numeric matrix and
+%   validate interval semantics for curvature/angle sampling.
+%
+% Example usage:
+%   w = local_parse_interval_windows(Config.initialCurvatureWindows, ...
+%       'Config.initialCurvatureWindows', false, -inf, inf);
+%
+% Inputs:
+%   - rawWindows: [N x 2] matrix or vector [min1 max1 min2 max2 ...].
+%   - variableName: label used in error messages.
+%   - allowEmpty: true allows [] (returns []).
+%   - minBound/maxBound: optional global bounds for interval endpoints.
+%
+% Output:
+%   - parsedWindows: sorted [N x 2] non-overlapping intervals.
+    if isempty(rawWindows)
+        if allowEmpty
+            parsedWindows = [];
+            return;
+        end
+        error('%s must not be empty.', variableName);
+    end
+    if ~isnumeric(rawWindows)
+        error('%s must be numeric.', variableName);
+    end
+
+    if isvector(rawWindows)
+        if mod(numel(rawWindows), 2) ~= 0
+            error('%s vector form requires an even number of values.', variableName);
+        end
+        parsedWindows = reshape(rawWindows, 2, [])';
+    elseif size(rawWindows, 2) == 2
+        parsedWindows = rawWindows;
+    else
+        error('%s must be Nx2 or a vector of paired bounds.', variableName);
+    end
+
+    if any(~isfinite(parsedWindows(:)))
+        error('%s contains non-finite values.', variableName);
+    end
+    if any(parsedWindows(:, 1) >= parsedWindows(:, 2))
+        error('%s requires [min, max] with min < max for each row.', variableName);
+    end
+    if any(parsedWindows(:) < minBound | parsedWindows(:) > maxBound)
+        error('%s bounds must stay within [%g, %g].', variableName, minBound, maxBound);
+    end
+
+    parsedWindows = sortrows(parsedWindows, 1);
+    if size(parsedWindows, 1) > 1
+        if any(parsedWindows(2:end, 1) < parsedWindows(1:end-1, 2))
+            error('%s rows must not overlap.', variableName);
+        end
+    end
+end
+
+function sampledValues = local_sample_from_windows(intervalWindows, nValues)
+% LOCAL_SAMPLE_FROM_WINDOWS Sample uniformly across a union of intervals.
+%
+% Purpose:
+%   Draw nValues samples from the union of disjoint intervals, with sampling
+%   probability proportional to interval width.
+%
+% Example usage:
+%   kappa = local_sample_from_windows([-0.8 -0.3755; 0.3755 0.8], 2);
+%
+% Inputs:
+%   - intervalWindows: [N x 2] sorted disjoint [min, max] intervals.
+%   - nValues: number of values to draw.
+%
+% Output:
+%   - sampledValues: [1 x nValues] sampled values.
+    if nValues < 1 || floor(nValues) ~= nValues
+        error('nValues must be a positive integer.');
+    end
+    if isempty(intervalWindows)
+        error('intervalWindows must not be empty.');
+    end
+
+    intervalWidths = intervalWindows(:, 2) - intervalWindows(:, 1);
+    totalWidth = sum(intervalWidths);
+    if totalWidth <= 0
+        error('intervalWindows must have positive total width.');
+    end
+
+    cumulativeWidths = [0; cumsum(intervalWidths)];
+    sampledValues = zeros(1, nValues);
+    for sampleIndex = 1:nValues
+        draw = rand(1) * totalWidth;
+        windowIndex = find(draw <= cumulativeWidths(2:end), 1, 'first');
+        if isempty(windowIndex)
+            windowIndex = size(intervalWindows, 1);
+        end
+        offset = draw - cumulativeWidths(windowIndex);
+        sampledValues(sampleIndex) = intervalWindows(windowIndex, 1) + offset;
+    end
+end
+
+function displacementXY = local_sample_deviant_displacement(radiusRangeDeg, angleWindowsDeg, referenceHeadingDeg)
+% LOCAL_SAMPLE_DEVIANT_DISPLACEMENT Sample one displacement vector in an annular sector.
+%
+% Purpose:
+%   Draw a post-deviant displacement vector using annular-sector controls.
+%   Angle windows are signed and interpreted relative to reference heading.
+%
+% Example usage:
+%   d = local_sample_deviant_displacement([0.45 1.25], [-140 -40; 40 140], 90);
+%
+% Inputs:
+%   - radiusRangeDeg: [inner, outer] annulus radii in degrees.
+%   - angleWindowsDeg: [N x 2] signed relative angle windows in degrees.
+%   - referenceHeadingDeg: heading used as 0 deg for relative windows.
+%
+% Output:
+%   - displacementXY: [1 x 2] translation vector [dx, dy] in visual degrees.
+%
+% Data flow:
+%   radius-range + angle windows + local heading -> sampled polar offset -> XY vector.
+    if isempty(angleWindowsDeg)
+        error('angleWindowsDeg must not be empty when displacement sampling is enabled.');
+    end
+
+    innerRadius = radiusRangeDeg(1);
+    outerRadius = radiusRangeDeg(2);
+    if outerRadius == innerRadius
+        sampledRadius = outerRadius;
+    else
+        % Uniform area density in the annulus (not uniform in radius).
+        sampledRadius = sqrt(rand(1) * (outerRadius^2 - innerRadius^2) + innerRadius^2);
+    end
+
+    sampledRelativeAngleDeg = local_sample_from_windows(angleWindowsDeg, 1);
+    absoluteAngleDeg = referenceHeadingDeg + sampledRelativeAngleDeg;
+    displacementXY = sampledRadius * [cosd(absoluteAngleDeg), sind(absoluteAngleDeg)];
 end
 
 %% Local helpers (deviant turn scheduling)
