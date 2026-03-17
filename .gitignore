@@ -10,7 +10,7 @@ reports/old_reports/
 derivatives/triggers/old_tests
 simulations/input/
 simulations/output/
-simulations/report/
+simulations/report/old/
 simulations/debug/debug/
 simulations/debug/*.png
 simulations/pipeline_recursive_backup.m
@@ -26,5 +26,7 @@ control-center/mock_presentation/figures/
 # Generated analysis/test artifacts
 simulations/scripts/tests/RDMs_snapshots/
 simulations/scripts/tests/derivatives/
+simulations/report/**/*.pdf
 simulations/report_old/**/*.pdf
+/$MDN
 **/.Rhistory

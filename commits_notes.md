@@ -1,3 +1,28 @@
+# 17 Mar 2026 15:48
+
+## Report tracking and ignore scope
+
+### `.gitignore`
+- Narrow the ignore scope from `simulations/report/` to `simulations/report/old/` so report deliverables under `simulations/report/` can be tracked while the archived `old` subtree stays ignored.
+- Add a root-level `/$MDN` rule to prevent committing the accidental markdown-dump artifact created in the repository root.
+- Add `simulations/report/**/*.pdf` to keep generated report exports out of version control while retaining markdown report sources.
+- Keep the existing generated-output excludes (`simulations/output/`, debug artifacts, and archived PDFs under `simulations/report_old/**/*.pdf`) in place.
+
+### `simulations/report/PE_simulation_diff_1Dot.md`
+- Add a generated one-dot PE matrix report for Sub71, Sub72, and Sub73 with a top index and anchor links for deviant, nondeviant, and post-deviant sections.
+- Enumerate matrix embeds across Observed/Predicted/PE comparisons and corr/PCR variants (legacy, ARC1, Ridge Full, Ridge Tapered), including per-image path-check strings that mirror the expected output tree.
+- Provide a text-first report source that can be diffed and regenerated independently from the PDF export.
+
+### `simulations/report/PE_simulation_diff_1Dot_backup.md`
+- Add a backup markdown copy of the same generated report content as `PE_simulation_diff_1Dot.md` to preserve a second text snapshot in the report folder.
+- Keep the backup in markdown form so it remains inspectable and diffable in the same way as the primary report source.
+
+## Legacy script removal
+
+### `simulations/report_old/generate_PIPELINE_simulation_report.m` (deleted)
+- Remove the tracked MATLAB Report Generator script from the legacy `simulations/report_old` path.
+- Retire this archived tracked copy now that report tracking is being redirected through the active `simulations/report` area and its scoped ignore rules.
+
 # 16 Mar 2026 15:44
 
 ## Report generator archive
