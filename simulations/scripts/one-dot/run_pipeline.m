@@ -7,7 +7,7 @@ scriptPath = '/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/simulations/sc
 participants = [73 72 71];
 
 % The three new PCR strategies to test.
-strategies = {'ridge_full_autocorr', 'ridge_tapered_autocorr', 'ar1_prewhite_ridge'};
+strategies = {'baseline_pcr_border','ridge_full_autocorr', 'ridge_tapered_autocorr', 'ar1_prewhite_ridge'};
 
 % Loop participants.
 for iP = 1:numel(participants)

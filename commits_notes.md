@@ -1,3 +1,26 @@
+# 19 Mar 2026 15:52
+
+## One-dot occlusion simulation pipeline
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v1.m`
+- Add a dedicated one-dot occlusion PE simulation entry point that runs only `occluded_nondeviant` and `occluded_deviant`, with strict one-dot input validation and extensive runtime/parameter documentation.
+- Keep canonical PE construction explicit (`observed - predicted`) and run deviant-only PE analyses against three neural targets (`neuralPE`, `neuralPredicted`, `neuralObserved`).
+- Add post-reappearance enforcement for occluded-deviant PE streams, deriving cut points from per-trial metadata with controlled fallback behavior when metadata is missing.
+- Support both `corr` and `PCR` dRSA modes and expose the full PCR regression-strategy surface (`baseline_pcr_border`, `ridge_full_autocorr`, `ridge_tapered_autocorr`, `ar1_prewhite_ridge`) with reproducibility-oriented defaults.
+- Organize outputs under `simulations/output/SubXX_oneDot_occlusion/...`, including strategy-tagged filenames to avoid collisions with legacy PCR outputs.
+
+### `simulations/scripts/one-dot/plot_occlusion_paths_1Dot.m`
+- Add a lightweight plotting helper to compare shared trial identities across `always_visible`, `occluded_nondeviant`, and `occluded_deviant` with shared axis limits.
+- Load one-dot center-relative paths from `MovDot_SubXX.mat`, align samples by `sequence` when available, and fall back to index-based sampling when no full sequence intersection exists.
+- Save reproducible path-comparison figures into the occlusion output tree for quick geometry sanity checks.
+
+### `simulations/scripts/one-dot/run_pipeline_occlusion.m`
+- Add a batch runner that loops participants and PCR strategies, then calls `PE_simulation_diff_1Dot_occlusion_v1.m` with explicit per-run parameter initialization.
+- Set default batch behavior to rerun/overwrite existing outputs (`existingResultsAction = 2`) for non-interactive pipeline use.
+
+### `simulations/scripts/one-dot/run_pipeline.m`
+- Extend the one-dot strategy list to include `baseline_pcr_border` alongside ridge and AR1 strategies so baseline PCR outputs are regenerated in the same batch workflow.
+
 # 19 Mar 2026 15:51
 
 ## Occlusion TrialStruct compatibility helper
