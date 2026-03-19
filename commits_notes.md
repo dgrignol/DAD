@@ -1,5 +1,16 @@
 # 19 Mar 2026 15:51
 
+## Occlusion TrialStruct compatibility helper
+
+### `experiment/CreateInputFiles_v12_temporary.m`
+- Add a temporary converter that builds `SubXX_TrialStruct.mat` from occlusion-era `MovDot_SubXX.mat` inputs without reintroducing catch-trial logic.
+- Preserve occlusion condition traceability by copying condition label, source trial index, sequence identity, and occlusion-enabled metadata into each `TrialStruct` row.
+- Build balanced run orders across `always_visible`, `occluded_nondeviant`, and `occluded_deviant` pools by truncating to the minimum shared count per condition.
+- Emit a no-catch `Catch` struct and legacy-compatible `TrialOrder`/`BlockOrder` containers so older workflows that require `SubXX_TrialStruct.mat` can run unchanged.
+- Add numeric input validation and overwrite guards (including optional non-interactive `overwriteExisting`) to keep batch runs deterministic.
+
+# 19 Mar 2026 15:51
+
 ## One-dot occlusion experiment core
 
 ### `experiment/stimuli_generation_v18.m`
