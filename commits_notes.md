@@ -1,3 +1,32 @@
+# 19 Mar 2026 15:51
+
+## One-dot occlusion experiment core
+
+### `experiment/stimuli_generation_v18.m`
+- Add a v18 occlusion dataset builder that transforms an existing one-dot source into three aligned condition sets: `always_visible`, `occluded_nondeviant`, and `occluded_deviant`.
+- Add configurable deviance-centered timing controls (`deviance-X`, `deviance+Y`) and emit per-trial twocircle geometry plus alpha fallback visibility profiles.
+- Export trigger-aligned occlusion event frames (`start`, `complete`, `end_start`, `end_complete`) and construct predicted occluded-deviant trials that match observed trajectories until reappearance before diverging.
+- Keep strict one-dot validation and deterministic trial pairing so generated observed/predicted outputs remain aligned for downstream runtime and simulations.
+
+### `experiment/stimuli_generation_v19.m`
+- Add a v19 generator variant that enforces a matched pre-deviance branch for occluded deviant trials and splices in the deviant suffix with translation for position-continuous continuity at deviance.
+- Preserve the v18 output contract (three observed conditions, predicted branch, twocircle/alpha metadata, and event-frame fields) while changing only the deviant-branch construction rule.
+- Add non-interactive overwrite control (`overwriteExisting`) so batch regeneration can run without prompt loops when target files already exist.
+
+### `experiment/MoveDot1_experiment_vX_occlusion_v1.m`
+- Add a dedicated one-dot occlusion runtime that consumes `MovDot_SubXX.mat` metadata from v18/v19, validates required occlusion fields, and enforces one-dot trajectory shape.
+- Implement condition-specific trial-onset triggers (`31`, `41`, `51`) and occlusion event triggers (`111`, `112`, `114`, `115`) with per-frame logging for debug/replay workflows.
+- Support two rendering paths (`twocircle` default, `alpha` fallback), balancing trial scheduling via `SubXX_TrialStruct.mat` when available and an internal balanced fallback otherwise.
+- Save run outputs and optional debug trigger CSVs under `experiment/output_files` with explicit no-overwrite guards.
+
+### `experiment/trigger_codes.md`
+- Add the canonical trigger-code table for `MoveDot1_experiment_vX_occlusion_v1.m`, including condition onset pulses and the four occlusion event pulses.
+- Clarify that event frames come from generator metadata and that condition and event trigger emissions are independent during a trial.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with v18/v19 selection guidance and capability summaries, including occlusion timing controls, twocircle metadata, event-frame exports, and v19 matched pre-deviance behavior.
+- Document how v18/v19 differ from earlier versions so users can choose between de-novo generation and occlusion-paradigm transformation workflows.
+
 # 17 Mar 2026 15:48
 
 ## Report tracking and ignore scope

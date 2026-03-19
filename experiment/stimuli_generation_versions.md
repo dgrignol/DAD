@@ -145,6 +145,12 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   turn/curvature controls available**: use **v16_Displacement**.
 - **Generate a one-dot trajectory set with v16-style turn/curvature/displacement
   controls and Config-toggled dRSA gate scope**: use **v17**.
+- **Build the three-condition occlusion paradigm (always-visible, occluded
+  nondeviant, occluded deviant) with twocircle default and configurable
+  deviance-centered timing window `deviance-X` to `deviance+Y`**: use **v18**.
+- **Build the occlusion paradigm with guaranteed matched pre-deviance branch
+  for occluded deviant (`pre-deviance identical`, `post-deviance translated
+  deviant suffix`)**: use **v19**.
 - **Reduce residual position-direction coupling while preserving constant
   within-trial curvature**: use **v14**.
 - **Experimentation version: half-length paths to reduce
@@ -419,6 +425,57 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
 - **Inter-dot minimum-distance enforcement** (v05, v08-v16).
 - **Two-dot plotting/preview rendering and `[x1 y1 x2 y2]` output layout**
   (v05-v16 variants).
+
+### v18 — `stimuli_generation_v18.m`
+
+**Adds**
+- **Three-condition occlusion dataset builder from an existing one-dot
+  source dataset**: creates `always_visible`, `occluded_nondeviant`, and
+  `occluded_deviant` trial sets with matched trajectory pairing.
+- **Configurable deviance-centered occlusion timing window**:
+  user inputs `X` and `Y` to define `deviance-X` (occlusion start) and
+  `deviance+Y` (reappearance start), defaulting to `0.25 s` and `0.25 s`.
+- **Twocircle occlusion metadata for runtime rendering**:
+  per trial exports center/radii/contact frames and post-deactivation frame
+  with pre-circle active only before deviance and post-circle active from
+  deviance onward.
+- **Event-frame metadata for MEG triggers**:
+  exports start/complete/end-start/end-complete frame fields so runtime
+  scripts can emit occlusion event triggers deterministically.
+- **Predicted-branch rule for occluded deviant simulations**:
+  writes predicted trials where predicted path is forced to equal observed
+  until reappearance start, then diverges from that frame onward.
+- **Alpha fallback visibility profiles retained**:
+  exports `visibility_alpha` and `visibility_geom` alongside twocircle fields
+  to support optional alpha-based presentation paths.
+
+**Omits (relative to other versions)**
+- **Direct de-novo trajectory synthesis**:
+  v18 transforms an existing one-dot source dataset rather than generating
+  raw trajectories from scratch (v17 and earlier generation role).
+
+### v19 — `stimuli_generation_v19.m`
+
+**Adds**
+- **Matched pre-deviance construction for occluded deviant**:
+  occluded deviant trials are explicitly built so frames up to deviance are
+  identical to the paired nondeviant trajectory.
+- **Position-continuous deviant splice rule**:
+  post-deviance branch is taken from deviant source trajectories and
+  translated so the splice at deviance has no positional jump.
+- **Non-interactive overwrite control**:
+  supports optional `overwriteExisting=true` for batch regeneration without
+  interactive overwrite prompts.
+- **Updated reproducibility metadata**:
+  outputs include a v19-specific construction rule label in `repro`.
+
+**Keeps from v18**
+- Three-condition occlusion outputs (`always_visible`, `occluded_nondeviant`,
+  `occluded_deviant`) and twocircle metadata.
+- Configurable `deviance-X` to `deviance+Y` timing and trigger-aligned event
+  frame metadata.
+- Predicted branch rule where predicted occluded deviant matches observed
+  until reappearance start, then diverges.
 
 ### v15_experimentalPathScale — `stimuli_generation_v15_experimentalPathScale.m`
 

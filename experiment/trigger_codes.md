@@ -20,3 +20,23 @@
 - In the current stimuli generator, `condition` corresponds to `directionVariance` (predictability); Config.likelihood uses `[0, 45]`, where 0 means no deviant angle change at the deviant onset and 45 introduces a deviation.
 - `blockCondition` is read from `BlockOrder` in the trial struct, so the attend-dot mapping can swap between blocks.
 - All onset codes switch to 102 for trials containing catches, so the block/condition mapping only applies to pure non-catch trials.
+
+---
+
+# Trigger Codes (MoveDot1_experiment_vX_occlusion_v1)
+
+| Code | Short label | Extended description |
+| --- | --- | --- |
+| 31 | Trial onset (always_visible) | First frame of an `always_visible` trial. |
+| 41 | Trial onset (occluded_nondeviant) | First frame of an `occluded_nondeviant` trial. |
+| 51 | Trial onset (occluded_deviant) | First frame of an `occluded_deviant` trial. |
+| 111 | Occlusion start | First frame where the dot starts disappearing (`occlusion_start_frame`). |
+| 112 | Occlusion complete | First frame where the dot is fully invisible (`occlusion_complete_frame`). |
+| 114 | Occlusion end start | First frame where the dot starts reappearing (`occlusion_end_frame` / `reappearance_start_frame`). |
+| 115 | Occlusion end complete | First frame where the dot is fully visible again (`occlusion_end_complete_frame`). |
+
+**Notes**
+- This trigger map is specific to `experiment/MoveDot1_experiment_vX_occlusion_v1.m`.
+- Catch trials are disabled by default in this runtime version.
+- Event-frame values are read from per-trial metadata produced by `experiment/stimuli_generation_v18.m`.
+- Condition-trigger and event-trigger emissions are independent; a trial onset pulse can be followed by zero or more event pulses depending on `occlusion_enabled`.
