@@ -1,5 +1,15 @@
 # 19 Mar 2026 15:52
 
+## Occlusion PE report refresh
+
+### `simulations/report/PE_simulation_diff_1Dot.md`
+- Append a generated Subject 70 section (`<!-- SUBJECT:70:START/END -->`) for the one-dot occlusion outputs under `Sub70_oneDot_occlusion`.
+- Add matrix embeds and path-check lines for `occluded_deviant` across Observed/Predicted/PE comparisons, including correlation and PCR strategy variants (legacy, ARC1, Ridge Full, Ridge Tapered) with both common and separate colorbar layouts.
+- Add matrix embeds and path-check lines for `occluded_nondeviant` observed-only comparisons across the same corr/PCR strategy set and colorbar layout variants.
+- Preserve the existing report structure so section-level updates remain script-replaceable for future subject refreshes.
+
+# 19 Mar 2026 15:52
+
 ## One-dot occlusion simulation pipeline
 
 ### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v1.m`
