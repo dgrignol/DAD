@@ -1,6 +1,6 @@
 %% Stimuli Generation (uniform starts, boundary-safe placement, dRSA-proxy trial gate)
 % Script: stimuli_generation_v15_experimentalPathScale.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v15 updates by Codex
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v15 updates by Dami
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping

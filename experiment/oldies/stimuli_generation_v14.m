@@ -1,6 +1,6 @@
 %% Stimuli Generation (uniform starts, boundary-safe placement, dRSA-proxy trial gate)
-% Script: stimuli_generation_v15.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v15 updates by Codex
+% Script: stimuli_generation_v14.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v14 updates by Dami
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -17,24 +17,17 @@
 %     - flipping curvature sign (legacy behavior), or
 %     - sampling a new curvature value in a configurable +/- range.
 %
-%   v15 keeps curvature smooth and predictable by design:
+%   v14 keeps curvature smooth and predictable by design:
 %     - one constant curvature value per dot at trial start,
 %     - optional deviant-only curvature change at deviant onset,
 %     - no additional within-trial curvature updates.
-%   In v15, initial and post-deviant curvature can be constrained with
-%   explicit windows from Config:
-%     - Config.initialCurvatureWindows
-%     - Config.deviantCurvatureWindows
-%   Each is an [N x 2] interval list in deg/frame, so curvature sampling can
-%   enforce signed thresholds directly (for example:
-%   [-0.8, -0.3755] U [0.3755, 0.8]).
 %   Deviant turn angles can be configured in two ways:
 %     - legacy: generated from directionVariance as linspace(dirVar, 360-dirVar),
 %     - explicit signed windows from Config.deviantSignedTurnWindows
 %       (e.g., [-180 -45; 45 180]) for direct threshold-style control.
 %
 %   To reduce residual dRSA position-direction cross-correlation without
-%   changing trajectory smoothness, v15 keeps the v14 dRSA-proxy-aware gate:
+%   changing trajectory smoothness, v14 adds a dRSA-proxy-aware gate:
 %     - generate a candidate trial using the same constant-curvature rules,
 %     - compute a proxy of the target dRSA cross-matrix by correlating
 %       position-RDM columns (euclidean) against direction-RDM columns
@@ -55,13 +48,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v15;
+%   stimuli_generation_v14;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v15;
+%   stimuli_generation_v14;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -107,11 +100,6 @@ plotPathConditions = [0 45]; % directionVariance values to plot as conditions
 flipCurvatureOnDeviant = Config.flipCurvatureOnDeviant; % set true to flip curvature sign at deviant onset
 randomizeCurvatureOnDeviant = Config.randomizeCurvatureOnDeviant; % set true to sample a new curvature at deviant onset
 deviantCurvatureRange = Config.deviantCurvatureRange; % sampled post-deviant curvature range is [-range, +range]
-% Explicit curvature windows for v15.
-initialCurvatureWindows = local_parse_interval_windows(Config.initialCurvatureWindows, ...
-    'Config.initialCurvatureWindows', false, -inf, inf);
-deviantCurvatureWindows = local_parse_interval_windows(Config.deviantCurvatureWindows, ...
-    'Config.deviantCurvatureWindows', false, -inf, inf);
 enforceCurvatureFeasibilityFloor = true; % set true to avoid near-straight trajectories that cannot fit bounds
 enforceMinDistanceOnNoDevBaseline = true; % set true to apply min-distance checks to the analysis-only no-deviant path too
 maxAttemptsPerTrial = 60000; % hard stop to avoid infinite loops under incompatible parameter sets
@@ -302,12 +290,11 @@ if ~skipGeneration
                     % Per-trial parameters: initial directions and baseline curvature.
                     directionAngle = [Utils.RandAngleDegree(), Utils.RandAngleDegree()];
                     directionAngleNoDev = directionAngle;
-                    % Baseline curvature sampling for v15:
-                    % Data flow: Config.initialCurvatureWindows -> per-dot constant curvature.
-                    curvynessFactor = local_sample_from_windows(initialCurvatureWindows, 2);
+                    curvynessFactor = Config.curvFactor * [ ...
+                        Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand), ...
+                        Utils.ComputeCurvyness(Config.isCurvValenceRand, Config.isCurvFactorRand)];
 
                     % Optional anti-bias safeguard: avoid near-zero curvature that cannot fit in-bounds.
-                    % Data flow: sampled baseline curvature -> floor check -> floor-safe curvature.
                     if enforceCurvatureFeasibilityFloor
                         for dotIndex = 1:2
                             curvSign = sign(curvynessFactor(dotIndex));
@@ -316,7 +303,12 @@ if ~skipGeneration
                             end
                             curvMag = abs(curvynessFactor(dotIndex));
                             if curvMag < effectiveCurvatureFloorDeg
-                                curvMag = effectiveCurvatureFloorDeg;
+                                if Config.isCurvFactorRand && abs(Config.curvFactor) > effectiveCurvatureFloorDeg
+                                    curvMag = effectiveCurvatureFloorDeg + rand(1) * ...
+                                        (abs(Config.curvFactor) - effectiveCurvatureFloorDeg);
+                                else
+                                    curvMag = effectiveCurvatureFloorDeg;
+                                end
                                 curvynessFactor(dotIndex) = curvSign * curvMag;
                             end
                         end
@@ -359,9 +351,7 @@ if ~skipGeneration
                         % Deviant curvature mode precedence:
                         % randomizeCurvatureOnDeviant > flipCurvatureOnDeviant.
                         if randomizeCurvatureOnDeviant
-                            % Post-deviant curvature sampling for v15:
-                            % Data flow: Config.deviantCurvatureWindows -> deviant-path curvature.
-                            deviantCurvynessFactor = local_sample_from_windows(deviantCurvatureWindows, 2);
+                            deviantCurvynessFactor = (2 * rand(1, 2) - 1) * deviantCurvatureRange;
                             curvynessPerStep(flipIndex:end, :) = repmat(deviantCurvynessFactor, numFlipSteps, 1);
                         elseif flipCurvatureOnDeviant
                             curvynessPerStep(flipIndex:end, :) = repmat(-curvynessFactor, numFlipSteps, 1);
@@ -669,14 +659,12 @@ if ~skipSave
     repro = struct();
     repro.script = struct( ...
         'name', mfilename, ...
-        'version', 'v15', ...
+        'version', 'v14', ...
         'parameters', struct( ...
             'renderPreview', renderPreview, ...
             'plotPathsAtEnd', plotPathsAtEnd, ...
             'plotPathsPerCondition', plotPathsPerCondition, ...
             'plotPathConditions', plotPathConditions, ...
-            'initialCurvatureWindows', initialCurvatureWindows, ...
-            'deviantCurvatureWindows', deviantCurvatureWindows, ...
             'flipCurvatureOnDeviant', flipCurvatureOnDeviant, ...
             'randomizeCurvatureOnDeviant', randomizeCurvatureOnDeviant, ...
             'deviantCurvatureRange', deviantCurvatureRange, ...
@@ -728,108 +716,6 @@ end
 % Close all onscreens and offscreens
 if renderPreview
     sca;
-end
-
-%% Local helpers (interval-window sampling)
-function parsedWindows = local_parse_interval_windows(rawWindows, variableName, allowEmpty, minBound, maxBound)
-% LOCAL_PARSE_INTERVAL_WINDOWS Validate and normalize numeric interval windows.
-%
-% Purpose:
-%   Normalize user-configured windows to an [N x 2] numeric matrix and
-%   validate interval semantics for curvature/angle sampling.
-%
-% Example usage:
-%   w = local_parse_interval_windows(Config.initialCurvatureWindows, ...
-%       'Config.initialCurvatureWindows', false, -inf, inf);
-%
-% Inputs:
-%   - rawWindows: [N x 2] matrix or vector [min1 max1 min2 max2 ...].
-%   - variableName: label used in error messages.
-%   - allowEmpty: true allows [] (returns []).
-%   - minBound/maxBound: optional global bounds for interval endpoints.
-%
-% Output:
-%   - parsedWindows: sorted [N x 2] non-overlapping intervals.
-    if isempty(rawWindows)
-        if allowEmpty
-            parsedWindows = [];
-            return;
-        end
-        error('%s must not be empty.', variableName);
-    end
-    if ~isnumeric(rawWindows)
-        error('%s must be numeric.', variableName);
-    end
-
-    if isvector(rawWindows)
-        if mod(numel(rawWindows), 2) ~= 0
-            error('%s vector form requires an even number of values.', variableName);
-        end
-        parsedWindows = reshape(rawWindows, 2, [])';
-    elseif size(rawWindows, 2) == 2
-        parsedWindows = rawWindows;
-    else
-        error('%s must be Nx2 or a vector of paired bounds.', variableName);
-    end
-
-    if any(~isfinite(parsedWindows(:)))
-        error('%s contains non-finite values.', variableName);
-    end
-    if any(parsedWindows(:, 1) >= parsedWindows(:, 2))
-        error('%s requires [min, max] with min < max for each row.', variableName);
-    end
-    if any(parsedWindows(:) < minBound | parsedWindows(:) > maxBound)
-        error('%s bounds must stay within [%g, %g].', variableName, minBound, maxBound);
-    end
-
-    parsedWindows = sortrows(parsedWindows, 1);
-    if size(parsedWindows, 1) > 1
-        if any(parsedWindows(2:end, 1) < parsedWindows(1:end-1, 2))
-            error('%s rows must not overlap.', variableName);
-        end
-    end
-end
-
-function sampledValues = local_sample_from_windows(intervalWindows, nValues)
-% LOCAL_SAMPLE_FROM_WINDOWS Sample uniformly across a union of intervals.
-%
-% Purpose:
-%   Draw nValues samples from the union of disjoint intervals, with sampling
-%   probability proportional to interval width.
-%
-% Example usage:
-%   kappa = local_sample_from_windows([-0.8 -0.3755; 0.3755 0.8], 2);
-%
-% Inputs:
-%   - intervalWindows: [N x 2] sorted disjoint [min, max] intervals.
-%   - nValues: number of values to draw.
-%
-% Output:
-%   - sampledValues: [1 x nValues] sampled values.
-    if nValues < 1 || floor(nValues) ~= nValues
-        error('nValues must be a positive integer.');
-    end
-    if isempty(intervalWindows)
-        error('intervalWindows must not be empty.');
-    end
-
-    intervalWidths = intervalWindows(:, 2) - intervalWindows(:, 1);
-    totalWidth = sum(intervalWidths);
-    if totalWidth <= 0
-        error('intervalWindows must have positive total width.');
-    end
-
-    cumulativeWidths = [0; cumsum(intervalWidths)];
-    sampledValues = zeros(1, nValues);
-    for sampleIndex = 1:nValues
-        draw = rand(1) * totalWidth;
-        windowIndex = find(draw <= cumulativeWidths(2:end), 1, 'first');
-        if isempty(windowIndex)
-            windowIndex = size(intervalWindows, 1);
-        end
-        offset = draw - cumulativeWidths(windowIndex);
-        sampledValues(sampleIndex) = intervalWindows(windowIndex, 1) + offset;
-    end
 end
 
 %% Local helpers (deviant turn scheduling)

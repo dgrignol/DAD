@@ -1,6 +1,6 @@
 %% Stimuli Generation v18 (occlusion paradigm builder with twocircle default)
 % Script: stimuli_generation_v18.m
-% Author: Codex (v18)
+% Author: Dami (v18)
 %
 % Purpose:
 %   Build a new three-condition one-dot occlusion dataset from an existing

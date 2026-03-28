@@ -1,6 +1,6 @@
 %% Stimuli Generation (deviant displacement + turn/curvature controls, boundary-safe, dRSA-proxy gate)
 % Script: stimuli_generation_v16_Displacement.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v16 updates by Codex
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v16 updates by Dami
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping

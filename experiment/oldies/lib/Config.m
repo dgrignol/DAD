@@ -2,7 +2,7 @@ classdef Config
     properties(Constant)
     
         %general
-        trialsPerCondition = 50;%20 %10000;  %nSeq in their code
+        trialsPerCondition = 20;%20 %10000;  %nSeq in their code
         trialDuration = 2.67;       %in seconds
         trialRepetetion = 1;
         %general - pc settings

@@ -23,7 +23,7 @@
 
 ---
 
-# Trigger Codes (MoveDot1_experiment_vX_occlusion_v1)
+# Trigger Codes (MoveDot1_experiment_occlusion_v1)
 
 | Code | Short label | Extended description |
 | --- | --- | --- |
@@ -36,7 +36,7 @@
 | 115 | Occlusion end complete | First frame where the dot is fully visible again (`occlusion_end_complete_frame`). |
 
 **Notes**
-- This trigger map is specific to `experiment/MoveDot1_experiment_vX_occlusion_v1.m`.
+- This trigger map is specific to `experiment/MoveDot1_experiment_occlusion_v1.m`.
 - Catch trials are disabled by default in this runtime version.
 - Event-frame values are read from per-trial metadata produced by `experiment/stimuli_generation_v18.m`.
 - Condition-trigger and event-trigger emissions are independent; a trial onset pulse can be followed by zero or more event pulses depending on `occlusion_enabled`.

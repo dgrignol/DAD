@@ -1,4 +1,4 @@
-% MoveDot1_experiment_vX_occlusion_v1.m
+% MoveDot1_experiment_occlusion_v1.m
 %
 % Purpose:
 %   Run the one-dot occlusion paradigm with three trial conditions using
@@ -30,11 +30,11 @@
 %   - Trigger definitions are mirrored in experiment/trigger_codes.md.
 %
 % Usage example (interactive from experiment/):
-%   MoveDot1_experiment_vX_occlusion_v1
+%   MoveDot1_experiment_occlusion_v1
 %
 % Usage example (non-interactive shell from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
-%   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); MoveDot1_experiment_vX_occlusion_v1;"
+%   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); MoveDot1_experiment_occlusion_v1;"
 %
 % Inputs:
 %   - experiment/input_files/MovDot_SubXX.mat with v18 metadata fields.
@@ -63,7 +63,7 @@ Conf.debug = 0;
 Conf.enableCatchTrials = 0; % explicitly disabled in this version.
 Conf.occlusionMode = 'twocircle'; % default: twocircle; optional: alpha.
 Conf.experimentName = 'MoveDot1_occlusion';
-Conf.background = [30 30 30];
+Conf.background = [0 0 0];
 Conf.rectColor = [5 5 5];
 Conf.rectBorderColor = [0 0 0];
 Conf.dotColor = [0 255 0];

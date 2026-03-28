@@ -1,6 +1,6 @@
 %% Stimuli Generation (uniform starts, boundary rejection, deviant curvature modulation)
 % Script: stimuli_generation_v12.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v12 updates by Codex
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v12 updates by Dami
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping

@@ -1,7 +1,7 @@
 %% Stimuli Generation (single-dot deviant displacement + turn/curvature controls, boundary-safe, dRSA-proxy gate)
 % Script: stimuli_generation_v17.m
 % Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8),
-%         Codex (v9-v17)
+%         Dami (v9-v17)
 %
 % Purpose:
 %   Generate single-dot motion stimuli with the same trajectory family and

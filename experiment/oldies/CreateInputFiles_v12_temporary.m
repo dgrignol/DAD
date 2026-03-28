@@ -15,7 +15,7 @@
 %   catch-related arrays empty.
 %
 % Why this temporary version exists:
-%   - The occlusion runtime (MoveDot1_experiment_vX_occlusion_v1.m) can read
+%   - The occlusion runtime (MoveDot1_experiment_occlusion_v1.m) can read
 %     MovDot_SubXX.mat directly.
 %   - Some workflows still expect a SubXX_TrialStruct.mat artifact.
 %   - This script provides a lightweight compatibility artifact without adding

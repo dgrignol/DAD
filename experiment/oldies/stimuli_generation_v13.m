@@ -1,6 +1,6 @@
-%% Stimuli Generation (uniform starts, boundary-safe placement, dRSA-proxy trial gate)
-% Script: stimuli_generation_v14.m
-% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v14 updates by Codex
+%% Stimuli Generation (uniform starts, boundary-safe placement, deviant curvature modulation)
+% Script: stimuli_generation_v13.m
+% Author: Marisa (original), Ayman Hatoum (v5), updated by Dami (v6-v8), v9-v13 updates by Dami
 %
 % Purpose:
 %   Generate dot-motion stimuli with uniform starting positions while keeping
@@ -9,7 +9,7 @@
 %     - generates trajectories in relative coordinates first,
 %     - solves feasible start-position ranges that keep paths in bounds, and
 %     - avoids boundary-hit rejection bias from whole-trial resampling.
-%   In practice this keeps the v13 path family while reducing hidden
+%   In practice this keeps the v12 path family while reducing the hidden
 %   selection pressure that can couple position and direction models in dRSA.
 %
 %   When a deviant occurs (likelihood stimulus), curvature can be modulated
@@ -17,26 +17,10 @@
 %     - flipping curvature sign (legacy behavior), or
 %     - sampling a new curvature value in a configurable +/- range.
 %
-%   v14 keeps curvature smooth and predictable by design:
-%     - one constant curvature value per dot at trial start,
-%     - optional deviant-only curvature change at deviant onset,
-%     - no additional within-trial curvature updates.
-%   Deviant turn angles can be configured in two ways:
-%     - legacy: generated from directionVariance as linspace(dirVar, 360-dirVar),
-%     - explicit signed windows from Config.deviantSignedTurnWindows
-%       (e.g., [-180 -45; 45 180]) for direct threshold-style control.
-%
-%   To reduce residual dRSA position-direction cross-correlation without
-%   changing trajectory smoothness, v14 adds a dRSA-proxy-aware gate:
-%     - generate a candidate trial using the same constant-curvature rules,
-%     - compute a proxy of the target dRSA cross-matrix by correlating
-%       position-RDM columns (euclidean) against direction-RDM columns
-%       (cosine) over sampled frames in the accepted-trial bank plus
-%       candidate trial,
-%     - accept candidates only when the proxy score improves (or meets an
-%       optional absolute cap).
-%   This preserves path smoothness while shaping the trial ensemble directly
-%   toward lower position-dot1 vs direction-dot1 dRSA coupling.
+%   v13 also includes a geometry-aware curvature floor option: if enabled,
+%   per-trial curvature magnitudes are constrained away from near-straight
+%   trajectories that cannot fit the dot rectangle over the full trial.
+%   This further reduces regeneration loops that could reintroduce bias.
 %
 %   Optionally plots a random subset of paths per condition after generation.
 %   This version also saves the no-deviant baseline paths for deviant
@@ -48,13 +32,13 @@
 %
 % Example usage (from repo root in MATLAB):
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v13;
 %   % Follow the dialog prompts for viewing distance and subject ID.
 %
 % Example usage (custom working directory):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD');
 %   addpath('experiment');
-%   stimuli_generation_v14;
+%   stimuli_generation_v13;
 %
 % Inputs:
 %   - Config (class/struct on MATLAB path) with screen, dot, and timing params.
@@ -77,14 +61,10 @@
 %   - Curvature modulation affects only the deviant path after deviant onset.
 %   - If both deviant-curvature options are enabled, randomization takes
 %     precedence over sign flipping.
-%   - Curvature stays constant within each trial except optional deviant-point
-%     modulation in deviant conditions.
 %   - No-deviant baselines reuse the same start points and pre-deviant
 %     curvature, but remove deviant-only curvature modulation and angle changes.
 %   - Boundary checks are satisfied by construction via feasible placement
 %     (instead of rejecting boundary-violating starts).
-%   - The dRSA-proxy gate rejects whole candidate trials; it does not edit
-%     trajectories frame-by-frame.
 
 addpath('lib/');
 
@@ -103,32 +83,8 @@ deviantCurvatureRange = Config.deviantCurvatureRange; % sampled post-deviant cur
 enforceCurvatureFeasibilityFloor = true; % set true to avoid near-straight trajectories that cannot fit bounds
 enforceMinDistanceOnNoDevBaseline = true; % set true to apply min-distance checks to the analysis-only no-deviant path too
 maxAttemptsPerTrial = 60000; % hard stop to avoid infinite loops under incompatible parameter sets
-enableDrsaProxyGate = true; % set true to enable dRSA-style position-vs-direction proxy gating
-applyDrsaProxyGateToNondeviantOnly = true; % set true to apply gate only in nondeviant likelihood condition(s)
-drsaProxyGateMinAcceptedTrials = 12; % gate starts only after this many accepted trials in current condition
-drsaProxyGateFrameStride = 4; % evaluate proxy every N frames to control compute cost
-drsaProxyGateExcludeMainDiagLags = 1; % ignore |lag|<=N sampled bins when averaging proxy matrix
-drsaProxyGateMinScoreImprovement = 0.0005; % candidate must improve proxy score by at least this amount
-drsaProxyGateMaxMeanAbsCorr = inf; % optional absolute cap (set finite to enforce hard maximum)
 if deviantCurvatureRange < 0
     error('Config.deviantCurvatureRange must be >= 0.');
-end
-if drsaProxyGateMinAcceptedTrials < 0 || ...
-        floor(drsaProxyGateMinAcceptedTrials) ~= drsaProxyGateMinAcceptedTrials
-    error('drsaProxyGateMinAcceptedTrials must be a non-negative integer.');
-end
-if drsaProxyGateFrameStride < 1 || floor(drsaProxyGateFrameStride) ~= drsaProxyGateFrameStride
-    error('drsaProxyGateFrameStride must be a positive integer.');
-end
-if drsaProxyGateExcludeMainDiagLags < 0 || ...
-        floor(drsaProxyGateExcludeMainDiagLags) ~= drsaProxyGateExcludeMainDiagLags
-    error('drsaProxyGateExcludeMainDiagLags must be a non-negative integer.');
-end
-if drsaProxyGateMinScoreImprovement < 0
-    error('drsaProxyGateMinScoreImprovement must be >= 0.');
-end
-if ~(isinf(drsaProxyGateMaxMeanAbsCorr) || drsaProxyGateMaxMeanAbsCorr >= 0)
-    error('drsaProxyGateMaxMeanAbsCorr must be >= 0 or inf.');
 end
 
 userDoubles = Utils.GetUserDoubles(Config.dialogTitle, Config.dialogDimensions, ...
@@ -223,7 +179,6 @@ if ~skipGeneration
         'acceptedTrials', 0, ...
         'rangeFailures', 0, ...
         'minDistanceFailures', 0, ...
-        'drsaProxyFailures', 0, ...
         'maxAttemptsSingleTrial', 0);
 
     % Geometry-derived floor for constant-curvature trajectories.
@@ -246,37 +201,14 @@ if ~skipGeneration
 
         for pathDurIndex = 1:length(stimulusTypeConfig.pathDuration)
             pathDuration = stimulusTypeConfig.pathDuration(pathDurIndex);
-            % Build per-trial deviant turn schedule (degrees).
-            % Data flow: Config likelihood settings -> turn vector -> deviant frame angle update.
-            trialDeviances = local_build_likelihood_deviant_turns(stimulusTypeConfig, ...
-                dirVar, Config.trialsPerCondition);
-            isNondeviantCondition = (Config.stimulusType ~= Utils.likelihood || dirVar == 0);
-            useDrsaProxyGate = enableDrsaProxyGate && ...
-                (~applyDrsaProxyGateToNondeviantOnly || isNondeviantCondition);
-            drsaProxyFrameIndices = 1:drsaProxyGateFrameStride:framesPerTrial;
-            if drsaProxyFrameIndices(end) ~= framesPerTrial
-                drsaProxyFrameIndices(end + 1) = framesPerTrial;
-            end
-            acceptedDot1Positions = zeros(Config.trialsPerCondition, framesPerTrial, 2);
-            acceptedDot1Directions = zeros(Config.trialsPerCondition, framesPerTrial, 2);
-            acceptedTrialCount = 0;
+            trialDeviances = linspace(dirVar, 360 - dirVar, Config.trialsPerCondition);
 
             totalSpread = zeros(Config.numXGrids, Config.numYGrids, 2);
 
             for trialPerCondIndex = 1:Config.trialsPerCondition
-                % Constraint-driven resampling: regenerate when placement,
-                % min-distance, or dRSA-proxy gate criteria fail.
-                % For the dRSA proxy gate, only candidates that improve the
-                % cross-model proxy are accepted once enough trials exist.
+                % Constraint-only resampling: regenerate only if placement range or min-distance fails.
                 trialValid = false;
                 attemptsThisTrial = 0;
-                currentDrsaProxyScore = NaN;
-                if useDrsaProxyGate && acceptedTrialCount >= drsaProxyGateMinAcceptedTrials
-                    currentDrsaProxyScore = local_compute_drsa_proxy_score( ...
-                        acceptedDot1Positions(1:acceptedTrialCount, :, :), ...
-                        acceptedDot1Directions(1:acceptedTrialCount, :, :), ...
-                        drsaProxyFrameIndices, drsaProxyGateExcludeMainDiagLags);
-                end
                 while ~trialValid
                     attemptsThisTrial = attemptsThisTrial + 1;
                     if attemptsThisTrial > maxAttemptsPerTrial
@@ -430,36 +362,6 @@ if ~skipGeneration
                         continue;
                     end
 
-                    % Optional dRSA-proxy-aware gate (dot1, nondeviant by default).
-                    % Data flow: accepted trial bank + candidate trial -> dRSA-style
-                    % position-vs-direction proxy score -> accept/reject.
-                    if useDrsaProxyGate && acceptedTrialCount >= drsaProxyGateMinAcceptedTrials
-                        candidateBankPositions = cat(1, ...
-                            acceptedDot1Positions(1:acceptedTrialCount, :, :), ...
-                            reshape(allPathsFrameDotXY(:, 1:2), [1, framesPerTrial, 2]));
-                        candidateBankDirections = cat(1, ...
-                            acceptedDot1Directions(1:acceptedTrialCount, :, :), ...
-                            reshape(directionVectors(:, 1:2), [1, framesPerTrial, 2]));
-                        candidateDrsaProxyScore = local_compute_drsa_proxy_score( ...
-                            candidateBankPositions, candidateBankDirections, ...
-                            drsaProxyFrameIndices, drsaProxyGateExcludeMainDiagLags);
-                        if ~isfinite(candidateDrsaProxyScore)
-                            candidateDrsaProxyScore = inf;
-                        end
-
-                        scoreImprovement = currentDrsaProxyScore - candidateDrsaProxyScore;
-                        relativePass = ~isfinite(currentDrsaProxyScore) || ...
-                            scoreImprovement >= drsaProxyGateMinScoreImprovement;
-                        absolutePass = isinf(drsaProxyGateMaxMeanAbsCorr) || ...
-                            candidateDrsaProxyScore <= drsaProxyGateMaxMeanAbsCorr;
-                        if ~(relativePass && absolutePass)
-                            generationAttemptStats.drsaProxyFailures = ...
-                                generationAttemptStats.drsaProxyFailures + 1;
-                            trialValid = false;
-                            continue;
-                        end
-                    end
-
                     % Per-trial buffers from vectorized outputs.
                     allPathsCurvyness = zeros(framesPerTrial, 2);
                     allPathsCurvyness(1, :) = curvynessFactor;
@@ -521,9 +423,6 @@ if ~skipGeneration
                 generationAttemptStats.acceptedTrials = generationAttemptStats.acceptedTrials + 1;
                 generationAttemptStats.maxAttemptsSingleTrial = max( ...
                     generationAttemptStats.maxAttemptsSingleTrial, attemptsThisTrial);
-                acceptedTrialCount = acceptedTrialCount + 1;
-                acceptedDot1Positions(acceptedTrialCount, :, :) = allPathsFrameDotXY(:, 1:2);
-                acceptedDot1Directions(acceptedTrialCount, :, :) = directionVectors(:, 1:2);
 
                 % Store trial outputs (match v5 struct layout).
                 xySeqs(dirVarIndex, pathDurIndex, trialPerCondIndex).condition          = dirVar;
@@ -659,7 +558,7 @@ if ~skipSave
     repro = struct();
     repro.script = struct( ...
         'name', mfilename, ...
-        'version', 'v14', ...
+        'version', 'v13', ...
         'parameters', struct( ...
             'renderPreview', renderPreview, ...
             'plotPathsAtEnd', plotPathsAtEnd, ...
@@ -668,31 +567,17 @@ if ~skipSave
             'flipCurvatureOnDeviant', flipCurvatureOnDeviant, ...
             'randomizeCurvatureOnDeviant', randomizeCurvatureOnDeviant, ...
             'deviantCurvatureRange', deviantCurvatureRange, ...
-            'deviantSignedTurnWindows', local_get_struct_field_or_default(stimulusTypeConfig, ...
-                'deviantSignedTurnWindows', []), ...
             'enforceCurvatureFeasibilityFloor', enforceCurvatureFeasibilityFloor, ...
             'enforceMinDistanceOnNoDevBaseline', enforceMinDistanceOnNoDevBaseline, ...
-            'enableDrsaProxyGate', enableDrsaProxyGate, ...
-            'applyDrsaProxyGateToNondeviantOnly', applyDrsaProxyGateToNondeviantOnly, ...
-            'drsaProxyGateMinAcceptedTrials', drsaProxyGateMinAcceptedTrials, ...
-            'drsaProxyGateFrameStride', drsaProxyGateFrameStride, ...
-            'drsaProxyGateExcludeMainDiagLags', drsaProxyGateExcludeMainDiagLags, ...
-            'drsaProxyGateMinScoreImprovement', drsaProxyGateMinScoreImprovement, ...
-            'drsaProxyGateMaxMeanAbsCorr', drsaProxyGateMaxMeanAbsCorr, ...
             'maxAttemptsPerTrial', maxAttemptsPerTrial));
     repro.inputs = struct('subjectID', subjectID, 'viewingDistance', viewingDistance);
     repro.rng = rngState;
     repro.config = configSnapshot;
     repro.stimulusTypeConfig = stimulusTypeConfig;
-    savedDrsaProxyFrameIndices = 1:drsaProxyGateFrameStride:framesPerTrial;
-    if savedDrsaProxyFrameIndices(end) ~= framesPerTrial
-        savedDrsaProxyFrameIndices(end + 1) = framesPerTrial;
-    end
     repro.derived = struct( ...
         'framesPerTrial', framesPerTrial, ...
         'minPos', minPos, ...
         'maxPos', maxPos, ...
-        'drsaProxyFrameIndices', savedDrsaProxyFrameIndices, ...
         'curvatureFeasibilityFloorDeg', curvatureFeasibilityFloorDeg, ...
         'effectiveCurvatureFloorDeg', effectiveCurvatureFloorDeg, ...
         'generationAttemptStats', generationAttemptStats);
@@ -716,244 +601,4 @@ end
 % Close all onscreens and offscreens
 if renderPreview
     sca;
-end
-
-%% Local helpers (deviant turn scheduling)
-function trialDeviances = local_build_likelihood_deviant_turns(stimulusTypeConfig, ...
-        dirVar, nTrials)
-% LOCAL_BUILD_LIKELIHOOD_DEVIANT_TURNS Build per-trial deviant turn angles.
-%
-% Purpose:
-%   Build the deviant turn values (degrees) used at the deviant onset frame
-%   for likelihood stimuli. This helper supports two behaviors:
-%     1) Legacy behavior (default): linspace(dirVar, 360-dirVar, nTrials).
-%     2) Explicit signed-turn windows from
-%        stimulusTypeConfig.deviantSignedTurnWindows, e.g.:
-%           [-180 -45; 45 180]
-%        for threshold-style control in signed degrees.
-%
-% Example usage:
-%   turns = local_build_likelihood_deviant_turns(stimulusTypeConfig, 45, 50);
-%
-% Inputs:
-%   - stimulusTypeConfig: likelihood config struct.
-%   - dirVar: current directionVariance condition value.
-%   - nTrials: number of trials to generate in this condition.
-%
-% Output:
-%   - trialDeviances: [1 x nTrials] turn angles in degrees.
-%
-% Data flow:
-%   Config likelihood fields -> validated windows (optional) ->
-%   deterministic coverage across allowed ranges -> per-trial turn vector.
-    if nTrials < 1 || floor(nTrials) ~= nTrials
-        error('nTrials must be a positive integer.');
-    end
-
-    trialDeviances = zeros(1, nTrials);
-
-    % Nondeviant conditions never inject a turn at deviant onset.
-    if dirVar == 0
-        return;
-    end
-
-    signedTurnWindows = local_get_struct_field_or_default(stimulusTypeConfig, ...
-        'deviantSignedTurnWindows', []);
-    if isempty(signedTurnWindows)
-        % Backward-compatible behavior used in earlier versions.
-        trialDeviances = linspace(dirVar, 360 - dirVar, nTrials);
-        return;
-    end
-
-    turnWindows = local_parse_signed_turn_windows(signedTurnWindows);
-    windowWidths = turnWindows(:, 2) - turnWindows(:, 1);
-    totalWidth = sum(windowWidths);
-    cumulativeWidth = [0; cumsum(windowWidths)];
-
-    % Deterministic, evenly spaced coverage over the union of allowed windows.
-    % Trial order is still randomized later by TrialOrder in CreateInputFiles.
-    samplePositions = ((1:nTrials)' - 0.5) / nTrials * totalWidth;
-    for trialIndex = 1:nTrials
-        windowIndex = find(samplePositions(trialIndex) <= cumulativeWidth(2:end), 1, 'first');
-        offsetWithinWindow = samplePositions(trialIndex) - cumulativeWidth(windowIndex);
-        trialDeviances(trialIndex) = turnWindows(windowIndex, 1) + offsetWithinWindow;
-    end
-end
-
-function turnWindows = local_parse_signed_turn_windows(rawTurnWindows)
-% LOCAL_PARSE_SIGNED_TURN_WINDOWS Validate and normalize signed turn windows.
-%
-% Purpose:
-%   Normalize user-configured signed windows to an [N x 2] numeric matrix
-%   and validate domain constraints for likelihood deviant turns.
-%
-% Inputs:
-%   - rawTurnWindows: either [N x 2] matrix or 1D vector with pairwise
-%     boundaries [min1, max1, min2, max2, ...].
-%
-% Output:
-%   - turnWindows: sorted [N x 2] intervals in signed degrees.
-%
-% Assumptions:
-%   - Signed angle domain is [-180, 180].
-%   - Each row is [min, max] with min < max.
-%   - Windows do not overlap.
-    if ~isnumeric(rawTurnWindows) || isempty(rawTurnWindows)
-        error(['deviantSignedTurnWindows must be numeric and non-empty when provided. ' ...
-            'Use [] to disable explicit signed windows.']);
-    end
-
-    if isvector(rawTurnWindows)
-        if mod(numel(rawTurnWindows), 2) ~= 0
-            error('Vector deviantSignedTurnWindows must have an even number of elements.');
-        end
-        turnWindows = reshape(rawTurnWindows, 2, [])';
-    elseif size(rawTurnWindows, 2) == 2
-        turnWindows = rawTurnWindows;
-    else
-        error('deviantSignedTurnWindows must be Nx2 or a vector of paired bounds.');
-    end
-
-    if any(~isfinite(turnWindows(:)))
-        error('deviantSignedTurnWindows contains non-finite values.');
-    end
-    if any(turnWindows(:, 1) >= turnWindows(:, 2))
-        error('Each deviantSignedTurnWindows row must satisfy min < max.');
-    end
-    if any(turnWindows(:) < -180 | turnWindows(:) > 180)
-        error('deviantSignedTurnWindows bounds must stay within [-180, 180].');
-    end
-
-    turnWindows = sortrows(turnWindows, 1);
-    if size(turnWindows, 1) > 1
-        if any(turnWindows(2:end, 1) < turnWindows(1:end-1, 2))
-            error('deviantSignedTurnWindows rows must not overlap.');
-        end
-    end
-end
-
-function value = local_get_struct_field_or_default(structValue, fieldName, defaultValue)
-% LOCAL_GET_STRUCT_FIELD_OR_DEFAULT Read an optional struct field safely.
-    value = defaultValue;
-    if isstruct(structValue) && isfield(structValue, fieldName)
-        value = structValue.(fieldName);
-    end
-end
-
-%% Local helpers (dRSA-proxy scoring)
-function meanAbsCorrScore = local_compute_drsa_proxy_score( ...
-        dot1Positions, dot1Directions, frameIndices, excludeDiagLagBins)
-% LOCAL_COMPUTE_DRSA_PROXY_SCORE Compute a dRSA-style proxy score.
-%
-% Purpose:
-%   Compute the acceptance-gate proxy used in v14 by mirroring the
-%   position-dot1 vs direction-dot1 corr dRSA branch at reduced time
-%   resolution:
-%     - position RDM columns use euclidean pair distances across trials,
-%     - direction RDM columns use cosine pair distances across trials,
-%     - score is mean(abs(corr(directionRDM, positionRDM))).
-%
-% Example usage:
-%   score = local_compute_drsa_proxy_score( ...
-%       dot1PosBank, dot1DirBank, 1:4:320, 1);
-%
-% Inputs:
-%   - dot1Positions: [nTrials x nFrames x 2] dot1 observed positions.
-%   - dot1Directions: [nTrials x nFrames x 2] dot1 direction unit vectors.
-%   - frameIndices: sampled frames used to build proxy RDM columns.
-%   - excludeDiagLagBins: ignore |lag| <= this many sampled bins in score.
-%
-% Output:
-%   - meanAbsCorrScore: scalar proxy score (lower is better).
-%
-% Data flow:
-%   sampled frames -> position/direction RDM columns -> cross-time columnwise
-%   correlation matrix -> abs + lag mask average -> scalar proxy score.
-    meanAbsCorrScore = 0;
-    nTrials = size(dot1Positions, 1);
-    if nTrials < 3 || isempty(frameIndices)
-        return;
-    end
-
-    nFramesToScore = numel(frameIndices);
-    trialPairs = nchoosek(1:nTrials, 2);
-    pairI = trialPairs(:, 1);
-    pairJ = trialPairs(:, 2);
-    nPairs = size(trialPairs, 1);
-    rdmPosition = zeros(nPairs, nFramesToScore);
-    rdmDirection = zeros(nPairs, nFramesToScore);
-
-    for frameListIndex = 1:nFramesToScore
-        frameIndex = frameIndices(frameListIndex);
-        posFrame = squeeze(dot1Positions(:, frameIndex, :));
-        dirFrame = squeeze(dot1Directions(:, frameIndex, :));
-        rdmPosition(:, frameListIndex) = local_pairwise_euclidean_from_pairs(posFrame, pairI, pairJ);
-        rdmDirection(:, frameListIndex) = local_pairwise_cosine_from_pairs(dirFrame, pairI, pairJ);
-    end
-
-    corrMatrix = local_columnwise_correlation(rdmDirection, rdmPosition);
-    if excludeDiagLagBins > 0
-        [rowIdx, colIdx] = ndgrid(1:nFramesToScore, 1:nFramesToScore);
-        validMask = abs(rowIdx - colIdx) > excludeDiagLagBins;
-    else
-        validMask = true(size(corrMatrix));
-    end
-    scoreValues = abs(corrMatrix(validMask));
-    scoreValues = scoreValues(~isnan(scoreValues));
-    if ~isempty(scoreValues)
-        meanAbsCorrScore = mean(scoreValues);
-    end
-end
-
-function distValues = local_pairwise_euclidean_from_pairs(pointsXY, pairI, pairJ)
-% LOCAL_PAIRWISE_EUCLIDEAN_FROM_PAIRS Euclidean distances for selected trial pairs.
-%
-% Inputs:
-%   - pointsXY: [nTrials x 2] coordinates for one frame.
-%   - pairI/pairJ: pair index vectors in pdist condensed order.
-%
-% Output:
-%   - distValues: [nPairs x 1] euclidean distances.
-    deltas = pointsXY(pairI, :) - pointsXY(pairJ, :);
-    distValues = sqrt(sum(deltas.^2, 2));
-end
-
-function distValues = local_pairwise_cosine_from_pairs(vectorsXY, pairI, pairJ)
-% LOCAL_PAIRWISE_COSINE_FROM_PAIRS Cosine distances for selected trial pairs.
-%
-% Inputs:
-%   - vectorsXY: [nTrials x 2] vectors for one frame.
-%   - pairI/pairJ: pair index vectors in pdist condensed order.
-%
-% Output:
-%   - distValues: [nPairs x 1] cosine distances (1 - cosine similarity).
-    vecA = vectorsXY(pairI, :);
-    vecB = vectorsXY(pairJ, :);
-    dotAB = sum(vecA .* vecB, 2);
-    normA = sqrt(sum(vecA.^2, 2));
-    normB = sqrt(sum(vecB.^2, 2));
-    denom = normA .* normB;
-    cosSim = zeros(size(dotAB));
-    validMask = denom > eps;
-    cosSim(validMask) = dotAB(validMask) ./ denom(validMask);
-    cosSim = max(min(cosSim, 1), -1);
-    distValues = 1 - cosSim;
-end
-
-function corrMatrix = local_columnwise_correlation(matrixX, matrixY)
-% LOCAL_COLUMNWISE_CORRELATION Compute corr(X, Y) without toolbox dependency.
-%
-% Inputs:
-%   - matrixX: [nObs x nColsX]
-%   - matrixY: [nObs x nColsY]
-%
-% Output:
-%   - corrMatrix: [nColsX x nColsY] columnwise Pearson correlations.
-    centeredX = bsxfun(@minus, matrixX, mean(matrixX, 1));
-    centeredY = bsxfun(@minus, matrixY, mean(matrixY, 1));
-    normX = sqrt(sum(centeredX.^2, 1));
-    normY = sqrt(sum(centeredY.^2, 1));
-    denom = normX' * normY;
-    corrMatrix = (centeredX' * centeredY) ./ denom;
-    corrMatrix(denom <= eps) = NaN;
 end
