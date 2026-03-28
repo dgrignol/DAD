@@ -1,5 +1,22 @@
 # 28 Mar 2026 22:17
 
+## Add V22 generator with fixation-collision controls
+
+### `experiment/stimuli_generation_V22.m`
+- Add a new active V22 config-driven one-dot occlusion generator that extends the V21 generation flow with explicit fixation-zone collision handling modes (`off`, `retry`, `move`).
+- Keep fixed-frame occlusion timing and output metadata contracts aligned with the existing occlusion runtime/simulation pipeline while introducing shape-preserving translation fallback logic for fixation collisions.
+
+### `experiment/lib/Config_stimuli_generation_V22.m`
+- Add the dedicated V22 config class with fixation-collision parameters (`fixationCollisionMode`, exclusion radius, padding, direction/shift sampling controls) plus core one-dot motion and occlusion defaults.
+
+### `experiment/lib/Config_stimuli_generation_V21.m`
+- Expand parameter-level comments/examples to clarify generation assumptions and units for V21 controls without changing the underlying default numeric behavior.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with a V22 section documenting fixation-collision behavior, retained V21 features, and MATLAB usage guidance for selecting collision mode.
+
+# 28 Mar 2026 22:17
+
 ## Introduce v8 run-color runtime and schedule config variants
 
 ### `experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m`

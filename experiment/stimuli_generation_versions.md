@@ -159,6 +159,9 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   while keeping fixed-frame occlusion geometry (`deviance=130`,
   `full occlusion 130..190`, nominal reappearance search from frame 191)**:
   use **V21**.
+- **Generate config-driven occlusion stimuli with fixation-zone collision
+  handling modes (`off`, `retry`, `move`) where `move` preserves trajectory
+  shape via minimal rigid translation when feasible**: use **V22**.
 - **Reduce residual position-direction coupling while preserving constant
   within-trial curvature**: use **v14**.
 - **Experimentation version: half-length paths to reduce
@@ -564,6 +567,40 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   `fixedOcclusionEndFrame = 190;`
   `overwriteExisting = true;`
   `stimuli_generation_V21;`
+
+### v22 — `stimuli_generation_V22.m`
+
+**Adds**
+- **Three-way fixation collision handling in generation config**:
+  `Config_stimuli_generation_V22.fixationCollisionMode` supports:
+  - `off`: keep colliding trajectories unchanged.
+  - `retry`: reject colliding candidates and regenerate.
+  - `move`: attempt a minimal rigid translation of the paired
+    nondeviant/deviant candidate to move it out of the exclusion zone while
+    preserving in-bounds placement; if no feasible translation exists, retry.
+- **Shape-preserving mitigation path**:
+  `move` mode preserves relative trajectory geometry and only changes absolute
+  placement when required to avoid the central fixation area.
+- **Dedicated V22 config class (`Config_stimuli_generation_V22`)**:
+  introduces fixation parameters:
+  `fixationCollisionMode`, `fixationExclusionRadiusDeg`,
+  `fixationMovePaddingDeg`, `fixationMoveDirectionSamples`,
+  `fixationMoveShiftSamples`.
+
+**Keeps from v21**
+- Config-driven one-dot generation without source subject MAT files.
+- Fixed-frame occlusion timeline (`deviance=130`, fully occluded `130..190`).
+- V20-compatible twocircle metadata and predicted output generation.
+
+**Usage examples (MATLAB code style)**
+- Interactive generation from `experiment/`:
+  `addpath('lib');`
+  `stimuli_generation_V22;`
+- Set fixation-collision behavior in config and run:
+  `addpath('lib');`
+  `% In Config_stimuli_generation_V22:`
+  `% fixationCollisionMode = 'move'; % or 'retry' / 'off'`
+  `stimuli_generation_V22;`
 
 ### v15_experimentalPathScale — `stimuli_generation_v15_experimentalPathScale.m`
 

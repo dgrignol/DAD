@@ -1,25 +1,25 @@
-classdef Config_stimuli_generation_V21
+classdef Config_stimuli_generation_V22
     properties(Constant)
 
-        % CONFIG_STIMULI_GENERATION_V21
+        % CONFIG_STIMULI_GENERATION_V22
         %
         % Purpose:
         %   Centralize one-dot trajectory generation controls used by:
-        %     - experiment/stimuli_generation_V21.m
+        %     - experiment/stimuli_generation_V22.m
         %
         % Usage example (interactive):
         %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment');
         %   addpath('lib/');
-        %   stimuli_generation_V21;
+        %   stimuli_generation_V22;
         %
         % Usage example (non-interactive):
         %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
         %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
-        %    addpath('lib/'); run('stimuli_generation_V21.m');"
+        %    addpath('lib/'); run('stimuli_generation_V22.m');"
         %
         % Key assumptions:
         %   - One-dot generation only.
-        %   - Fixed-frame occlusion defaults match V21 expectations.
+        %   - Fixed-frame occlusion defaults match V22 expectations.
         %   - Output location points to experiment/input_files by default.
 
         % Number of unique sequence IDs generated per condition.
@@ -48,10 +48,42 @@ classdef Config_stimuli_generation_V21
         dotSpeedDegPerSec = 3.73;
         % Derived framewise displacement (deg/frame).
         % Example: consumed directly by path integrator each frame.
-        dotSpeedDegPerFrame = Config_stimuli_generation_V21.dotSpeedDegPerSec / Config_stimuli_generation_V21.frameFrequency;
+        dotSpeedDegPerFrame = Config_stimuli_generation_V22.dotSpeedDegPerSec / Config_stimuli_generation_V22.frameFrequency;
+
+        % Optional central-fixation collision handling for generated paths.
+        % Modes:
+        %   - 'off'   : no fixation-zone handling.
+        %   - 'retry' : reject colliding candidates and resample.
+        %   - 'move'  : try to translate colliding candidates minimally out
+        %               of the exclusion zone before falling back to retry.
+        % Collision handling mode around central fixation zone.
+        % Example: 'move' (default here), alternatives: 'retry', 'off'.
+        fixationCollisionMode = 'move';
+        % Approximate fixation cross full span in visual degrees.
+        % Example: if runtime has Conf.fixSizeDeg = 0.2, set this to ~0.4.
+        fixationCrossSizeDegApprox = 0.4;
+        % Extra conservative clearance around fixation, beyond
+        % cross half-span + dot radius, to prevent near-miss trajectories.
+        % Example: 0.10 keeps the dot visibly farther from the cross center.
+        fixationSafetyMarginDeg = 0.10;
+        % Exclusion radius for the dot center around fixation.
+        % Example: cross half-span + dot radius + safety margin.
+        fixationExclusionRadiusDeg = ...
+            (Config_stimuli_generation_V22.fixationCrossSizeDegApprox / 2) + ...
+            (Config_stimuli_generation_V22.dotWidth / 2) + ...
+            Config_stimuli_generation_V22.fixationSafetyMarginDeg;
+        % Extra safety padding added to the move-mode target radius.
+        % Example: 0.01 deg ensures a small clearance margin.
+        fixationMovePaddingDeg = 0.01;
+        % Number of direction candidates tested in move mode.
+        % Example: 32 gives dense angular search with low runtime cost.
+        fixationMoveDirectionSamples = 32;
+        % Number of shift magnitudes sampled per candidate direction.
+        % Example: 320 supports fine-grained minimal-shift search.
+        fixationMoveShiftSamples = 320;
 
         % Deviance and curvature controls used by the config-driven
-        % one-dot trajectory synthesis in stimuli_generation_V21.m.
+        % one-dot trajectory synthesis in stimuli_generation_V22.m.
         % If true, invert curvature sign after deviance onset.
         % Example: false keeps sign unchanged unless randomization is enabled.
         flipCurvatureOnDeviant = false;
@@ -69,7 +101,7 @@ classdef Config_stimuli_generation_V21
         % Example: [-81,1;1,81] excludes exactly-zero signed turn.
         deviantSignedTurnWindows = [-81, 1; 1, 81];
 
-        % Fixed-frame occlusion timing controls for the V21 paradigm.
+        % Fixed-frame occlusion timing controls for the V22 paradigm.
         % Fixed frame index where deviance and full occlusion begin.
         % Example: 130 at 120 Hz is ~1.08 s after trial start.
         fixedDevianceFrame = 130;
@@ -81,10 +113,10 @@ classdef Config_stimuli_generation_V21
         % Likelihood-mode condition definition consumed by generator.
         % Example: directionVariance [0,45] -> nondeviant + deviant condition.
         likelihood = struct( ...
-            'pathDuration', Config_stimuli_generation_V21.trialDuration, ...
+            'pathDuration', Config_stimuli_generation_V22.trialDuration, ...
             'directionVariance', [0, 45], ...
             'directionChange', 30, ...
-            'deviantSignedTurnWindows', Config_stimuli_generation_V21.deviantSignedTurnWindows);
+            'deviantSignedTurnWindows', Config_stimuli_generation_V22.deviantSignedTurnWindows);
 
         % Output folder (relative to experiment/ unless absolute path is used).
         % Example: 'input_files/' writes MovDot_SubXX*.mat there.
