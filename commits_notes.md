@@ -1,3 +1,16 @@
+# 28 Mar 2026 22:16
+
+## Archive v6/V21 runtime lineage under oldies
+
+### `experiment/MoveDot1_experiment_occlusion_v6_runColorCue.m` -> `experiment/oldies/MoveDot1_experiment_occlusion_v6_runColorCue.m`
+- Move the v6 run-color-cue runtime out of the active experiment root into `oldies` as a pure archive relocation, preserving the script content for reproducibility/back-reference.
+
+### `experiment/oldies/MoveDot1_experiment_occlusion_v7_runColorCueMessages.m`
+- Add the v7 run-color-cue-with-messages runtime variant into the archive tree so intermediate runtime iterations remain recoverable without crowding the active experiment folder.
+
+### `experiment/stimuli_generation_V21.m` -> `experiment/oldies/stimuli_generation_V21.m`
+- Move the V21 config-driven one-dot generator from active root to `oldies`, keeping the full generator implementation available while preparing the active path for V22.
+
 # 28 Mar 2026 15:23
 
 ## Experiment folder archival and active v6/V21 layout
