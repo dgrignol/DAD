@@ -1,3 +1,82 @@
+# 28 Mar 2026 15:23
+
+## Experiment folder archival and active v6/V21 layout
+
+### `experiment/CreateInputFiles_v14_threeRunsPerBlock_catch.m`
+- Add the v14 catch-aware TrialStruct builder at the active experiment root, now wired to `Config_schedule_CreateInputV14_MoveDotV6` for schedule, catch-rate, and question timing controls.
+- Preserve the three-runs-per-block data flow (always-visible in run 1; mixed occlusion conditions in runs 2/3) while adding deterministic `CatchPlan` metadata aligned to `TrialOrder` slots.
+
+### `experiment/MoveDot1_experiment_occlusion_v6_runColorCue.m`
+- Add the v6 runtime as the active occlusion experiment entry point, including block-aware scheduling, catch-trial question flow, sequence-identity trigger support, and run-family color cue counterbalancing.
+- Keep trigger semantics aligned with the occlusion event map (`occlusion_start`, `occlusion_complete`, `occlusion_end_start`, `occlusion_end_complete`) and catch-response events used by DataPixx/MEG workflows.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m`
+- Add the active v6 schedule config class for run partitioning, catch-rate controls, and run-color cue toggles used by both input-file creation and runtime execution.
+
+### `experiment/lib/Config_stimuli_generation_V21.m`
+- Add a dedicated V21 generator config class that isolates one-dot occlusion synthesis parameters, fixed-frame occlusion timing defaults, and output naming controls from the legacy multi-version `Config` class.
+
+### `experiment/runExperiment.m`
+- Add a small convenience launcher that pre-sets subject/block/debug run variables and calls the selected occlusion runtime from an absolute local path.
+
+### `experiment/stimuli_generation_V21.m`
+- Add the active V21 config-driven generator that synthesizes one-dot trajectories without source subject MAT transforms while preserving fixed-frame occlusion geometry and metadata compatibility expectations.
+- Export observed condition sets plus predicted occluded-deviant outputs in the current one-dot format used by downstream simulation tooling.
+
+### `experiment/trigger_codes_occlusion_v6.md`
+- Add the v6 trigger reference table, including condition onsets, sequence-identity range, occlusion event pulses, catch-question lifecycle, and response/timeout events.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with V20/V21 capability notes, fixed-frame occlusion timing rules, and usage guidance for choosing transformed-source versus config-driven generation paths.
+
+## Legacy experiment archive moves (`experiment` -> `experiment/oldies`)
+
+### Legacy CreateInput script moves
+- Move `experiment/CreateInputFiles_v10.m` to `experiment/oldies/CreateInputFiles_v10.m` without behavior changes.
+- Move `experiment/CreateInputFiles_v11.m` to `experiment/oldies/CreateInputFiles_v11.m` without behavior changes.
+- Move `experiment/CreateInputFiles_v12_temporary.m` to `experiment/oldies/CreateInputFiles_v12_temporary.m`, keeping compatibility-helper logic while updating internal script-name references.
+- Add `experiment/oldies/CreateInputFiles_v13_threeRunsPerBlock.m` to preserve the prior v13 schedule builder in the archive area.
+
+### Legacy MoveDot runtime moves
+- Move `experiment/MoveDot1_experiment_vX.m` to `experiment/oldies/MoveDot1_experiment_vX.m` as a pure archive relocation.
+- Move `experiment/MoveDot1_experiment_vX_occlusion_v1.m` to `experiment/oldies/MoveDot1_experiment_occlusion_v1.m` and align script-name references in comments.
+- Add archived copies of intermediate occlusion runtime variants:
+  `experiment/oldies/MoveDot1_experiment_occlusion_v2_threeRunsPerBlock.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v3_blocksBreak.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v4_catchTrials.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v5_sequenceTriggers.m`.
+
+### Legacy config class moves and archival
+- Move `experiment/lib/Config.m` to `experiment/oldies/lib/Config.m`, keeping legacy generator constants available under the archive tree.
+- Add `experiment/oldies/lib/Config_occlusion_schedule_v1.m` and `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV5.m` to retain earlier scheduling config versions alongside archived runtimes.
+
+### Legacy stimulus generator moves
+- Move legacy generators from the active root to `experiment/oldies/`:
+  `stimuli_generation_v05.m`, `stimuli_generation_v06.m`, `stimuli_generation_v07.m`, `stimuli_generation_v08.m`, `stimuli_generation_v09.m`, `stimuli_generation_v10.m`, `stimuli_generation_v12.m`, `stimuli_generation_v13.m`, `stimuli_generation_v14.m`, `stimuli_generation_v15.m`, `stimuli_generation_v15_experimentalPathScale.m`, `stimuli_generation_v16_Displacement.m`, `stimuli_generation_v17.m`, `stimuli_generation_v18.m`, and `stimuli_generation_v19.m`.
+- Add `experiment/oldies/stimuli_generation_V20.m` as the archived fixed-frame V20 generator.
+- Normalize authorship comments in moved v09-v19 scripts to the maintained naming convention.
+
+### Legacy trigger doc moves
+- Move `experiment/trigger_codes.md` to `experiment/oldies/trigger_codes.md` with updated runtime-name references.
+- Add archived trigger maps `experiment/oldies/trigger_codes_occlusion_v4.md` and `experiment/oldies/trigger_codes_occlusion_v5.md` next to their archived runtime variants.
+
+### `experiment/triggers_report_sub03_copy_withNotes.pdf` (deleted)
+- Remove the tracked trigger-report PDF from the active `experiment/` root as part of the folder cleanup; an unstaged copy remains in `experiment/oldies/` for local archival.
+
+## One-dot occlusion simulation/report refresh
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v1.m`
+- Add matrix-guide overlays keyed to occlusion event timing (full disappearance and first reappearance) and propagate resolved event metadata into reproducibility outputs.
+- Keep guide-time conversion explicit for both standard and PE-cut analysis windows so plotted markers stay aligned after frame trimming.
+
+### `simulations/scripts/one-dot/run_pipeline_occlusion.m`
+- Extend the batch runner to branch cleanly across `dRSAtypeToRun` values (`PCR` vs `corr`), normalize strategy inputs, and avoid redundant per-strategy reruns for the `corr` branch.
+- Update participant default and runtime logging so batch invocations print both dRSA branch and strategy context per run.
+
+### `simulations/report/PE_simulation_diff_1Dot.md`
+- Append a generated Subject 67 section (`<!-- SUBJECT:67:START/END -->`) with matrix embeds and path checks across observed/predicted/PE comparisons and corr/PCR strategy variants.
+- Preserve report structure and section conventions so future scripted subject refreshes can replace bounded subject blocks in place.
+
 # 19 Mar 2026 15:52
 
 ## Occlusion PE report refresh
@@ -57,14 +136,14 @@
 - Preserve the v18 output contract (three observed conditions, predicted branch, twocircle/alpha metadata, and event-frame fields) while changing only the deviant-branch construction rule.
 - Add non-interactive overwrite control (`overwriteExisting`) so batch regeneration can run without prompt loops when target files already exist.
 
-### `experiment/MoveDot1_experiment_vX_occlusion_v1.m`
+### `experiment/MoveDot1_experiment_occlusion_v1.m`
 - Add a dedicated one-dot occlusion runtime that consumes `MovDot_SubXX.mat` metadata from v18/v19, validates required occlusion fields, and enforces one-dot trajectory shape.
 - Implement condition-specific trial-onset triggers (`31`, `41`, `51`) and occlusion event triggers (`111`, `112`, `114`, `115`) with per-frame logging for debug/replay workflows.
 - Support two rendering paths (`twocircle` default, `alpha` fallback), balancing trial scheduling via `SubXX_TrialStruct.mat` when available and an internal balanced fallback otherwise.
 - Save run outputs and optional debug trigger CSVs under `experiment/output_files` with explicit no-overwrite guards.
 
 ### `experiment/trigger_codes.md`
-- Add the canonical trigger-code table for `MoveDot1_experiment_vX_occlusion_v1.m`, including condition onset pulses and the four occlusion event pulses.
+- Add the canonical trigger-code table for `MoveDot1_experiment_occlusion_v1.m`, including condition onset pulses and the four occlusion event pulses.
 - Clarify that event frames come from generator metadata and that condition and event trigger emissions are independent during a trial.
 
 ### `experiment/stimuli_generation_versions.md`
