@@ -1,3 +1,21 @@
+# 28 Mar 2026 22:17
+
+## Introduce v8 run-color runtime and schedule config variants
+
+### `experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m`
+- Add a new active v8 occlusion runtime variant that keeps the run-color-cue flow and catch-trial architecture while advancing the runtime naming/version lineage beyond the archived v6/v7 scripts.
+- Keep trigger and schedule assumptions consistent with the existing one-dot occlusion family (condition onsets, sequence identity pulse, occlusion event triggers, and catch-response triggers).
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV7.m`
+- Add a V7 schedule/config snapshot for the three-runs-per-block catch pipeline so v7 runtime assumptions remain explicit and reproducible.
+- Set defaults/documentation fields for block count, catch rates, question timing, and run-color cue behavior in one place.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV8.m`
+- Add the active v8 schedule/config class used by the new runtime, preserving the same schedule/catch contract while versioning config ownership to v8.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m`
+- Expand section-level comments and parameter-level examples to clarify schedule/catch data flow and runtime assumptions without changing the configured numeric behavior.
+
 # 28 Mar 2026 22:16
 
 ## Archive v6/V21 runtime lineage under oldies

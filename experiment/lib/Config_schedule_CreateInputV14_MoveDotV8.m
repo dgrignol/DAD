@@ -1,18 +1,18 @@
-classdef Config_schedule_CreateInputV14_MoveDotV6
+classdef Config_schedule_CreateInputV14_MoveDotV8
     properties(Constant)
 
-        % CONFIG_SCHEDULE_CREATEINPUTV14_MOVEDOTV6
+        % CONFIG_SCHEDULE_CREATEINPUTV14_MOVEDOTV8
         %
         % Purpose:
         %   Centralize block/run schedule controls and catch-trial controls
         %   for:
         %     - experiment/CreateInputFiles_v14_threeRunsPerBlock_catch.m
-        %     - experiment/MoveDot1_experiment_occlusion_v6_runColorCue.m
+        %     - experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m
         %     - experiment/MoveDot1_experiment_occlusion_v5_sequenceTriggers.m
         %
         % Usage example (interactive):
         %   In MATLAB, open this file and set:
-        %       Config_schedule_CreateInputV14_MoveDotV6.numBlocks
+        %       Config_schedule_CreateInputV14_MoveDotV8.numBlocks
         %   then run:
         %       CreateInputFiles_v14_threeRunsPerBlock_catch
         %
@@ -39,7 +39,7 @@ classdef Config_schedule_CreateInputV14_MoveDotV6
 
         % Number of blocks generated in TrialOrder.
         % Example: 2 -> block 1 and block 2 each with runs 1..3.
-        numBlocks = 1;
+        numBlocks = 2;
 
         % Runs per block (kept fixed for this family).
         % Example: 3 -> run1(always_visible), run2/3(occluded mix).
@@ -93,7 +93,77 @@ classdef Config_schedule_CreateInputV14_MoveDotV6
         % Example: 2 means "not changed".
         catchResponseNoCode = 2;
 
-        % Run-color cue switch for experiment v6.
+        % Start-of-experiment message shown before the first run starts.
+        % Set duration <= 0 to require an explicit keyboard/button-box
+        % response (1 or 8) with no timeout.
+        % Enable pre-run message before run 1.
+        % Example: true shows welcome/instruction screen.
+        startMessageEnabled = true;
+        % Text shown in the pre-run message.
+        % Example: includes button-box instructions.
+        startMessageText = sprintf(['Welcome!\n\n' ...
+            'Press Red or Blue on the button box\n' ...
+            'to start the experiment.']);
+        % Message duration (seconds). <=0 means wait for response.
+        % Example: 0.0 -> require explicit response (1 or 8).
+        startMessageDurationSec = 0.0;
+
+        % Mid-experiment transition message shown after run 1 and before
+        % the following run (typically run 2).
+        % Enable transition message between run 1 and run 2.
+        % Example: true adds a short rest prompt after run 1.
+        run1TransitionMessageEnabled = true;
+        % Text shown in the run1->run2 transition screen.
+        % Example: remind participant to rest before continuing.
+        run1TransitionMessageText = sprintf(['End of first task.\n\n' ...
+            'You ca rest your eyes.\n' ...
+            'Second task will start soon.']);
+        % Transition message duration in seconds.
+        % Example: 5.0 -> auto-continue after 5 s.
+        run1TransitionMessageDurationSec = 5.0;
+
+        % End-of-block message (non-final blocks).
+        % Runtime fills the two %d placeholders with:
+        %   1) ended block number
+        %   2) remaining block count
+        % Enable message shown between non-final blocks.
+        % Example: true shows "block ended / remaining blocks" prompt.
+        endOfBlockMessageEnabled = true;
+        % End-of-block template with placeholders:
+        %   first %d = completed block index, second %d = remaining blocks.
+        endOfBlockMessageTextTemplate = sprintf(['Block %d ended.\n' ...
+            'Remaining blocks: %d.\n\n' ...
+            'Press Red or Blue to start the next block.']);
+        % End-of-block message duration. <=0 waits for response.
+        % Example: 0.0 -> participant must press button to continue.
+        endOfBlockMessageDurationSec = 0.0;
+
+        % End-of-experiment message shown after the last block.
+        % Enable final message after last block.
+        % Example: true shows closing text before quit.
+        finalMessageEnabled = true;
+        % Closing text at experiment end.
+        % Example: replace with lab-standard thank-you wording.
+        finalMessageText = 'you completed the experiment bye thanks';
+        % Final message duration in seconds.
+        % Example: 5.0 -> auto-close after 5 s.
+        finalMessageDurationSec = 5.0;
+
+        % Shared controls for message transitions.
+        % Add fixation period immediately after message screens.
+        % Example: true enforces short recentering interval.
+        postMessageFixationEnabled = true;
+        % Duration of post-message fixation interval.
+        % Example: 3.0 seconds.
+        postMessageFixationDurationSec = 3.0;
+
+        % For message screens that require button confirmation (except
+        % catch trials), wait this long before accepting inputs.
+        % Ignore button responses during initial lockout period.
+        % Example: 1.0 prevents accidental carry-over presses.
+        messageResponseLockoutSec = 1.0;
+
+        % Run-color cue switch for experiment v8.
         % If true, run 1 and runs 2/3 use different dot colors with
         % odd/even subject counterbalancing in runtime.
         % Enable run-family color cue metadata used by runtime.
