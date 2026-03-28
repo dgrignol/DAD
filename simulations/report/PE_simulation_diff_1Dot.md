@@ -2285,3 +2285,566 @@ Path check: `Sub70_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obs
 Path check: `Sub70_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-sepCbar -dRSA_sub70_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_sepCbar.png`
 
 <!-- SUBJECT:70:END -->
+
+<!-- SUBJECT:67:START -->
+# Subject 67 - Occlusion v1 (sub67)
+
+Updated: 2026-03-23 14:36
+
+## occluded_deviant
+
+### Observed > Observed
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ Dev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/base/commCbar/dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - base-commCbar -dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ Dev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/base/sepCbar/dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - base-sepCbar -dRSA_sub67_occluded_deviant_corr_oneDot_matrices_base_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ Dev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ Dev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_base_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ Dev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ Dev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_base_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ Dev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ Dev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_base_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/base/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - base-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_base_sepCbar.png`
+
+### Predicted > Observed
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ Dev / Predicted-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/predicted/commCbar/dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - predicted-commCbar -dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ Dev / Predicted-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/predicted/sepCbar/dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - predicted-sepCbar -dRSA_sub67_occluded_deviant_corr_oneDot_matrices_predicted_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ Dev / Predicted-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ Dev / Predicted-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_matrices_predicted_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ Dev / Predicted-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ Dev / Predicted-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_matrices_predicted_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ Dev / Predicted-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ Dev / Predicted-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_matrices_predicted_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / Predicted-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / Predicted-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/predicted/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - predicted-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_matrices_predicted_sepCbar.png`
+
+### PE > Observed
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ Dev / PE-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ Dev / PE-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralObserved_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralObserved_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralObserved_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralObserved_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralObserved_sepCbar.png`
+
+### PE > Predicted
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ Dev / PE-Predicted / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ Dev / PE-Predicted / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPredicted_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-Predicted / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-Predicted / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPredicted_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-Predicted / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-Predicted / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPredicted_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-Predicted / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-Predicted / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPredicted_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-Predicted / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-Predicted / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPredicted_sepCbar.png`
+
+### PE > PE
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ Dev / PE-PE / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ Dev / PE-PE / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/corr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - corr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_corr_oneDot_PE_neuralPE_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-PE / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ Dev / PE-PE / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_PE_neuralPE_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-PE / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ Dev / PE-PE / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrar1PrewhiteRidge_PE_neuralPE_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-PE / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ Dev / PE-PE / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeFullAuto_PE_neuralPE_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-PE / Same Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/commCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-commCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ Dev / PE-PE / Separate Cbar**
+
+![dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_deviant/pcr/matrices/PE/sepCbar/dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_deviant - pcr - matrices - PE-sepCbar -dRSA_sub67_occluded_deviant_pcr_oneDot_pcrridgeTaperedAuto_PE_neuralPE_sepCbar.png`
+
+## occluded_nondeviant
+
+### Observed > Observed
+
+#### Correlation
+
+##### Same Cbar
+
+**Correlation / sub67 / Occ NonDev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/corr/matrices/commCbar/dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - corr - matrices - obsOnly-commCbar -dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_commCbar.png`
+
+##### Separate Cbar
+
+**Correlation / sub67 / Occ NonDev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/corr/matrices/sepCbar/dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - corr - matrices - obsOnly-sepCbar -dRSA_sub67_occluded_nondeviant_corr_oneDot_obsOnly_matrices_sepCbar.png`
+
+#### PCR legacy
+
+##### Same Cbar
+
+**PCR legacy / sub67 / Occ NonDev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/commCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-commCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_commCbar.png`
+
+##### Separate Cbar
+
+**PCR legacy / sub67 / Occ NonDev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/sepCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-sepCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_matrices_sepCbar.png`
+
+#### ARC1
+
+##### Same Cbar
+
+**ARC1 / sub67 / Occ NonDev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/commCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-commCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_commCbar.png`
+
+##### Separate Cbar
+
+**ARC1 / sub67 / Occ NonDev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/sepCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-sepCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrar1PrewhiteRidge_matrices_sepCbar.png`
+
+#### Ridge Full
+
+##### Same Cbar
+
+**Ridge Full / sub67 / Occ NonDev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/commCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-commCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Full / sub67 / Occ NonDev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/sepCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-sepCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeFullAuto_matrices_sepCbar.png`
+
+#### Ridge Tapered
+
+##### Same Cbar
+
+**Ridge Tapered / sub67 / Occ NonDev / Observed-Observed / Same Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_commCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/commCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_commCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-commCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_commCbar.png`
+
+##### Separate Cbar
+
+**Ridge Tapered / sub67 / Occ NonDev / Observed-Observed / Separate Cbar**
+
+![dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_sepCbar.png](../output/Sub67_oneDot_occlusion/occluded_nondeviant/pcr/matrices/sepCbar/dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_sepCbar.png)
+
+Path check: `Sub67_oneDot_occlusion - occluded_nondeviant - pcr - matrices - obsOnly-sepCbar -dRSA_sub67_occluded_nondeviant_pcr_oneDot_obsOnly_pcrridgeTaperedAuto_matrices_sepCbar.png`
+
+<!-- SUBJECT:67:END -->
