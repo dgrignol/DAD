@@ -1,5 +1,23 @@
 # 13 Apr 2026 12:12
 
+## Add trigger confrontation tooling for reported-vs-observed checks
+
+### `triggers_check/compare_reported_vs_observed_triggers.py`
+- Add the V17-focused trigger confrontation CLI that aligns reported MATLAB debug CSV events against observed FIF stim-channel windows using semi-global sequence alignment.
+- Include anomaly extraction/reporting, transition-pulse collapse warnings, markdown summary generation, per-anomaly plots, and optional interactive scroller support for rapid trigger-channel inspection.
+- Keep script-level documentation explicit for expected inputs, output artifacts, and default analysis windows so the workflow can run non-interactively from subject/block/run selectors.
+
+### `oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py`
+- Add an archived trigger-confrontation script snapshot preserving the earlier tool behavior for historical comparison and backward-reference debugging.
+
+### `triggers_check/context.md`
+- Add a local context manifest describing canonical legacy experiment/config references and the three-way trigger comparison goal (expected, reported, observed) used by the trigger-check workspace.
+
+### `triggers_check/AGENTS.md`
+- Add workspace-local coding and MATLAB invocation instructions aligned with repository AGENTS policies for documentation/commenting and absolute-path MATLAB execution.
+
+# 13 Apr 2026 12:12
+
 ## Update experiment documentation and add simulation/methods notes
 
 ### `.gitignore`
