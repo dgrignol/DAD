@@ -1,3 +1,35 @@
+# 13 Apr 2026 12:13
+
+## Archive legacy experiment lineage under oldies and clean tracked trigger/output artifacts
+
+### `experiment/oldies/CreateInputFiles_v14_threeRunsPerBlock_catch.m`, `experiment/oldies/CreateInputFiles_v15_threeRunsPerBlock_catch.m`, `experiment/oldies/CreateInputFiles_v16_threeRunsPerBlock_catch_NotWiredOccluder.m`, `experiment/oldies/CreateInputFiles_v17_threeRunsPerBlock_catch_PathBandOccluder.m`, `experiment/oldies/CreateInputFiles_v18_threeRunsPerBlock_catch_PathBandOccluder.m`, `experiment/oldies/CreateInputFiles_v19_threeRunsPerBlock_catch_eyeTrackerReplay.m`
+- Add archived CreateInputFiles script snapshots (v14-v19) into `experiment/oldies` so prior schedule and catch-planning iterations remain recoverable without staying in the active root.
+
+### `experiment/oldies/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v9_addedPracticeMode.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v10_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v11_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v12_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v13_NotWiredOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v14_PathBandOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v15_PathBandOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v16_eyeTrackerReplay.m`, `experiment/oldies/MoveDot1_experiment_vX copy.m`
+- Add archived runtime script snapshots for the v8-v16 occlusion family plus the generic `MoveDot1_experiment_vX` copy, consolidating historical runtime variants under `experiment/oldies`.
+
+### `experiment/oldies/lib/Config_runtime_v16_eyeTrackerReplay.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV6.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV7.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV8.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV9.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV9.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV10.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV11.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV12.m`, `experiment/oldies/lib/Config_schedule_CreateInputV16_MoveDotV13_NotWiredOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV17_MoveDotV14_PathBandOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV18_MoveDotV15_PathBandOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV19_MoveDotV16_eyeTrackerReplay.m`
+- Add archived schedule/runtime config lineage files to keep historical parameter surfaces and run-structure assumptions versioned alongside their archived scripts.
+
+### `experiment/oldies/lib/Config_stimuli_generation_V21.m`, `experiment/oldies/lib/Config_stimuli_generation_V23_NotWiredOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V24_PathBandOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V25_PathBandOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V26_eyeTrackerReplay.m`, `experiment/oldies/input_files/Config_stimuli_generation_V22.m`
+- Add archived generation config snapshots across V21-V26 plus the V22 input-file config snapshot for reproducible regeneration/debugging of old datasets.
+
+### `experiment/oldies/stimuli_generation_V22.m`, `experiment/oldies/stimuli_generation_V23_NotWiredOccluder.m`, `experiment/oldies/stimuli_generation_V24_PathBandOccluder.m`, `experiment/oldies/stimuli_generation_V25_PathBandOccluder.m`, `experiment/oldies/stimuli_generation_V26_eyeTrackerReplay.m`
+- Add archived generator script snapshots so prior trajectory-generation branches remain available in the `oldies` tree after active-path consolidation.
+
+### `experiment/oldies/trigger_codes_occlusion_v6.md`, `experiment/oldies/trigger_codes_occlusion_v7_eyeTrackerReplay.md`
+- Add archived trigger-code maps for older runtime versions to preserve historical trigger semantics in the same archive tree as the corresponding scripts/configs.
+
+### `derivatives/triggers/sub04/*.csv`, `derivatives/triggers/sub98/*.csv`, `derivatives/triggers/sub99/*.csv` (deleted)
+- Remove tracked trigger-check CSV artifacts for archived subjects/runs from `derivatives/triggers`, keeping trigger-data cleanup separate from active script sources.
+- CSV paths are intentionally not enumerated one-by-one here to keep notes concise.
+
+### `experiment/output_files/practice_SUB99_RUN01.mat` (deleted binary)
+- Remove a tracked output artifact from `experiment/output_files` as part of output-tree cleanup.
+- Warning (binary extension present in staged set): if this `.mat` deletion was unintended, unstage it with:
+  `git reset HEAD -- experiment/output_files/practice_SUB99_RUN01.mat`
+- `.gitignore` guidance: no additional rule needed because `experiment/output_files/` is already ignored.
+
 # 13 Apr 2026 12:12
 
 ## Add trigger confrontation tooling for reported-vs-observed checks
