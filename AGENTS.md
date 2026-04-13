@@ -9,8 +9,6 @@
   the file already uses non-ASCII.
 - Update or add docstrings for scripts/functions when behavior changes,
   covering inputs, outputs, and key assumptions.
-- For trigger logic, align commentary with the canonical definitions in
-  `experiment/trigger_codes.md` and `experiment/MoveDot1_experiment_vX.m`.
 
 ## Local Tooling
 - MATLAB is installed on this machine at:

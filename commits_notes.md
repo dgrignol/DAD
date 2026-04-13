@@ -1,3 +1,59 @@
+# 13 Apr 2026 12:11
+
+## Add block-resume v17/v20/v27 experiment pipeline and retire legacy active files
+
+### `AGENTS.md`
+- Remove the extra trigger-commentary alignment rule so repository-level coding guidance stays focused on documentation/commenting and local MATLAB invocation policy.
+
+### `experiment/CreateInputFiles_v14_threeRunsPerBlock_catch.m` -> `experiment/CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m`
+- Promote the input-builder script to the v20 block-resume variant and align script naming with the new runtime/generation family.
+- Keep deterministic three-runs-per-block scheduling while integrating explicit catch-planning metadata (including run-scoped catch type placement and expected response fields) into the generated TrialStruct artifacts.
+- Expand script-level and section-level documentation so non-interactive/batch usage and workspace override behavior are explicit.
+
+### `experiment/MoveDot1_experiment_occlusion_v17_blockResume.m`
+- Add the new active v17 runtime entry point for the one-dot occlusion paradigm with block-resume support, catch handling, and schedule compatibility with the v20 TrialStruct/CatchPlan format.
+- Restore and document eye-tracker related controls (including optional calibration gates, fixation-break detection, and replay scheduling) while keeping debug-mode and hardware-mode behavior configurable via workspace overrides.
+- Extend timing instrumentation and runtime guardrails (flip diagnostics, missed-frame counters, and optional abort thresholds) to support MEG-focused timing validation workflows.
+- Keep trigger emissions aligned to the new v8 trigger map, including explicit catch-question status closure behavior and replay/gaze-break markers.
+
+### `experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m` (deleted)
+- Remove the previous active v8 runtime script from the active experiment root now that v17 block-resume is the canonical runtime entry point.
+
+### `experiment/lib/Config_runtime_v17_blockResume.m`
+- Add a runtime preset script that exposes subject/session controls and all major v17 overrides (ITI jitter, debug overlays, eye-tracker modes, calibration choices, and path-band geometry tuning) in one reproducible launcher surface.
+- Document accepted value ranges and default fallback behavior for each override so operators can run deterministic presets in interactive and batch sessions.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m` (deleted)
+- Remove the old V14/V6 schedule config from active lib after migration to the new v20/v17 block-resume schedule class.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV7.m` (deleted)
+- Remove the old V14/V7 schedule config from active lib to avoid parallel active schedule definitions after v20 adoption.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV8.m` (deleted)
+- Remove the old V14/V8 schedule config from active lib and consolidate schedule ownership in the v20/v17 block-resume class.
+
+### `experiment/lib/Config_schedule_CreateInputV20_MoveDotV17_blockResume.m`
+- Add the canonical schedule/config class for the new runtime/generator chain, including fixed 3-run partitioning, catch-rate controls, message flow defaults, eye-tracker policy defaults, and timing guard parameters.
+- Keep run-family color-cue and transition messaging controls co-located with catch/planning controls so runtime and input creation consume one shared schedule contract.
+
+### `experiment/lib/Config_stimuli_generation_V21.m` (deleted)
+- Remove the previous V21 generation config from active lib and retire the superseded config lineage from the active path.
+
+### `experiment/lib/Config_stimuli_generation_V22.m` -> `experiment/lib/Config_stimuli_generation_V27_blockResume.m`
+- Promote the generation config to the V27 block-resume variant and keep one-dot synthesis controls, fixed-frame occlusion anchors, and path-band geometry policy in a dedicated class.
+- Preserve fixation-collision handling controls and deviance-curvature windows while aligning output naming and assumptions with the new runtime/input-builder family.
+
+### `experiment/stimuli_generation_V22.m` -> `experiment/stimuli_generation_V27_blockResume.m`
+- Promote the generator script to V27 block-resume naming and update script-level documentation to reflect the de-novo config-driven synthesis flow and exported metadata contracts.
+- Keep fixed-frame occlusion timing and path-band metadata generation explicit, including terminal-style controls and compatibility with the v17 runtime.
+
+### `experiment/trigger_codes_occlusion_v6.md` (deleted)
+- Remove the outdated v6 trigger reference from the active root in favor of the new block-resume trigger map.
+
+### `experiment/trigger_codes_occlusion_v8_blockResume.md`
+- Add the block-resume trigger-code table documenting condition onsets, sequence identity range, occlusion event markers, catch question lifecycle, gaze/replay events, and dedicated ESC termination code.
+- Clarify runtime semantics for mutually exclusive catch-question close triggers and preserve collision-free trigger-space expectations with dynamic sequence IDs.
+
 # 28 Mar 2026 22:17
 
 ## Add V22 generator with fixation-collision controls

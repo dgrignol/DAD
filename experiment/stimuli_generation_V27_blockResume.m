@@ -1,6 +1,6 @@
-%% Stimuli Generation V22 (config-driven one-dot occlusion, no source subject files)
-% Script: stimuli_generation_V22.m
-% Author: Dami (V22 fixation-collision modes by Codex)
+%% Stimuli Generation V27 eyeTrackerReplay blockResume (config-driven one-dot occlusion, no source subject files)
+% Script: stimuli_generation_V27_blockResume.m
+% Author: Dami (V27 block-resume refresh by Codex)
 %
 % Purpose:
 %   Generate a complete one-dot occlusion dataset directly from config
@@ -8,7 +8,7 @@
 %
 %   This script keeps the fixed-frame occlusion geometry behavior introduced
 %   in V20 while replacing source-file transforms with de novo trajectory
-%   synthesis (v17-style controls):
+%   synthesis (v18-style controls):
 %     - one baseline nondeviant trajectory per sequence,
 %     - one deviant trajectory per sequence (turn/curvature change),
 %     - one predicted deviant baseline per sequence.
@@ -17,67 +17,80 @@
 %     1) always_visible
 %     2) occluded_nondeviant
 %     3) occluded_deviant
-%   plus occluded_deviant_predicted in MovDot_SubXX_predicted.mat.
+%   plus occluded_deviant_predicted in MovDot_SubXX_V27_eyeTrackerReplay_blockResume_predicted.mat.
 %
 % Optional central-fixation collision handling:
-%   - configured through Config_stimuli_generation_V22.fixationCollisionMode.
+%   - configured through Config_stimuli_generation_V27_blockResume.fixationCollisionMode.
 %   - modes:
 %       * 'off'   : no special handling.
 %       * 'retry' : reject colliding candidates and resample.
 %       * 'move'  : minimally translate colliding paired trajectories out of
 %                   the fixation exclusion zone when feasible, otherwise retry.
 %   - exclusion radius is controlled by
-%     Config_stimuli_generation_V22.fixationExclusionRadiusDeg.
+%     Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg.
 %
 % Fixed occlusion timeline:
-%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V22)
+%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V27_blockResume)
 %   - first fully occluded frame fixed at 130
 %   - fully occluded through frame 190 (inclusive)
 %   - nominal reappearance search starts at frame 191
 %     (actual reappearance metadata is computed geometrically)
 %
-% Occlusion geometry model (twocircle default):
-%   - pre occluder:
-%       * center = dot position at frame 130
-%       * radius = moving-dot radius
+% Occlusion geometry model (pathband default):
+%   - pre band:
+%       * follows nondeviant path segment from frame 130 to frame 190
 %       * active for frames < 130
-%   - post occluder:
+%       * used to produce partial occlusion onset based on speed and width
+%   - post band:
 %       * activates at frame 130
-%       * center anchored at frame-130 position
-%       * radius chosen to fully occlude all centers in 130..190
+%       * follows active branch segment from frame 130 to frame 190
+%         (for deviant trials this switches to deviant branch at deviance)
 %       * remains active to trial end so reappearance is geometric
+%   - width:
+%       * controlled by Config_stimuli_generation_V27_blockResume.pathBandWidthDeg
+%       * constrained to be strictly larger than dot diameter
+%   - terminal style:
+%       * controlled by Config_stimuli_generation_V27_blockResume.pathBandTerminalStyle
+%       * 'round' keeps rounded terminal caps; 'straight' uses wall-like
+%         straight terminals with configurable start backshift
 %
 % Trigger/event metadata compatibility:
 %   The exported trial fields are aligned with:
-%     - experiment/MoveDot1_experiment_occlusion_v1.m
-%     - experiment/trigger_codes.md
+%     - experiment/MoveDot1_experiment_occlusion_v17_blockResume.m
+%     - experiment/trigger_codes_occlusion_v8_blockResume.md
 %
 % Usage example (interactive from experiment/):
 %   addpath('lib');
-%   stimuli_generation_V22;
+%   stimuli_generation_V27_blockResume;
 %
 % Usage example (set fixed-frame overrides before running):
 %   addpath('lib');
 %   fixedDevianceFrame = 130;
 %   fixedOcclusionEndFrame = 190;
 %   overwriteExisting = true;
-%   stimuli_generation_V22;
+%   stimuli_generation_V27_blockResume;
+%
+% Usage example (force round terminal metadata for comparison):
+%   addpath('lib');
+%   pathBandTerminalStyle = 'round';
+%   pathBandStraightBackshiftDotRadiusScale = 0.0;
+%   stimuli_generation_V27_blockResume;
 %
 % Usage example (enable fixation-cross avoidance in config and run):
 %   addpath('lib');
-%   % In Config_stimuli_generation_V22:
+%   % In Config_stimuli_generation_V27_blockResume:
 %   %   fixationCollisionMode = 'move'; % or 'retry' / 'off'
-%   stimuli_generation_V22;
+%   stimuli_generation_V27_blockResume;
 %
 % Inputs:
-%   - Config_stimuli_generation_V22 class on MATLAB path.
-%   - Interactive target subject ID (always prompted, no default target).
+%   - Config_stimuli_generation_V27_blockResume class on MATLAB path.
+%   - targetSubjectID optional workspace override; otherwise prompted.
 %
 % Outputs:
-%   - input_files/MovDot_SubXX.mat
+%   - input_files/MovDot_SubXX_V27_eyeTrackerReplay_blockResume.mat
 %       with xySeqs containing always_visible / occluded_nondeviant /
 %       occluded_deviant and full occlusion metadata fields.
-%   - input_files/MovDot_SubXX_predicted.mat
+%   - input_files/MovDot_SubXX_V27_eyeTrackerReplay_blockResume_predicted.mat
 %       with xySeqsPredicted containing occluded_deviant_predicted trials
 %       and matching metadata.
 %
@@ -87,23 +100,31 @@
 %     deviant value (>0); the first deviant value is used for generation.
 %   - Trial pairing is sequence-index based and one-to-one across conditions.
 %   - Output directories are relative to experiment/ unless overridden by
-%     Config_stimuli_generation_V22.
+%     Config_stimuli_generation_V27_blockResume.
 
 addpath('lib/');
 
 %% Setup and runtime parameter defaults
-% Data flow: caller overrides + Config_stimuli_generation_V22 constants -> validated controls.
-clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame;
+% Data flow: caller overrides + Config_stimuli_generation_V27_blockResume constants -> validated controls.
+clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale;
 clc;
 
 if ~(exist('fixedDevianceFrame', 'var') && ~isempty(fixedDevianceFrame))
-    fixedDevianceFrame = Config_stimuli_generation_V22.fixedDevianceFrame;
+    fixedDevianceFrame = Config_stimuli_generation_V27_blockResume.fixedDevianceFrame;
 end
 if ~(exist('fixedOcclusionEndFrame', 'var') && ~isempty(fixedOcclusionEndFrame))
-    fixedOcclusionEndFrame = Config_stimuli_generation_V22.fixedOcclusionEndFrame;
+    fixedOcclusionEndFrame = Config_stimuli_generation_V27_blockResume.fixedOcclusionEndFrame;
 end
 if ~(exist('overwriteExisting', 'var') && ~isempty(overwriteExisting))
     overwriteExisting = true;
+end
+if ~(exist('pathBandTerminalStyle', 'var') && ~isempty(pathBandTerminalStyle))
+    pathBandTerminalStyle = Config_stimuli_generation_V27_blockResume.pathBandTerminalStyle;
+end
+if ~(exist('pathBandStraightBackshiftDotRadiusScale', 'var') && ...
+        ~isempty(pathBandStraightBackshiftDotRadiusScale))
+    pathBandStraightBackshiftDotRadiusScale = ...
+        Config_stimuli_generation_V27_blockResume.pathBandStraightBackshiftDotRadiusScale;
 end
 
 if ~isscalar(fixedDevianceFrame) || ~isscalar(fixedOcclusionEndFrame) || ...
@@ -113,19 +134,30 @@ end
 fixedDevianceFrame = round(fixedDevianceFrame);
 fixedOcclusionEndFrame = round(fixedOcclusionEndFrame);
 overwriteExisting = logical(overwriteExisting);
-
-%% Interactive target subject prompt (always requested)
-% Data flow: dialog input -> targetSubjectID -> RNG seed + output filenames.
-prompt = {'Target subject ID (new config-driven occlusion dataset):'};
-dlgTitle = 'V22 target subject';
-dims = [1 70];
-definput = {''}; % no default target by design.
-userInput = inputdlg(prompt, dlgTitle, dims, definput);
-if isempty(userInput)
-    disp('Canceled by user.');
-    return;
+pathBandTerminalStyle = lower(strtrim(char(pathBandTerminalStyle)));
+pathBandStraightBackshiftDotRadiusScale = double(pathBandStraightBackshiftDotRadiusScale);
+if ~ismember(pathBandTerminalStyle, {'round', 'straight'})
+    error('pathBandTerminalStyle must be ''round'' or ''straight''.');
 end
-targetSubjectID = str2double(userInput{1});
+if ~isfinite(pathBandStraightBackshiftDotRadiusScale) || ...
+        pathBandStraightBackshiftDotRadiusScale < 0
+    error('pathBandStraightBackshiftDotRadiusScale must be a non-negative finite scalar.');
+end
+
+%% Resolve target subject ID (workspace override or interactive prompt)
+% Data flow: optional caller-provided subject ID -> fallback dialog -> validated ID.
+if ~(exist('targetSubjectID', 'var') && ~isempty(targetSubjectID))
+    prompt = {'Target subject ID (new config-driven occlusion dataset):'};
+    dlgTitle = 'V27 block-resume target subject';
+    dims = [1 70];
+    definput = {''}; % no default target by design.
+    userInput = inputdlg(prompt, dlgTitle, dims, definput);
+    if isempty(userInput)
+        disp('Canceled by user.');
+        return;
+    end
+    targetSubjectID = str2double(userInput{1});
+end
 
 if isnan(targetSubjectID) || targetSubjectID < 0
     error('Target subject ID must be a numeric value >= 0.');
@@ -133,14 +165,16 @@ end
 targetSubjectID = round(targetSubjectID);
 
 %% Resolve output paths and overwrite guard
-% Data flow: targetSubjectID + Config_stimuli_generation_V22 directories -> output files.
-inputDir = Config_stimuli_generation_V22.inputDirectory;
+% Data flow: targetSubjectID + Config_stimuli_generation_V27_blockResume directories -> output files.
+inputDir = Config_stimuli_generation_V27_blockResume.inputDirectory;
 if ~exist(inputDir, 'dir')
     mkdir(inputDir);
 end
 
-targetObservedFile = fullfile(inputDir, sprintf('MovDot_Sub%02d.mat', targetSubjectID));
-targetPredictedFile = fullfile(inputDir, sprintf('MovDot_Sub%02d_predicted.mat', targetSubjectID));
+targetObservedFile = fullfile(inputDir, sprintf( ...
+    Config_stimuli_generation_V27_blockResume.observedFilePattern, targetSubjectID));
+targetPredictedFile = fullfile(inputDir, sprintf( ...
+    Config_stimuli_generation_V27_blockResume.predictedFilePattern, targetSubjectID));
 
 if isfile(targetObservedFile) || isfile(targetPredictedFile)
     doOverwrite = logical(overwriteExisting);
@@ -157,17 +191,21 @@ if isfile(targetObservedFile) || isfile(targetPredictedFile)
     end
 end
 
-%% Build generation controls from Config_stimuli_generation_V22
-% Data flow: Config_stimuli_generation_V22 constants -> trajectory synthesis controls.
-stimulusTypeConfig = Config_stimuli_generation_V22.likelihood;
-framesPerTrial = round(Config_stimuli_generation_V22.trialDuration * Config_stimuli_generation_V22.frameFrequency);
-nTrials = Config_stimuli_generation_V22.trialsPerCondition;
-fps = double(Config_stimuli_generation_V22.frameFrequency);
+%% Build generation controls from Config_stimuli_generation_V27_blockResume
+% Data flow: Config_stimuli_generation_V27_blockResume constants -> trajectory synthesis controls.
+stimulusTypeConfig = Config_stimuli_generation_V27_blockResume.likelihood;
+framesPerTrial = round(Config_stimuli_generation_V27_blockResume.trialDuration * Config_stimuli_generation_V27_blockResume.frameFrequency);
+nTrials = Config_stimuli_generation_V27_blockResume.trialsPerCondition;
+fps = double(Config_stimuli_generation_V27_blockResume.frameFrequency);
 alphaFadeInFrames = max(1, round(0.25 * fps));
-dotRadiusDeg = double(Config_stimuli_generation_V22.dotWidth) / 2;
+dotRadiusDeg = double(Config_stimuli_generation_V27_blockResume.dotWidth) / 2;
+pathBandWidthDeg = double(Config_stimuli_generation_V27_blockResume.pathBandWidthDeg);
+pathBandStyle = struct( ...
+    'terminalStyle', pathBandTerminalStyle, ...
+    'straightBackshiftDotRadiusScale', pathBandStraightBackshiftDotRadiusScale);
 
 if nTrials < 1
-    error('Config_stimuli_generation_V22.trialsPerCondition must be >= 1.');
+    error('Config_stimuli_generation_V27_blockResume.trialsPerCondition must be >= 1.');
 end
 if framesPerTrial < 2
     error('Computed framesPerTrial (trialDuration * frameFrequency) must be >= 2.');
@@ -179,13 +217,17 @@ if fixedOcclusionEndFrame < fixedDevianceFrame || fixedOcclusionEndFrame > frame
     error(['fixedOcclusionEndFrame (%d) must be within [%d, %d] and must not ' ...
         'precede fixedDevianceFrame.'], fixedOcclusionEndFrame, fixedDevianceFrame, framesPerTrial);
 end
+if ~isfinite(pathBandWidthDeg) || pathBandWidthDeg <= (2 * dotRadiusDeg)
+    error(['Config_stimuli_generation_V27_blockResume.pathBandWidthDeg must be finite and ' ...
+        'strictly larger than the dot diameter (%g deg).'], 2 * dotRadiusDeg);
+end
 
 directionVariance = double(stimulusTypeConfig.directionVariance(:)');
 if ~any(directionVariance == 0)
-    error('Config_stimuli_generation_V22.likelihood.directionVariance must include nondeviant value 0.');
+    error('Config_stimuli_generation_V27_blockResume.likelihood.directionVariance must include nondeviant value 0.');
 end
 if ~any(directionVariance > 0)
-    error('Config_stimuli_generation_V22.likelihood.directionVariance must include at least one deviant value > 0.');
+    error('Config_stimuli_generation_V27_blockResume.likelihood.directionVariance must include at least one deviant value > 0.');
 end
 deviantConditionCode = directionVariance(find(directionVariance > 0, 1, 'first'));
 if numel(directionVariance(directionVariance > 0)) > 1
@@ -194,67 +236,67 @@ if numel(directionVariance(directionVariance > 0)) > 1
 end
 
 if numel(stimulusTypeConfig.pathDuration) > 1
-    warning(['Config_stimuli_generation_V22.likelihood.pathDuration has multiple values. ' ...
-        'V22 uses the first value for one-dot occlusion generation.']);
+    warning(['Config_stimuli_generation_V27_blockResume.likelihood.pathDuration has multiple values. ' ...
+        'V27 block-resume uses the first value for one-dot occlusion generation.']);
 end
 pathDurationSec = double(stimulusTypeConfig.pathDuration(1));
 
 generationCfg = struct();
 generationCfg.framesPerTrial = framesPerTrial;
-generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V22.dotSpeedDegPerFrame);
-generationCfg.minPosDeg = [Config_stimuli_generation_V22.dotWidth / 2, Config_stimuli_generation_V22.dotWidth / 2];
-generationCfg.maxPosDeg = double(Config_stimuli_generation_V22.dotRectSize) - generationCfg.minPosDeg;
+generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V27_blockResume.dotSpeedDegPerFrame);
+generationCfg.minPosDeg = [Config_stimuli_generation_V27_blockResume.dotWidth / 2, Config_stimuli_generation_V27_blockResume.dotWidth / 2];
+generationCfg.maxPosDeg = double(Config_stimuli_generation_V27_blockResume.dotRectSize) - generationCfg.minPosDeg;
 generationCfg.initialCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V22.initialCurvatureWindows, 'Config_stimuli_generation_V22.initialCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V27_blockResume.initialCurvatureWindows, 'Config_stimuli_generation_V27_blockResume.initialCurvatureWindows', false, -inf, inf);
 generationCfg.deviantCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V22.deviantCurvatureWindows, 'Config_stimuli_generation_V22.deviantCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V27_blockResume.deviantCurvatureWindows, 'Config_stimuli_generation_V27_blockResume.deviantCurvatureWindows', false, -inf, inf);
 generationCfg.deviantTurnWindowsDeg = local_parse_interval_windows( ...
     stimulusTypeConfig.deviantSignedTurnWindows, ...
-    'Config_stimuli_generation_V22.likelihood.deviantSignedTurnWindows', true, -180, 180);
-generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V22.flipCurvatureOnDeviant);
-generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V22.randomizeCurvatureOnDeviant);
+    'Config_stimuli_generation_V27_blockResume.likelihood.deviantSignedTurnWindows', true, -180, 180);
+generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V27_blockResume.flipCurvatureOnDeviant);
+generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V27_blockResume.randomizeCurvatureOnDeviant);
 generationCfg.pathDurationSec = pathDurationSec;
 generationCfg.maxAttemptsPerTrial = 60000;
 generationCfg.fixationCollisionMode = lower(strtrim(char( ...
-    Config_stimuli_generation_V22.fixationCollisionMode)));
+    Config_stimuli_generation_V27_blockResume.fixationCollisionMode)));
 generationCfg.fixationExclusionRadiusDeg = double( ...
-    Config_stimuli_generation_V22.fixationExclusionRadiusDeg);
-generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V22.dotRectSize(:)') / 2;
+    Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg);
+generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V27_blockResume.dotRectSize(:)') / 2;
 generationCfg.fixationMovePaddingDeg = double( ...
-    Config_stimuli_generation_V22.fixationMovePaddingDeg);
+    Config_stimuli_generation_V27_blockResume.fixationMovePaddingDeg);
 generationCfg.fixationMoveDirectionSamples = double( ...
-    Config_stimuli_generation_V22.fixationMoveDirectionSamples);
+    Config_stimuli_generation_V27_blockResume.fixationMoveDirectionSamples);
 generationCfg.fixationMoveShiftSamples = double( ...
-    Config_stimuli_generation_V22.fixationMoveShiftSamples);
+    Config_stimuli_generation_V27_blockResume.fixationMoveShiftSamples);
 
 % Validate fixation-collision controls once, then enforce them per trial.
 if numel(generationCfg.fixationCenterDeg) ~= 2
-    error('Config_stimuli_generation_V22.dotRectSize must be [width height].');
+    error('Config_stimuli_generation_V27_blockResume.dotRectSize must be [width height].');
 end
 if ~ismember(generationCfg.fixationCollisionMode, {'off', 'retry', 'move'})
-    error(['Config_stimuli_generation_V22.fixationCollisionMode must be one of: ' ...
+    error(['Config_stimuli_generation_V27_blockResume.fixationCollisionMode must be one of: ' ...
         '''off'', ''retry'', ''move''.']);
 end
 if ~isfinite(generationCfg.fixationExclusionRadiusDeg) || generationCfg.fixationExclusionRadiusDeg < 0
-    error('Config_stimuli_generation_V22.fixationExclusionRadiusDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg must be finite and >= 0.');
 end
 if ~isfinite(generationCfg.fixationMovePaddingDeg) || generationCfg.fixationMovePaddingDeg < 0
-    error('Config_stimuli_generation_V22.fixationMovePaddingDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V27_blockResume.fixationMovePaddingDeg must be finite and >= 0.');
 end
 if generationCfg.fixationMoveDirectionSamples < 4 || ...
         floor(generationCfg.fixationMoveDirectionSamples) ~= generationCfg.fixationMoveDirectionSamples
-    error('Config_stimuli_generation_V22.fixationMoveDirectionSamples must be an integer >= 4.');
+    error('Config_stimuli_generation_V27_blockResume.fixationMoveDirectionSamples must be an integer >= 4.');
 end
 if generationCfg.fixationMoveShiftSamples < 10 || ...
         floor(generationCfg.fixationMoveShiftSamples) ~= generationCfg.fixationMoveShiftSamples
-    error('Config_stimuli_generation_V22.fixationMoveShiftSamples must be an integer >= 10.');
+    error('Config_stimuli_generation_V27_blockResume.fixationMoveShiftSamples must be an integer >= 10.');
 end
 
 % Match v17 geometric floor logic to avoid near-straight paths that cannot
 % fit inside the movement rectangle under fixed speed/frame constraints.
-maxTurnRadiusDeg = min(double(Config_stimuli_generation_V22.dotRectSize) - double(Config_stimuli_generation_V22.dotWidth)) / 2;
+maxTurnRadiusDeg = min(double(Config_stimuli_generation_V27_blockResume.dotRectSize) - double(Config_stimuli_generation_V27_blockResume.dotWidth)) / 2;
 if maxTurnRadiusDeg <= 0
-    error('Config_stimuli_generation_V22.dotRectSize minus dotWidth must be > 0.');
+    error('Config_stimuli_generation_V27_blockResume.dotRectSize minus dotWidth must be > 0.');
 end
 generationCfg.minimumAbsCurvatureDeg = rad2deg(generationCfg.dotSpeedDegPerFrame / maxTurnRadiusDeg);
 
@@ -295,8 +337,10 @@ for iTrial = 1:nTrials
         framesPerTrial, devFrame, fixedOcclusionEndFrame, alphaFadeInFrames);
     trialDevSpliced = local_build_spliced_occluded_deviant(trialNondev, trialDevRaw, devFrame);
 
-    twocircleNondev = local_build_twocircle_metadata(trialNondev.xy, devFrame, timing, dotRadiusDeg);
-    twocircleDev = local_build_twocircle_metadata(trialDevSpliced.xy, devFrame, timing, dotRadiusDeg);
+    pathbandNondev = local_build_pathband_metadata( ...
+        trialNondev.xy, trialNondev.xy, devFrame, timing, dotRadiusDeg, pathBandWidthDeg, pathBandStyle);
+    pathbandDev = local_build_pathband_metadata( ...
+        trialNondev.xy, trialDevSpliced.xy, devFrame, timing, dotRadiusDeg, pathBandWidthDeg, pathBandStyle);
 
     [alphaVisible, geomVisible] = local_build_visible_profiles(framesPerTrial);
     [alphaOcc, geomOcc] = local_build_alpha_profiles(framesPerTrial, timing);
@@ -307,15 +351,15 @@ for iTrial = 1:nTrials
 
     observedCell{rowVisible} = local_attach_occlusion_fields( ...
         trialNondev, -1, 'always_visible', false, ...
-        timing, twocircleNondev, alphaVisible, geomVisible);
+        timing, pathbandNondev, alphaVisible, geomVisible);
 
     observedCell{rowOccNondev} = local_attach_occlusion_fields( ...
         trialNondev, 0, 'occluded_nondeviant', true, ...
-        timing, twocircleNondev, alphaOcc, geomOcc);
+        timing, pathbandNondev, alphaOcc, geomOcc);
 
     observedCell{rowOccDev} = local_attach_occlusion_fields( ...
         trialDevSpliced, deviantConditionCode, 'occluded_deviant', true, ...
-        timing, twocircleDev, alphaOcc, geomOcc);
+        timing, pathbandDev, alphaOcc, geomOcc);
 
     splicedObservedDeviant{iTrial} = observedCell{rowOccDev};
 end
@@ -331,48 +375,52 @@ for iTrial = 1:nTrials
     devFrame = local_infer_deviance_frame(framesPerTrial, fixedDevianceFrame);
     timing = local_build_occlusion_timing( ...
         framesPerTrial, devFrame, fixedOcclusionEndFrame, alphaFadeInFrames);
-    twocirclePred = local_build_twocircle_metadata(trialPredictedDev.xy, devFrame, timing, dotRadiusDeg);
     [alphaOcc, geomOcc] = local_build_alpha_profiles(framesPerTrial, timing);
 
-    % Modeling assumption retained from v18-v20:
+    % Modeling assumption retained from v18-v27:
     % predicted and observed are forced identical until reappearance starts.
     adjustedPred = trialPredictedDev;
     rs = timing.reappearance_start_frame;
     if rs > 1
         adjustedPred.xy(1:(rs - 1), :) = trialObservedDev.xy(1:(rs - 1), :);
     end
+    pathbandPred = local_build_pathband_metadata( ...
+        adjustedPred.xy, adjustedPred.xy, devFrame, timing, dotRadiusDeg, pathBandWidthDeg, pathBandStyle);
 
     predictedCell{iTrial} = local_attach_occlusion_fields( ...
         adjustedPred, deviantConditionCode, 'occluded_deviant_predicted', true, ...
-        timing, twocirclePred, alphaOcc, geomOcc);
+        timing, pathbandPred, alphaOcc, geomOcc);
 end
 xySeqsPredicted = vertcat(predictedCell{:});
 
 %% Build Cfg and reproducibility metadata
-% Data flow: Config_stimuli_generation_V22 snapshot + runtime values -> Cfg + repro outputs.
+% Data flow: Config_stimuli_generation_V27_blockResume snapshot + runtime values -> Cfg + repro outputs.
 Cfg = struct();
-Cfg.dpf = Config_stimuli_generation_V22.dotSpeedDegPerFrame;
-Cfg.fps = Config_stimuli_generation_V22.frameFrequency;
-Cfg.Stimulitype = Config_stimuli_generation_V22.stimulusType;
-Cfg.dot_w = Config_stimuli_generation_V22.dotWidth;
-Cfg.rectSize = Config_stimuli_generation_V22.dotRectSize;
+Cfg.dpf = Config_stimuli_generation_V27_blockResume.dotSpeedDegPerFrame;
+Cfg.fps = Config_stimuli_generation_V27_blockResume.frameFrequency;
+Cfg.Stimulitype = Config_stimuli_generation_V27_blockResume.stimulusType;
+Cfg.dot_w = Config_stimuli_generation_V27_blockResume.dotWidth;
+Cfg.rectSize = Config_stimuli_generation_V27_blockResume.dotRectSize;
 Cfg.DirChange = stimulusTypeConfig.directionChange;
 
-configProps = properties('Config_stimuli_generation_V22');
+configProps = properties('Config_stimuli_generation_V27_blockResume');
 configSnapshot = struct();
 for iProp = 1:numel(configProps)
     propName = configProps{iProp};
-    configSnapshot.(propName) = Config_stimuli_generation_V22.(propName);
+    configSnapshot.(propName) = Config_stimuli_generation_V27_blockResume.(propName);
 end
 
 repro = struct();
 repro.script = struct( ...
     'name', mfilename, ...
-    'version', 'V22_fixationCollisionModes', ...
+    'version', 'V27_eyeTrackerReplay_blockResume', ...
     'parameters', struct( ...
         'fixedDevianceFrame', fixedDevianceFrame, ...
         'fixedOcclusionEndFrame', fixedOcclusionEndFrame, ...
         'alphaFadeInFrames', alphaFadeInFrames, ...
+        'pathBandWidthDeg', pathBandWidthDeg, ...
+        'pathBandTerminalStyle', pathBandStyle.terminalStyle, ...
+        'pathBandStraightBackshiftDotRadiusScale', pathBandStyle.straightBackshiftDotRadiusScale, ...
         'deviantConditionCode', deviantConditionCode, ...
         'pathDurationSec', pathDurationSec, ...
         'minimumAbsCurvatureDeg', generationCfg.minimumAbsCurvatureDeg, ...
@@ -385,22 +433,28 @@ repro.script = struct( ...
 repro.inputs = struct('targetSubjectID', targetSubjectID);
 repro.rng = rngState;
 repro.config = configSnapshot;
-repro.v21_occlusion = struct( ...
+repro.v27_blockResume_pathband_occlusion = struct( ...
     'script', mfilename, ...
     'targetSubjectID', targetSubjectID, ...
     'fixedDevianceFrame', fixedDevianceFrame, ...
     'fixedOcclusionEndFrame', fixedOcclusionEndFrame, ...
     'nominalReappearanceFrame', fixedOcclusionEndFrame + 1, ...
     'dotRadiusDeg', dotRadiusDeg, ...
+    'pathBandWidthDeg', pathBandWidthDeg, ...
+    'pathBandTerminalStyle', pathBandStyle.terminalStyle, ...
+    'pathBandStraightBackshiftDotRadiusScale', pathBandStyle.straightBackshiftDotRadiusScale, ...
     'deviantConstructionRule', 'config_generated_with_nondeviant_prefix_locked_at_deviance', ...
-    'twocircleRule', 'pre_radius_equals_dot_radius;post_radius_covers_frames_130_to_190;post_active_until_trial_end', ...
-    'defaultModel', 'twocircle', ...
+    'pathbandRule', ['pre_band_follows_nondeviant_trajectory_from_deviance_to_full_occlusion_end;' ...
+        'post_band_follows_active_branch_trajectory_from_deviance_to_full_occlusion_end;' ...
+        'terminal_style_controls_start_end_caps_and_start_backshift;' ...
+        'band_width_strictly_larger_than_dot_diameter'], ...
+    'defaultModel', 'pathband', ...
     'optionalModel', 'alpha', ...
     'conditionCodes', struct('always_visible', -1, 'occluded_nondeviant', 0, ...
         'occluded_deviant', deviantConditionCode));
 
 %% Save outputs
-% Data flow: generated structs -> MAT files in Config_stimuli_generation_V22.inputDirectory.
+% Data flow: generated structs -> MAT files in Config_stimuli_generation_V27_blockResume.inputDirectory.
 save(targetObservedFile, 'xySeqs', 'Cfg', 'repro');
 save(targetPredictedFile, 'xySeqsPredicted', 'Cfg');
 
@@ -541,7 +595,7 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
 end
 
 error(['Failed to generate a feasible trial after %d attempts (sequence %d). ' ...
-    'Check Config_stimuli_generation_V22 geometry and curvature settings.'], ...
+    'Check Config_stimuli_generation_V27_blockResume geometry and curvature settings.'], ...
     generationCfg.maxAttemptsPerTrial, sequenceIndex);
 end
 
@@ -856,7 +910,7 @@ end
 end
 
 function timing = local_build_occlusion_timing(nFrames, devFrame, occlusionEndFrameInclusive, fadeInFrames)
-% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V22 occlusion event indices.
+% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V27 block-resume occlusion event indices.
 occlusionStartFrame = max(1, devFrame - 1);
 occlusionFullEndFrame = max(devFrame, min(nFrames, round(occlusionEndFrameInclusive)));
 reappearanceStartFrame = min(nFrames, occlusionFullEndFrame + 1);
@@ -873,37 +927,59 @@ timing.reappearance_end_frame = reappearanceEndFrame;
 timing.occlusion_end_complete_frame = reappearanceEndFrame;
 end
 
-function twocircle = local_build_twocircle_metadata(xy, devFrame, timing, dotRadiusDeg)
-% LOCAL_BUILD_TWOCIRCLE_METADATA Compute twocircle geometry and event frames.
+function pathband = local_build_pathband_metadata( ...
+        xyPre, xyPost, devFrame, timing, dotRadiusDeg, pathBandWidthDeg, pathBandStyle)
+% LOCAL_BUILD_PATHBAND_METADATA Compute path-band geometry and occlusion events.
 %
-% V22 fixed-frame geometry:
-%   - pre circle: radius == dot radius at frame-130 center.
-%   - post circle: radius covers every center in frames 130..190.
-nFrames = size(xy, 1);
-center = double(xy(devFrame, 1:2));
-preFrame = devFrame;
-postFrame = devFrame;
+% Data flow:
+%   pre-branch trajectory + post-branch trajectory + band width ->
+%   framewise overlap tests -> occlusion event frame metadata.
+%
+% Geometry rule:
+%   - Pre-deviance band follows the nondeviant trajectory segment from
+%     deviance to fixed full-occlusion end (used only for frames < deviance).
+%   - Post-deviance band follows the active branch (nondeviant or deviant)
+%     over the same segment frame window.
+%   - Band width is strictly greater than dot diameter.
+%
+% Timing rule enforced:
+%   - First fully occluded frame is fixed to deviance frame by disallowing
+%     full invisibility for frames before deviance.
+if size(xyPre, 2) ~= 2 || size(xyPost, 2) ~= 2 || size(xyPre, 1) ~= size(xyPost, 1)
+    error('Path-band metadata expects paired one-dot trajectories with identical frame count.');
+end
+
+nFrames = size(xyPost, 1);
+devFrame = max(1, min(nFrames, round(devFrame)));
 holdEndFrame = max(devFrame, min(nFrames, timing.occlusion_full_end_frame));
 
-rPre = max(1e-6, dotRadiusDeg);
+prePolyline = local_build_pathband_polyline(xyPre, devFrame, holdEndFrame);
+postPolyline = local_build_pathband_polyline(xyPost, devFrame, holdEndFrame);
 
-windowXY = double(xy(devFrame:holdEndFrame, 1:2));
-distWindow = sqrt(sum((windowXY - center) .^ 2, 2));
-rPost = max(1e-6, max(distWindow) + dotRadiusDeg);
+% Resolve style options and apply geometry transforms (e.g., straight-style
+% start backshift) before evaluating visibility events.
+styleOpts = local_resolve_pathband_style_options(pathBandStyle, dotRadiusDeg);
+prePolyline = local_apply_polyline_style(prePolyline, styleOpts);
+postPolyline = local_apply_polyline_style(postPolyline, styleOpts);
 
-preActive = false(nFrames, 1);
-preActive(1:max(1, devFrame - 1)) = true;
-
-postActive = false(nFrames, 1);
-postActive(devFrame:nFrames) = true;
-postDeactivateFrame = nFrames;
+halfWidthDeg = max(1e-6, pathBandWidthDeg / 2);
+fullInvisibleDistanceDeg = max(0, halfWidthDeg - dotRadiusDeg);
+fullVisibleDistanceDeg = halfWidthDeg + dotRadiusDeg;
 
 occlusionStartFrame = NaN;
 occlusionCompleteFrame = NaN;
 for iFrame = 1:nFrames
-    [isInvisible, isFullyVisible] = local_twocircle_visibility_state( ...
-        double(xy(iFrame, 1:2)), center, rPre, rPost, dotRadiusDeg, ...
-        preActive(iFrame), postActive(iFrame));
+    dotCenter = double(xyPost(iFrame, 1:2));
+    if iFrame < devFrame
+        activePolyline = prePolyline;
+        allowFullInvisibility = false;
+    else
+        activePolyline = postPolyline;
+        allowFullInvisibility = true;
+    end
+    [isInvisible, isFullyVisible] = local_pathband_visibility_state( ...
+        dotCenter, activePolyline, fullInvisibleDistanceDeg, ...
+        fullVisibleDistanceDeg, allowFullInvisibility, styleOpts);
     if isnan(occlusionStartFrame) && ~isFullyVisible
         occlusionStartFrame = iFrame;
     end
@@ -919,12 +995,16 @@ if isnan(occlusionCompleteFrame)
     occlusionCompleteFrame = devFrame;
 end
 
+% Required behavior: first complete occlusion is the deviance frame.
+occlusionCompleteFrame = max(devFrame, occlusionCompleteFrame);
+
 occlusionEndFrame = nFrames;
 searchStart = min(nFrames, holdEndFrame + 1);
 for iFrame = searchStart:nFrames
-    [isInvisible, ~] = local_twocircle_visibility_state( ...
-        double(xy(iFrame, 1:2)), center, rPre, rPost, dotRadiusDeg, ...
-        preActive(iFrame), postActive(iFrame));
+    dotCenter = double(xyPost(iFrame, 1:2));
+    [isInvisible, ~] = local_pathband_visibility_state( ...
+        dotCenter, postPolyline, fullInvisibleDistanceDeg, ...
+        fullVisibleDistanceDeg, true, styleOpts);
     if ~isInvisible
         occlusionEndFrame = iFrame;
         break;
@@ -933,48 +1013,198 @@ end
 
 occlusionEndCompleteFrame = timing.reappearance_end_frame;
 for iFrame = max(occlusionEndFrame, searchStart):nFrames
-    [~, isFullyVisible] = local_twocircle_visibility_state( ...
-        double(xy(iFrame, 1:2)), center, rPre, rPost, dotRadiusDeg, ...
-        preActive(iFrame), postActive(iFrame));
+    dotCenter = double(xyPost(iFrame, 1:2));
+    [~, isFullyVisible] = local_pathband_visibility_state( ...
+        dotCenter, postPolyline, fullInvisibleDistanceDeg, ...
+        fullVisibleDistanceDeg, true, styleOpts);
     if isFullyVisible
         occlusionEndCompleteFrame = iFrame;
         break;
     end
 end
 
-twocircle = struct();
-twocircle.center_xy = center;
-twocircle.radius_pre = rPre;
-twocircle.radius_post = rPost;
-twocircle.pre_contact_frame = preFrame;
-twocircle.post_contact_frame = postFrame;
-twocircle.post_deactivate_frame = postDeactivateFrame;
-twocircle.occlusion_start_frame = occlusionStartFrame;
-twocircle.occlusion_complete_frame = occlusionCompleteFrame;
-twocircle.occlusion_end_frame = occlusionEndFrame;
-twocircle.occlusion_end_complete_frame = occlusionEndCompleteFrame;
+pathband = struct();
+pathband.pre_xy = prePolyline;
+pathband.post_xy = postPolyline;
+pathband.width_deg = pathBandWidthDeg;
+pathband.half_width_deg = halfWidthDeg;
+pathband.pre_anchor_frame = devFrame;
+pathband.post_anchor_frame = devFrame;
+pathband.post_deactivate_frame = nFrames;
+pathband.occlusion_start_frame = occlusionStartFrame;
+pathband.occlusion_complete_frame = occlusionCompleteFrame;
+pathband.occlusion_end_frame = occlusionEndFrame;
+pathband.occlusion_end_complete_frame = occlusionEndCompleteFrame;
+pathband.terminal_style = styleOpts.terminalStyle;
+pathband.straight_backshift_dot_radius_scale = styleOpts.straightBackshiftDotRadiusScale;
 end
 
-function [isInvisible, isFullyVisible] = local_twocircle_visibility_state( ...
-        dotCenter, circleCenter, rPre, rPost, dotRadiusDeg, preActive, postActive)
-% LOCAL_TWOCIRCLE_VISIBILITY_STATE Determine fully invisible / fully visible states.
-activeRadii = [];
-if preActive
-    activeRadii(end + 1) = rPre;
-end
-if postActive
-    activeRadii(end + 1) = rPost;
+function polyline = local_build_pathband_polyline(xy, startFrame, endFrame)
+% LOCAL_BUILD_PATHBAND_POLYLINE Build a finite polyline segment for band occlusion.
+nFrames = size(xy, 1);
+startFrame = max(1, min(nFrames, round(startFrame)));
+endFrame = max(startFrame, min(nFrames, round(endFrame)));
+polyline = double(xy(startFrame:endFrame, 1:2));
+
+finiteMask = isfinite(polyline(:, 1)) & isfinite(polyline(:, 2));
+polyline = polyline(finiteMask, :);
+if isempty(polyline)
+    polyline = double(xy(startFrame, 1:2));
 end
 
-if isempty(activeRadii)
-    isInvisible = false;
-    isFullyVisible = true;
+if size(polyline, 1) > 1
+    segmentLen = sqrt(sum(diff(polyline, 1, 1) .^ 2, 2));
+    keepMask = [true; (segmentLen > 1e-10)];
+    polyline = polyline(keepMask, :);
+end
+
+if size(polyline, 1) < 2
+    if endFrame < nFrames
+        fallbackPoint = double(xy(endFrame + 1, 1:2));
+        if any(~isfinite(fallbackPoint))
+            fallbackPoint = polyline(1, :) + [1e-6, 0];
+        end
+    else
+        fallbackPoint = polyline(1, :) + [1e-6, 0];
+    end
+    polyline = [polyline; fallbackPoint];
+end
+end
+
+function [isInvisible, isFullyVisible] = local_pathband_visibility_state( ...
+        dotCenter, polyline, fullInvisibleDistanceDeg, fullVisibleDistanceDeg, ...
+        allowFullInvisibility, styleOpts)
+% LOCAL_PATHBAND_VISIBILITY_STATE Determine full-invisible/full-visible states.
+distanceToBandCenter = local_distance_point_to_polyline_style(dotCenter, polyline, styleOpts);
+isInvisible = logical(allowFullInvisibility) && ...
+    (distanceToBandCenter <= (fullInvisibleDistanceDeg + 1e-12));
+isFullyVisible = distanceToBandCenter >= (fullVisibleDistanceDeg - 1e-12);
+end
+
+function styleOpts = local_resolve_pathband_style_options(pathBandStyle, dotRadiusDeg)
+% LOCAL_RESOLVE_PATHBAND_STYLE_OPTIONS Normalize style controls for geometry checks.
+styleOpts = struct();
+styleOpts.terminalStyle = 'round';
+styleOpts.drawStartCap = true;
+styleOpts.drawEndCap = true;
+styleOpts.startBackshiftDeg = 0;
+styleOpts.straightBackshiftDotRadiusScale = 0;
+
+if nargin < 1 || isempty(pathBandStyle)
     return;
 end
 
-distCenter = norm(dotCenter - circleCenter);
-isInvisible = any(distCenter <= (activeRadii - dotRadiusDeg));
-isFullyVisible = all(distCenter >= (activeRadii + dotRadiusDeg));
+if isstruct(pathBandStyle) && isfield(pathBandStyle, 'terminalStyle')
+    terminalStyle = lower(strtrim(char(pathBandStyle.terminalStyle)));
+else
+    terminalStyle = lower(strtrim(char(pathBandStyle)));
+end
+if ~ismember(terminalStyle, {'round', 'straight'})
+    error('Unsupported pathBand terminal style: %s', terminalStyle);
+end
+
+styleOpts.terminalStyle = terminalStyle;
+if strcmp(terminalStyle, 'straight')
+    backshiftScale = 0.0;
+    if isstruct(pathBandStyle) && isfield(pathBandStyle, 'straightBackshiftDotRadiusScale')
+        backshiftScale = double(pathBandStyle.straightBackshiftDotRadiusScale);
+    end
+    if ~isfinite(backshiftScale) || backshiftScale < 0
+        backshiftScale = 0;
+    end
+    styleOpts.drawStartCap = false;
+    styleOpts.drawEndCap = false;
+    styleOpts.straightBackshiftDotRadiusScale = backshiftScale;
+    styleOpts.startBackshiftDeg = max(0, backshiftScale * double(dotRadiusDeg));
+end
+end
+
+function polylineOut = local_apply_polyline_style(polylineIn, styleOpts)
+% LOCAL_APPLY_POLYLINE_STYLE Apply style-specific transforms to polyline geometry.
+polylineOut = double(polylineIn);
+if isempty(polylineOut) || size(polylineOut, 1) < 2
+    return;
+end
+polylineOut = local_apply_start_backshift_to_polyline(polylineOut, styleOpts.startBackshiftDeg);
+end
+
+function polylineOut = local_apply_start_backshift_to_polyline(polylineIn, backshiftDeg)
+% LOCAL_APPLY_START_BACKSHIFT_TO_POLYLINE Extend first segment backward by degrees.
+polylineOut = double(polylineIn);
+if backshiftDeg <= 0 || isempty(polylineOut) || size(polylineOut, 1) < 2
+    return;
+end
+
+p1 = polylineOut(1, :);
+for iSeg = 1:(size(polylineOut, 1) - 1)
+    p2 = polylineOut(iSeg + 1, :);
+    if ~(all(isfinite(p1)) && all(isfinite(p2)))
+        continue;
+    end
+    v = p2 - p1;
+    vNorm = norm(v);
+    if vNorm <= 1e-12
+        continue;
+    end
+    u = v ./ vNorm;
+    polylineOut(1, :) = p1 - backshiftDeg .* u;
+    return;
+end
+end
+
+function minDistance = local_distance_point_to_polyline_style(pointXY, polylineXY, styleOpts)
+% LOCAL_DISTANCE_POINT_TO_POLYLINE_STYLE Distance to style-aware polyline support.
+%
+% Terminal behavior:
+%   - start terminal uses rounded cap only if styleOpts.drawStartCap=true.
+%   - end terminal uses rounded cap only if styleOpts.drawEndCap=true.
+% Internal joins are always connected through neighboring segments.
+if size(polylineXY, 1) == 1
+    if logical(styleOpts.drawStartCap) || logical(styleOpts.drawEndCap)
+        minDistance = norm(pointXY - polylineXY(1, :));
+    else
+        minDistance = inf;
+    end
+    return;
+end
+
+nSeg = size(polylineXY, 1) - 1;
+minDistance = inf;
+for iSeg = 1:nSeg
+    segStart = polylineXY(iSeg, :);
+    segEnd = polylineXY(iSeg + 1, :);
+    segVec = segEnd - segStart;
+    segLen2 = sum(segVec .^ 2);
+    if segLen2 <= 1e-12
+        continue;
+    end
+
+    ptVec = pointXY - segStart;
+    t = sum(ptVec .* segVec) / segLen2;
+    if t >= 0 && t <= 1
+        closestPoint = segStart + t .* segVec;
+        d = norm(pointXY - closestPoint);
+        if d < minDistance
+            minDistance = d;
+        end
+    elseif t < 0
+        allowEndpoint = (iSeg > 1) || logical(styleOpts.drawStartCap);
+        if allowEndpoint
+            d = norm(pointXY - segStart);
+            if d < minDistance
+                minDistance = d;
+            end
+        end
+    else
+        allowEndpoint = (iSeg < nSeg) || logical(styleOpts.drawEndCap);
+        if allowEndpoint
+            d = norm(pointXY - segEnd);
+            if d < minDistance
+                minDistance = d;
+            end
+        end
+    end
+end
 end
 
 function [alphaProfile, geomProfile] = local_build_visible_profiles(nFrames)
@@ -1010,29 +1240,34 @@ geomProfile = alphaProfile;
 end
 
 function outTrial = local_attach_occlusion_fields(inTrial, conditionCode, conditionLabel, ...
-        occlusionEnabled, timing, twocircle, alphaProfile, geomProfile)
+        occlusionEnabled, timing, pathband, alphaProfile, geomProfile)
 % LOCAL_ATTACH_OCCLUSION_FIELDS Attach condition and occlusion metadata to a trial.
 outTrial = inTrial;
 outTrial.condition = conditionCode;
 outTrial.condition_label = conditionLabel;
 outTrial.occlusion_enabled = logical(occlusionEnabled);
-outTrial.occlusion_model_default = 'twocircle';
-outTrial.occlusion_model_options = {'twocircle', 'alpha'};
+outTrial.occlusion_model_default = 'pathband';
+outTrial.occlusion_model_options = {'pathband', 'alpha'};
 
 outTrial.deviance_frame = timing.deviance_frame;
-outTrial.occlusion_start_frame = twocircle.occlusion_start_frame;
-outTrial.occlusion_complete_frame = twocircle.occlusion_complete_frame;
-outTrial.occlusion_end_frame = twocircle.occlusion_end_frame;
-outTrial.reappearance_start_frame = twocircle.occlusion_end_frame;
-outTrial.reappearance_end_frame = twocircle.occlusion_end_complete_frame;
-outTrial.occlusion_end_complete_frame = twocircle.occlusion_end_complete_frame;
+outTrial.occlusion_start_frame = pathband.occlusion_start_frame;
+outTrial.occlusion_complete_frame = pathband.occlusion_complete_frame;
+outTrial.occlusion_end_frame = pathband.occlusion_end_frame;
+outTrial.reappearance_start_frame = pathband.occlusion_end_frame;
+outTrial.reappearance_end_frame = pathband.occlusion_end_complete_frame;
+outTrial.occlusion_end_complete_frame = pathband.occlusion_end_complete_frame;
 
-outTrial.twocircle_center_xy = twocircle.center_xy;
-outTrial.twocircle_radius_pre = twocircle.radius_pre;
-outTrial.twocircle_radius_post = twocircle.radius_post;
-outTrial.twocircle_pre_contact_frame = twocircle.pre_contact_frame;
-outTrial.twocircle_post_contact_frame = twocircle.post_contact_frame;
-outTrial.twocircle_post_deactivate_frame = twocircle.post_deactivate_frame;
+% Path-band occluder fields used by v14 runtime.
+outTrial.pathband_pre_xy = pathband.pre_xy;
+outTrial.pathband_post_xy = pathband.post_xy;
+outTrial.pathband_width_deg = pathband.width_deg;
+outTrial.pathband_half_width_deg = pathband.half_width_deg;
+outTrial.pathband_pre_anchor_frame = pathband.pre_anchor_frame;
+outTrial.pathband_post_anchor_frame = pathband.post_anchor_frame;
+outTrial.pathband_post_deactivate_frame = pathband.post_deactivate_frame;
+outTrial.pathband_terminal_style = pathband.terminal_style;
+outTrial.pathband_straight_backshift_dot_radius_scale = ...
+    pathband.straight_backshift_dot_radius_scale;
 
 outTrial.visibility_alpha = alphaProfile(:);
 outTrial.visibility_geom = geomProfile(:);
