@@ -1,3 +1,16 @@
+# 13 Apr 2026 12:17
+
+## Add one-dot occlusion v2 simulation scripts
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v2.m`
+- Add a new one-dot occlusion PE simulation entry point (v2) with extensive script-level and section-level documentation, explicit usage examples, and clarified data-flow assumptions.
+- Keep the canonical PE definition (`observed - predicted`) explicit while restricting the analysis surface to one-dot occlusion conditions and adding stricter input/version resolution behavior.
+- Extend configuration controls for existing-results policy and PCR regression strategy handling so non-interactive runs can choose deterministic overwrite/reuse behavior.
+
+### `simulations/scripts/one-dot/plot_occlusion_paths_1Dot_v2.m`
+- Add a new minimal one-dot path-inspection helper (v2) that resolves observed input files by version priority and samples aligned trial identities across `always_visible`, `occluded_nondeviant`, and `occluded_deviant`.
+- Render shared-axis three-panel path comparisons and save reproducible PNG outputs under the subject-specific one-dot occlusion output tree.
+
 # 13 Apr 2026 12:16
 
 ## Archive simulations scripts tree into `simulations/oldies`
