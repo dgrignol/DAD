@@ -1,3 +1,27 @@
+# 13 Apr 2026 12:16
+
+## Archive simulations scripts tree into `simulations/oldies`
+
+### `simulations/scripts/*.m` -> `simulations/oldies/scripts/*.m` (root scripts)
+- Move the root simulation pipeline/debug scripts to `simulations/oldies/scripts` as pure path relocations (`R100`), preserving file content and behavior unchanged.
+- Moved files:
+  `PE_simulation_RDM_level_PE.m`, `PE_simulation_diff.m`, `PIPELINE_simulation.m`, `PIPELINE_simulation_posOnly.m`, `autocorr_leakage_sweep.m`, `barebone_pipeline.m`, `counterfactual_simulation.m`, `pipeline_recursive.m`, `pipeline_recursive_backup.m`, `toy_PE_diff.m`, `toy_direction.m`.
+
+### `simulations/scripts/one-dot/*.m` -> `simulations/oldies/scripts/one-dot/*.m`
+- Archive legacy one-dot simulation entry points and pipeline launchers under `simulations/oldies/scripts/one-dot` without modifying implementation details.
+- Moved files:
+  `PE_simulation_diff_1Dot.m`, `PE_simulation_diff_1Dot_occlusion_v1.m`, `plot_occlusion_paths_1Dot.m`, `run_pipeline.m`, `run_pipeline_occlusion.m`.
+
+### `simulations/scripts/step_by_step/*.m` -> `simulations/oldies/scripts/step_by_step/*.m`
+- Move step-by-step teaching/debug pipeline scripts to the simulations archive tree to keep the active `simulations/scripts` path focused on current workflows.
+- Moved files:
+  `pipeline_base.m`, `pipeline_base_nondeviant_dot1_minimal.m`.
+
+### `simulations/scripts/tests/*.m` -> `simulations/oldies/scripts/tests/*.m`
+- Move toy/debug test scripts to `simulations/oldies/scripts/tests` as archival snapshots.
+- Moved files:
+  `toy_PE_debug.m`, `toy_PE_debug_videos.m`, `toy_PE_debug_videos_displacement.m`.
+
 # 13 Apr 2026 12:13
 
 ## Archive legacy experiment lineage under oldies and clean tracked trigger/output artifacts
