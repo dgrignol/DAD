@@ -32,3 +32,12 @@ simulations/report_old/**/*.pdf
 /$MDN
 **/.Rhistory
 *.gdoc
+
+# Archived experiment and trigger-check generated artifacts
+experiment/oldies/input_files/
+experiment/oldies/output_files/
+oldTriggerChecks_asBakcup/experiment/
+oldTriggerChecks_asBakcup/reports/
+triggers_check/experiment/
+triggers_check/reports/
+triggers_check/__pycache__/

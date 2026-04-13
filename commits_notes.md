@@ -1,3 +1,15 @@
+# 13 Apr 2026 12:24
+
+## Ignore archived generated artifacts in experiment and trigger-check trees
+
+### `.gitignore`
+- Add folder-level ignore rules for archived/generated artifact trees so large legacy `.mat/.csv/.png` outputs and trigger-check report products are kept out of version control.
+- Newly ignored paths:
+  `experiment/oldies/input_files/`, `experiment/oldies/output_files/`,
+  `oldTriggerChecks_asBakcup/experiment/`, `oldTriggerChecks_asBakcup/reports/`,
+  `triggers_check/experiment/`, `triggers_check/reports/`, `triggers_check/__pycache__/`.
+- Keep the ignore strategy directory-scoped (instead of broad extension globs) to avoid masking source files elsewhere in the repository.
+
 # 13 Apr 2026 12:17
 
 ## Add one-dot occlusion v2 simulation scripts
