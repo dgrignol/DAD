@@ -1,3 +1,17 @@
+# 13 Apr 2026 12:27
+
+## Stop tracking archived `oldies` source trees while keeping files on disk
+
+### `.gitignore`
+- Add a repository-wide archive rule `**/oldies/` so any `oldies` directory is treated as archival and excluded from future tracking by default.
+- Keep existing artifact-specific ignore entries in place; this new rule broadens scope to archived source trees (not just generated files inside them).
+
+### `experiment/oldies/**` and `simulations/oldies/**` (index-only removals)
+- Untrack all currently tracked files under `experiment/oldies` and `simulations/oldies` via `git rm -r --cached`.
+- This change removes archived sources from git history going forward while intentionally preserving the files on local disk for offline reference.
+- Verified representative files still exist locally after untracking:
+  `experiment/oldies/CreateInputFiles_v10.m`, `simulations/oldies/scripts/PE_simulation_diff.m`.
+
 # 13 Apr 2026 12:24
 
 ## Ignore archived generated artifacts in experiment and trigger-check trees

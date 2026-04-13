@@ -41,3 +41,6 @@ oldTriggerChecks_asBakcup/reports/
 triggers_check/experiment/
 triggers_check/reports/
 triggers_check/__pycache__/
+
+# Ignore archived source trees anywhere in repo
+**/oldies/
