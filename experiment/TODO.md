@@ -1,8 +1,54 @@
+TODO FROM 2026-04-02 CONVERSATION
 
-- [ ] check changes to constrains worked: new constrain that checks the non-deviant paths in deviant trials would not have touched the boudaries
-- [ ] scale the jitter with the distance from the center? (Bence suggestion)
+Experiment Flow
+- [ ] Debug the current startup EyeLink calibration, which does not seem to work reliably.
+- [ ] Review and finalize post-deviance trajectory controls in `Config_stimuli_generation_V26_eyeTrackerReplay.m`: `initialCurvatureWindows`, `deviantCurvatureWindows`, `deviantSignedTurnWindows`, `likelihood.directionChange`, `flipCurvatureOnDeviant`, and `randomizeCurvatureOnDeviant`.
+
+Visual Display
+- [ ] If black side bands are still visible, verify whether they come from display/fading rather than explicit band drawing in the v16 code. -> not needed if background is black [0 0 0]
+
+
+DONE
+
+Experiment Flow
+- [x] Add an option to call EyeLink calibration again between blocks.
+- [x] Confirm that replayed trials should stay within the same run. The current behavior is run-local: replays are appended to the end of the current run (`run 1 = always_visible`, `runs 2/3 = occluded`). -> They do replay per run. Replay scheduling is run-local: when a fixation break (trigger 150) occurs, that trial’s source index is appended to the end of the current run’s schedule, and replay state resets at each run (no cross-run/block carry-over). With v19-generated TrialOrder, run 1 sources are always_visible and runs 2/3 sources are occluded, so replayed trials inherit the current run’s condition family; this condition split depends on the input schedule.
+- [x] Decide the EyeLink calibration policy. The current v16 runtime calls calibration once at experiment start, before the block loop.
+- [x] Add a visible countdown to the run-1 to run-2 transition screen (`End of first task. You can rest your eyes. Second task will start soon.`).
+- [x] Add a trigger for experiment termination via `Esc`.
+- [x] Standardize the `Esc` abort messages so they include block number and context, at minimum:
+      - `esc pressed during block [block_number]`
+      - `esc pressed at the end of block [block_number]`
+- [x] Keep the current overwrite refusal, but add the help message: `if you intended to run from a specific block, set iBlock variable`
+
+Saving and Output
+- [x] Keep the current block-level `.mat` save, which already happens before the end-of-block screen.
+- [x] Make the EyeLink output block-independent as well, so all files needed for analysis exist by the time the end-of-block message appears.
+- [x] Decide whether EyeLink should use one EDF per block. The current code opens one EDF before the block loop and receives/moves it only once during final cleanup.
+
+Visual Display
+- [x] Set `background`, `rectColor`, and `rectBorderColor` to the same black color: `[0 0 0]`. The current mismatch is mainly the dark-gray arena fill against a black background.
+- [x] Check the full-screen mask appearance after the color change. The post-trial grid mask still uses non-black colors. -> mask has been removed for now.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+OLD STUFF TO BE IGNORED FOR NOW:
+- [x] check changes to constrains worked: new constrain that checks the non-deviant paths in deviant trials would not have touched the boudaries
+- [x] scale the jitter with the distance from the center? (Bence suggestion)
 - [ ] Catch trials behavioural testing
-- [ ] try to find if eye-tracer detects blinks automatically or not and adjust code so that it is less demanding on the participant
+- [x] try to find if eye-tracer detects blinks automatically or not and adjust code so that it is less demanding on the participant
 - [ ] non avere anticorrelation della posizione dei dots.
 
 - [ ] SAVING ISSUE:

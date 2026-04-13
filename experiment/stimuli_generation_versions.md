@@ -41,7 +41,8 @@ structures expose a field (currently Subj 04 and 05), the cell is left as `—`.
 | `experiment/input_files/MovDot_Sub05.mat` | 05 | Cfg | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 | `experiment/input_files/MovDot_Sub04.mat` | 04 | Cfg | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — | — |
 
-This document summarizes how each `stimuli_generation_vXX.m` script differs in the
+This document summarizes how each `stimuli_generation_vXX.m` script (including
+`stimuli_generation_V20.m`) differs in the
 kinds of dot-motion paths it can generate. It focuses on *capabilities* and how
 parameter options affect the output paths, not on any specific parameter values.
 
@@ -145,6 +146,22 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   turn/curvature controls available**: use **v16_Displacement**.
 - **Generate a one-dot trajectory set with v16-style turn/curvature/displacement
   controls and Config-toggled dRSA gate scope**: use **v17**.
+- **Build the three-condition occlusion paradigm (always-visible, occluded
+  nondeviant, occluded deviant) with twocircle default and configurable
+  deviance-centered timing window `deviance-X` to `deviance+Y`**: use **v18**.
+- **Build the occlusion paradigm with guaranteed matched pre-deviance branch
+  for occluded deviant (`pre-deviance identical`, `post-deviance translated
+  deviant suffix`)**: use **v19**.
+- **Build the occlusion paradigm with fixed-frame timing (`deviance=130`,
+  `full occlusion 130..190`) and geometric gradual reappearance from
+  frame 191 onward**: use **V20**.
+- **Generate occlusion stimuli directly from config (no source subject MAT)
+  while keeping fixed-frame occlusion geometry (`deviance=130`,
+  `full occlusion 130..190`, nominal reappearance search from frame 191)**:
+  use **V21**.
+- **Generate config-driven occlusion stimuli with fixation-zone collision
+  handling modes (`off`, `retry`, `move`) where `move` preserves trajectory
+  shape via minimal rigid translation when feasible**: use **V22**.
 - **Reduce residual position-direction coupling while preserving constant
   within-trial curvature**: use **v14**.
 - **Experimentation version: half-length paths to reduce
@@ -419,6 +436,171 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
 - **Inter-dot minimum-distance enforcement** (v05, v08-v16).
 - **Two-dot plotting/preview rendering and `[x1 y1 x2 y2]` output layout**
   (v05-v16 variants).
+
+### v18 — `stimuli_generation_v18.m`
+
+**Adds**
+- **Three-condition occlusion dataset builder from an existing one-dot
+  source dataset**: creates `always_visible`, `occluded_nondeviant`, and
+  `occluded_deviant` trial sets with matched trajectory pairing.
+- **Configurable deviance-centered occlusion timing window**:
+  user inputs `X` and `Y` to define `deviance-X` (occlusion start) and
+  `deviance+Y` (reappearance start), defaulting to `0.25 s` and `0.25 s`.
+- **Twocircle occlusion metadata for runtime rendering**:
+  per trial exports center/radii/contact frames and post-deactivation frame
+  with pre-circle active only before deviance and post-circle active from
+  deviance onward.
+- **Event-frame metadata for MEG triggers**:
+  exports start/complete/end-start/end-complete frame fields so runtime
+  scripts can emit occlusion event triggers deterministically.
+- **Predicted-branch rule for occluded deviant simulations**:
+  writes predicted trials where predicted path is forced to equal observed
+  until reappearance start, then diverges from that frame onward.
+- **Alpha fallback visibility profiles retained**:
+  exports `visibility_alpha` and `visibility_geom` alongside twocircle fields
+  to support optional alpha-based presentation paths.
+
+**Omits (relative to other versions)**
+- **Direct de-novo trajectory synthesis**:
+  v18 transforms an existing one-dot source dataset rather than generating
+  raw trajectories from scratch (v17 and earlier generation role).
+
+### v19 — `stimuli_generation_v19.m`
+
+**Adds**
+- **Matched pre-deviance construction for occluded deviant**:
+  occluded deviant trials are explicitly built so frames up to deviance are
+  identical to the paired nondeviant trajectory.
+- **Position-continuous deviant splice rule**:
+  post-deviance branch is taken from deviant source trajectories and
+  translated so the splice at deviance has no positional jump.
+- **Non-interactive overwrite control**:
+  supports optional `overwriteExisting=true` for batch regeneration without
+  interactive overwrite prompts.
+- **Updated reproducibility metadata**:
+  outputs include a v19-specific construction rule label in `repro`.
+
+**Keeps from v18**
+- Three-condition occlusion outputs (`always_visible`, `occluded_nondeviant`,
+  `occluded_deviant`) and twocircle metadata.
+- Configurable `deviance-X` to `deviance+Y` timing and trigger-aligned event
+  frame metadata.
+- Predicted branch rule where predicted occluded deviant matches observed
+  until reappearance start, then diverges.
+
+### v20 — `stimuli_generation_V20.m`
+
+**Adds**
+- **Fixed-frame occlusion timeline with exact frame targets**:
+  deviance is fixed at frame `130`, first full occlusion is fixed at frame
+  `130`, and full occlusion is enforced through frame `190` (inclusive).
+  The nominal reappearance search starts at frame `191`.
+- **Fixed pre-occluder geometry at deviance**:
+  the pre-deviance occluder is centered at the frame-130 dot position and
+  uses a radius equal to the moving-dot radius.
+- **Post-occluder hold and geometric reappearance**:
+  the post-deviance occluder activates at frame `130`, has radius computed
+  to fully occlude the dot for frames `130..190`, and remains active until
+  trial end so reappearance is gradual and geometry-driven.
+- **Single-deviance splice rule at frame 130**:
+  the occluded-deviant pre-branch is copied from the paired nondeviant
+  trial up to frame `130`; the source deviant post-branch is re-timed to
+  start at frame `130` and translated for positional continuity, preventing
+  a second inherited deviance point.
+- **Twocircle-derived reappearance metadata**:
+  `occlusion_end_frame` and `occlusion_end_complete_frame` are derived from
+  geometric visibility state instead of a hard post-occluder deactivation
+  frame.
+- **Batch-safe fixed-frame controls**:
+  supports non-interactive `fixedDevianceFrame` and
+  `fixedOcclusionEndFrame` inputs (defaults `130` and `190`) with
+  `overwriteExisting=true` for batch regeneration.
+
+**Keeps from v19**
+- Three-condition occlusion outputs (`always_visible`, `occluded_nondeviant`,
+  `occluded_deviant`) and matched pre-deviance construction.
+- Twocircle default + alpha fallback metadata and predicted output generation.
+
+**Usage examples**
+- Generate a V20 occlusion dataset non-interactively from repo root:
+  `/Applications/MATLAB_R2020a.app/bin/matlab -batch "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); addpath('lib'); sourceSubjectID=73; targetSubjectID=99; fixedDevianceFrame=130; fixedOcclusionEndFrame=190; overwriteExisting=true; stimuli_generation_V20;"`
+- If R2020a host-architecture detection fails on Apple Silicon, force Intel mode:
+  `arch -x86_64 /Applications/MATLAB_R2020a.app/bin/matlab -batch "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); addpath('lib'); sourceSubjectID=73; targetSubjectID=99; fixedDevianceFrame=130; fixedOcclusionEndFrame=190; overwriteExisting=true; stimuli_generation_V20;"`
+- Create an occlusion preview video (twocircle mode) from the generated dataset:
+  `python3 control-center/presentation/make_stimulus_movie_occlusion.py --mat-file /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment/input_files/MovDot_Sub99.mat --condition occluded_deviant --mode twocircle --num-trials 1 --trial-selection first --show-event-markers --format both --output-stem /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/control-center/presentation/sub99_occluded_deviant_twocircle_v20_preview`
+
+### v21 — `stimuli_generation_V21.m`
+
+**Adds**
+- **Config-driven one-dot trajectory synthesis with no source subject files**:
+  V21 generates nondeviant/deviant/predicted trajectory triplets directly from
+  `Config_stimuli_generation_V21` controls (curvature windows, deviant-turn windows,
+  speed/frame geometry) instead of transforming pre-existing source MAT files.
+- **Dedicated occlusion config class (`Config_stimuli_generation_V21`)**:
+  keeps only one-dot parameters needed for this paradigm and introduces
+  explicit fixed-frame occlusion timing constants.
+- **Fixed-frame occlusion timeline preserved from V20**:
+  uses `fixedDevianceFrame = 130`, `fixedOcclusionEndFrame = 190`, and a
+  nominal geometric reappearance search start at frame `191`.
+- **V20-compatible twocircle metadata and trigger-aligned event fields**:
+  output trial structs remain compatible with
+  `MoveDot1_experiment_occlusion_v1.m` and `trigger_codes.md`.
+- **Predicted occlusion output in current tooling style**:
+  writes `MovDot_SubXX_predicted.mat` with `xySeqsPredicted` entries labeled
+  `occluded_deviant_predicted`, including the same occlusion metadata fields.
+
+**Keeps from v20**
+- Three observed occlusion conditions:
+  `always_visible`, `occluded_nondeviant`, `occluded_deviant`.
+- Pre-occluder at frame-130 position with dot-sized radius and post-occluder
+  active from frame `130` through trial end.
+- Geometric derivation of `occlusion_end_frame` and
+  `occlusion_end_complete_frame`.
+
+**Usage examples (MATLAB code style)**
+- Interactive generation from `experiment/`:
+  `addpath('lib');`
+  `stimuli_generation_V21;`
+- Override fixed-frame controls before generation:
+  `addpath('lib');`
+  `fixedDevianceFrame = 130;`
+  `fixedOcclusionEndFrame = 190;`
+  `overwriteExisting = true;`
+  `stimuli_generation_V21;`
+
+### v22 — `stimuli_generation_V22.m`
+
+**Adds**
+- **Three-way fixation collision handling in generation config**:
+  `Config_stimuli_generation_V22.fixationCollisionMode` supports:
+  - `off`: keep colliding trajectories unchanged.
+  - `retry`: reject colliding candidates and regenerate.
+  - `move`: attempt a minimal rigid translation of the paired
+    nondeviant/deviant candidate to move it out of the exclusion zone while
+    preserving in-bounds placement; if no feasible translation exists, retry.
+- **Shape-preserving mitigation path**:
+  `move` mode preserves relative trajectory geometry and only changes absolute
+  placement when required to avoid the central fixation area.
+- **Dedicated V22 config class (`Config_stimuli_generation_V22`)**:
+  introduces fixation parameters:
+  `fixationCollisionMode`, `fixationExclusionRadiusDeg`,
+  `fixationMovePaddingDeg`, `fixationMoveDirectionSamples`,
+  `fixationMoveShiftSamples`.
+
+**Keeps from v21**
+- Config-driven one-dot generation without source subject MAT files.
+- Fixed-frame occlusion timeline (`deviance=130`, fully occluded `130..190`).
+- V20-compatible twocircle metadata and predicted output generation.
+
+**Usage examples (MATLAB code style)**
+- Interactive generation from `experiment/`:
+  `addpath('lib');`
+  `stimuli_generation_V22;`
+- Set fixation-collision behavior in config and run:
+  `addpath('lib');`
+  `% In Config_stimuli_generation_V22:`
+  `% fixationCollisionMode = 'move'; % or 'retry' / 'off'`
+  `stimuli_generation_V22;`
 
 ### v15_experimentalPathScale — `stimuli_generation_v15_experimentalPathScale.m`
 

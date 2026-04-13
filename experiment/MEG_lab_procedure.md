@@ -6,10 +6,11 @@
   - Note that the second screen will only turn on if the main blue box is on.
 
 ## Before subject
+
 - Turn on Polhemus in prep room (minimum 15 minutes before using).
   - Metal off table.
   - Twist dial on speakers to turn on.
-
+  - double check Polhemus is ON.
 - Acquisition PC:
   - Pword: m3g.
   - Click `acquisition` icon on desktop if software not already open.

@@ -1,3 +1,399 @@
+# 13 Apr 2026 12:27
+
+## Stop tracking archived `oldies` source trees while keeping files on disk
+
+### `.gitignore`
+- Add a repository-wide archive rule `**/oldies/` so any `oldies` directory is treated as archival and excluded from future tracking by default.
+- Keep existing artifact-specific ignore entries in place; this new rule broadens scope to archived source trees (not just generated files inside them).
+
+### `experiment/oldies/**` and `simulations/oldies/**` (index-only removals)
+- Untrack all currently tracked files under `experiment/oldies` and `simulations/oldies` via `git rm -r --cached`.
+- This change removes archived sources from git history going forward while intentionally preserving the files on local disk for offline reference.
+- Verified representative files still exist locally after untracking:
+  `experiment/oldies/CreateInputFiles_v10.m`, `simulations/oldies/scripts/PE_simulation_diff.m`.
+
+# 13 Apr 2026 12:24
+
+## Ignore archived generated artifacts in experiment and trigger-check trees
+
+### `.gitignore`
+- Add folder-level ignore rules for archived/generated artifact trees so large legacy `.mat/.csv/.png` outputs and trigger-check report products are kept out of version control.
+- Newly ignored paths:
+  `experiment/oldies/input_files/`, `experiment/oldies/output_files/`,
+  `oldTriggerChecks_asBakcup/experiment/`, `oldTriggerChecks_asBakcup/reports/`,
+  `triggers_check/experiment/`, `triggers_check/reports/`, `triggers_check/__pycache__/`.
+- Keep the ignore strategy directory-scoped (instead of broad extension globs) to avoid masking source files elsewhere in the repository.
+
+# 13 Apr 2026 12:17
+
+## Add one-dot occlusion v2 simulation scripts
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v2.m`
+- Add a new one-dot occlusion PE simulation entry point (v2) with extensive script-level and section-level documentation, explicit usage examples, and clarified data-flow assumptions.
+- Keep the canonical PE definition (`observed - predicted`) explicit while restricting the analysis surface to one-dot occlusion conditions and adding stricter input/version resolution behavior.
+- Extend configuration controls for existing-results policy and PCR regression strategy handling so non-interactive runs can choose deterministic overwrite/reuse behavior.
+
+### `simulations/scripts/one-dot/plot_occlusion_paths_1Dot_v2.m`
+- Add a new minimal one-dot path-inspection helper (v2) that resolves observed input files by version priority and samples aligned trial identities across `always_visible`, `occluded_nondeviant`, and `occluded_deviant`.
+- Render shared-axis three-panel path comparisons and save reproducible PNG outputs under the subject-specific one-dot occlusion output tree.
+
+# 13 Apr 2026 12:16
+
+## Archive simulations scripts tree into `simulations/oldies`
+
+### `simulations/scripts/*.m` -> `simulations/oldies/scripts/*.m` (root scripts)
+- Move the root simulation pipeline/debug scripts to `simulations/oldies/scripts` as pure path relocations (`R100`), preserving file content and behavior unchanged.
+- Moved files:
+  `PE_simulation_RDM_level_PE.m`, `PE_simulation_diff.m`, `PIPELINE_simulation.m`, `PIPELINE_simulation_posOnly.m`, `autocorr_leakage_sweep.m`, `barebone_pipeline.m`, `counterfactual_simulation.m`, `pipeline_recursive.m`, `pipeline_recursive_backup.m`, `toy_PE_diff.m`, `toy_direction.m`.
+
+### `simulations/scripts/one-dot/*.m` -> `simulations/oldies/scripts/one-dot/*.m`
+- Archive legacy one-dot simulation entry points and pipeline launchers under `simulations/oldies/scripts/one-dot` without modifying implementation details.
+- Moved files:
+  `PE_simulation_diff_1Dot.m`, `PE_simulation_diff_1Dot_occlusion_v1.m`, `plot_occlusion_paths_1Dot.m`, `run_pipeline.m`, `run_pipeline_occlusion.m`.
+
+### `simulations/scripts/step_by_step/*.m` -> `simulations/oldies/scripts/step_by_step/*.m`
+- Move step-by-step teaching/debug pipeline scripts to the simulations archive tree to keep the active `simulations/scripts` path focused on current workflows.
+- Moved files:
+  `pipeline_base.m`, `pipeline_base_nondeviant_dot1_minimal.m`.
+
+### `simulations/scripts/tests/*.m` -> `simulations/oldies/scripts/tests/*.m`
+- Move toy/debug test scripts to `simulations/oldies/scripts/tests` as archival snapshots.
+- Moved files:
+  `toy_PE_debug.m`, `toy_PE_debug_videos.m`, `toy_PE_debug_videos_displacement.m`.
+
+# 13 Apr 2026 12:13
+
+## Archive legacy experiment lineage under oldies and clean tracked trigger/output artifacts
+
+### `experiment/oldies/CreateInputFiles_v14_threeRunsPerBlock_catch.m`, `experiment/oldies/CreateInputFiles_v15_threeRunsPerBlock_catch.m`, `experiment/oldies/CreateInputFiles_v16_threeRunsPerBlock_catch_NotWiredOccluder.m`, `experiment/oldies/CreateInputFiles_v17_threeRunsPerBlock_catch_PathBandOccluder.m`, `experiment/oldies/CreateInputFiles_v18_threeRunsPerBlock_catch_PathBandOccluder.m`, `experiment/oldies/CreateInputFiles_v19_threeRunsPerBlock_catch_eyeTrackerReplay.m`
+- Add archived CreateInputFiles script snapshots (v14-v19) into `experiment/oldies` so prior schedule and catch-planning iterations remain recoverable without staying in the active root.
+
+### `experiment/oldies/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v9_addedPracticeMode.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v10_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v11_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v12_practiceByRun.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v13_NotWiredOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v14_PathBandOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v15_PathBandOccluder.m`, `experiment/oldies/MoveDot1_experiment_occlusion_v16_eyeTrackerReplay.m`, `experiment/oldies/MoveDot1_experiment_vX copy.m`
+- Add archived runtime script snapshots for the v8-v16 occlusion family plus the generic `MoveDot1_experiment_vX` copy, consolidating historical runtime variants under `experiment/oldies`.
+
+### `experiment/oldies/lib/Config_runtime_v16_eyeTrackerReplay.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV6.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV7.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV8.m`, `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV9.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV9.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV10.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV11.m`, `experiment/oldies/lib/Config_schedule_CreateInputV15_MoveDotV12.m`, `experiment/oldies/lib/Config_schedule_CreateInputV16_MoveDotV13_NotWiredOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV17_MoveDotV14_PathBandOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV18_MoveDotV15_PathBandOccluder.m`, `experiment/oldies/lib/Config_schedule_CreateInputV19_MoveDotV16_eyeTrackerReplay.m`
+- Add archived schedule/runtime config lineage files to keep historical parameter surfaces and run-structure assumptions versioned alongside their archived scripts.
+
+### `experiment/oldies/lib/Config_stimuli_generation_V21.m`, `experiment/oldies/lib/Config_stimuli_generation_V23_NotWiredOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V24_PathBandOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V25_PathBandOccluder.m`, `experiment/oldies/lib/Config_stimuli_generation_V26_eyeTrackerReplay.m`, `experiment/oldies/input_files/Config_stimuli_generation_V22.m`
+- Add archived generation config snapshots across V21-V26 plus the V22 input-file config snapshot for reproducible regeneration/debugging of old datasets.
+
+### `experiment/oldies/stimuli_generation_V22.m`, `experiment/oldies/stimuli_generation_V23_NotWiredOccluder.m`, `experiment/oldies/stimuli_generation_V24_PathBandOccluder.m`, `experiment/oldies/stimuli_generation_V25_PathBandOccluder.m`, `experiment/oldies/stimuli_generation_V26_eyeTrackerReplay.m`
+- Add archived generator script snapshots so prior trajectory-generation branches remain available in the `oldies` tree after active-path consolidation.
+
+### `experiment/oldies/trigger_codes_occlusion_v6.md`, `experiment/oldies/trigger_codes_occlusion_v7_eyeTrackerReplay.md`
+- Add archived trigger-code maps for older runtime versions to preserve historical trigger semantics in the same archive tree as the corresponding scripts/configs.
+
+### `derivatives/triggers/sub04/*.csv`, `derivatives/triggers/sub98/*.csv`, `derivatives/triggers/sub99/*.csv` (deleted)
+- Remove tracked trigger-check CSV artifacts for archived subjects/runs from `derivatives/triggers`, keeping trigger-data cleanup separate from active script sources.
+- CSV paths are intentionally not enumerated one-by-one here to keep notes concise.
+
+### `experiment/output_files/practice_SUB99_RUN01.mat` (deleted binary)
+- Remove a tracked output artifact from `experiment/output_files` as part of output-tree cleanup.
+- Warning (binary extension present in staged set): if this `.mat` deletion was unintended, unstage it with:
+  `git reset HEAD -- experiment/output_files/practice_SUB99_RUN01.mat`
+- `.gitignore` guidance: no additional rule needed because `experiment/output_files/` is already ignored.
+
+# 13 Apr 2026 12:12
+
+## Add trigger confrontation tooling for reported-vs-observed checks
+
+### `triggers_check/compare_reported_vs_observed_triggers.py`
+- Add the V17-focused trigger confrontation CLI that aligns reported MATLAB debug CSV events against observed FIF stim-channel windows using semi-global sequence alignment.
+- Include anomaly extraction/reporting, transition-pulse collapse warnings, markdown summary generation, per-anomaly plots, and optional interactive scroller support for rapid trigger-channel inspection.
+- Keep script-level documentation explicit for expected inputs, output artifacts, and default analysis windows so the workflow can run non-interactively from subject/block/run selectors.
+
+### `oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py`
+- Add an archived trigger-confrontation script snapshot preserving the earlier tool behavior for historical comparison and backward-reference debugging.
+
+### `triggers_check/context.md`
+- Add a local context manifest describing canonical legacy experiment/config references and the three-way trigger comparison goal (expected, reported, observed) used by the trigger-check workspace.
+
+### `triggers_check/AGENTS.md`
+- Add workspace-local coding and MATLAB invocation instructions aligned with repository AGENTS policies for documentation/commenting and absolute-path MATLAB execution.
+
+# 13 Apr 2026 12:12
+
+## Update experiment documentation and add simulation/methods notes
+
+### `.gitignore`
+- Add a root `*.gdoc` ignore rule so Google Docs link-export sidecar files are not accidentally tracked in future documentation updates.
+
+### `experiment/MEG_lab_procedure.md`
+- Add an explicit pre-session check item for confirming Polhemus power state in the "Before subject" preparation checklist.
+- Keep checklist formatting aligned with the existing operations flow used during acquisition setup.
+
+### `experiment/TODO.md`
+- Replace the short legacy TODO header with a dated, structured list that separates active priorities from completed items and older deferred tasks.
+- Document recent decisions and implementation outcomes for EyeLink calibration flow, replay behavior, abort messaging, save policy, and display color/mask adjustments.
+
+### `experiment/timing.md`
+- Add a dedicated timing-assessment note for the path-band runtime with MEG-oriented interpretation, current risks, and a prioritized hardening checklist.
+- Record scope limits (static inspection vs live capture), trigger/flip alignment caveats, and acceptance criteria for production timing validation.
+
+### `paper/methods.md`
+- Add a methods draft covering V27 block-resume stimulus generation, occlusion geometry/timing anchors, schedule and catch-trial policies, message flow, and trigger-code mapping.
+- Include explicit parameter values and assumptions used by the current runtime/generator stack so manuscript text stays synchronized with implementation.
+
+### `simulations/report/PCR_full_ridge_timeline_explainer_Sub52_V27.md`
+- Add a detailed explainer of the one-dot occlusion PCR `ridge_full_autocorr` strategy, including design-matrix construction, penalty behavior, and timeline-window interpretation for standard vs PE branches.
+- Document metadata-backed frame/timeline values from the referenced Sub52 run so result interpretation remains reproducible.
+
+# 13 Apr 2026 12:11
+
+## Add block-resume v17/v20/v27 experiment pipeline and retire legacy active files
+
+### `AGENTS.md`
+- Remove the extra trigger-commentary alignment rule so repository-level coding guidance stays focused on documentation/commenting and local MATLAB invocation policy.
+
+### `experiment/CreateInputFiles_v14_threeRunsPerBlock_catch.m` -> `experiment/CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m`
+- Promote the input-builder script to the v20 block-resume variant and align script naming with the new runtime/generation family.
+- Keep deterministic three-runs-per-block scheduling while integrating explicit catch-planning metadata (including run-scoped catch type placement and expected response fields) into the generated TrialStruct artifacts.
+- Expand script-level and section-level documentation so non-interactive/batch usage and workspace override behavior are explicit.
+
+### `experiment/MoveDot1_experiment_occlusion_v17_blockResume.m`
+- Add the new active v17 runtime entry point for the one-dot occlusion paradigm with block-resume support, catch handling, and schedule compatibility with the v20 TrialStruct/CatchPlan format.
+- Restore and document eye-tracker related controls (including optional calibration gates, fixation-break detection, and replay scheduling) while keeping debug-mode and hardware-mode behavior configurable via workspace overrides.
+- Extend timing instrumentation and runtime guardrails (flip diagnostics, missed-frame counters, and optional abort thresholds) to support MEG-focused timing validation workflows.
+- Keep trigger emissions aligned to the new v8 trigger map, including explicit catch-question status closure behavior and replay/gaze-break markers.
+
+### `experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m` (deleted)
+- Remove the previous active v8 runtime script from the active experiment root now that v17 block-resume is the canonical runtime entry point.
+
+### `experiment/lib/Config_runtime_v17_blockResume.m`
+- Add a runtime preset script that exposes subject/session controls and all major v17 overrides (ITI jitter, debug overlays, eye-tracker modes, calibration choices, and path-band geometry tuning) in one reproducible launcher surface.
+- Document accepted value ranges and default fallback behavior for each override so operators can run deterministic presets in interactive and batch sessions.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m` (deleted)
+- Remove the old V14/V6 schedule config from active lib after migration to the new v20/v17 block-resume schedule class.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV7.m` (deleted)
+- Remove the old V14/V7 schedule config from active lib to avoid parallel active schedule definitions after v20 adoption.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV8.m` (deleted)
+- Remove the old V14/V8 schedule config from active lib and consolidate schedule ownership in the v20/v17 block-resume class.
+
+### `experiment/lib/Config_schedule_CreateInputV20_MoveDotV17_blockResume.m`
+- Add the canonical schedule/config class for the new runtime/generator chain, including fixed 3-run partitioning, catch-rate controls, message flow defaults, eye-tracker policy defaults, and timing guard parameters.
+- Keep run-family color-cue and transition messaging controls co-located with catch/planning controls so runtime and input creation consume one shared schedule contract.
+
+### `experiment/lib/Config_stimuli_generation_V21.m` (deleted)
+- Remove the previous V21 generation config from active lib and retire the superseded config lineage from the active path.
+
+### `experiment/lib/Config_stimuli_generation_V22.m` -> `experiment/lib/Config_stimuli_generation_V27_blockResume.m`
+- Promote the generation config to the V27 block-resume variant and keep one-dot synthesis controls, fixed-frame occlusion anchors, and path-band geometry policy in a dedicated class.
+- Preserve fixation-collision handling controls and deviance-curvature windows while aligning output naming and assumptions with the new runtime/input-builder family.
+
+### `experiment/stimuli_generation_V22.m` -> `experiment/stimuli_generation_V27_blockResume.m`
+- Promote the generator script to V27 block-resume naming and update script-level documentation to reflect the de-novo config-driven synthesis flow and exported metadata contracts.
+- Keep fixed-frame occlusion timing and path-band metadata generation explicit, including terminal-style controls and compatibility with the v17 runtime.
+
+### `experiment/trigger_codes_occlusion_v6.md` (deleted)
+- Remove the outdated v6 trigger reference from the active root in favor of the new block-resume trigger map.
+
+### `experiment/trigger_codes_occlusion_v8_blockResume.md`
+- Add the block-resume trigger-code table documenting condition onsets, sequence identity range, occlusion event markers, catch question lifecycle, gaze/replay events, and dedicated ESC termination code.
+- Clarify runtime semantics for mutually exclusive catch-question close triggers and preserve collision-free trigger-space expectations with dynamic sequence IDs.
+
+# 28 Mar 2026 22:17
+
+## Add V22 generator with fixation-collision controls
+
+### `experiment/stimuli_generation_V22.m`
+- Add a new active V22 config-driven one-dot occlusion generator that extends the V21 generation flow with explicit fixation-zone collision handling modes (`off`, `retry`, `move`).
+- Keep fixed-frame occlusion timing and output metadata contracts aligned with the existing occlusion runtime/simulation pipeline while introducing shape-preserving translation fallback logic for fixation collisions.
+
+### `experiment/lib/Config_stimuli_generation_V22.m`
+- Add the dedicated V22 config class with fixation-collision parameters (`fixationCollisionMode`, exclusion radius, padding, direction/shift sampling controls) plus core one-dot motion and occlusion defaults.
+
+### `experiment/lib/Config_stimuli_generation_V21.m`
+- Expand parameter-level comments/examples to clarify generation assumptions and units for V21 controls without changing the underlying default numeric behavior.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with a V22 section documenting fixation-collision behavior, retained V21 features, and MATLAB usage guidance for selecting collision mode.
+
+# 28 Mar 2026 22:17
+
+## Introduce v8 run-color runtime and schedule config variants
+
+### `experiment/MoveDot1_experiment_occlusion_v8_runColorCueMessages.m`
+- Add a new active v8 occlusion runtime variant that keeps the run-color-cue flow and catch-trial architecture while advancing the runtime naming/version lineage beyond the archived v6/v7 scripts.
+- Keep trigger and schedule assumptions consistent with the existing one-dot occlusion family (condition onsets, sequence identity pulse, occlusion event triggers, and catch-response triggers).
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV7.m`
+- Add a V7 schedule/config snapshot for the three-runs-per-block catch pipeline so v7 runtime assumptions remain explicit and reproducible.
+- Set defaults/documentation fields for block count, catch rates, question timing, and run-color cue behavior in one place.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV8.m`
+- Add the active v8 schedule/config class used by the new runtime, preserving the same schedule/catch contract while versioning config ownership to v8.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m`
+- Expand section-level comments and parameter-level examples to clarify schedule/catch data flow and runtime assumptions without changing the configured numeric behavior.
+
+# 28 Mar 2026 22:16
+
+## Archive v6/V21 runtime lineage under oldies
+
+### `experiment/MoveDot1_experiment_occlusion_v6_runColorCue.m` -> `experiment/oldies/MoveDot1_experiment_occlusion_v6_runColorCue.m`
+- Move the v6 run-color-cue runtime out of the active experiment root into `oldies` as a pure archive relocation, preserving the script content for reproducibility/back-reference.
+
+### `experiment/oldies/MoveDot1_experiment_occlusion_v7_runColorCueMessages.m`
+- Add the v7 run-color-cue-with-messages runtime variant into the archive tree so intermediate runtime iterations remain recoverable without crowding the active experiment folder.
+
+### `experiment/stimuli_generation_V21.m` -> `experiment/oldies/stimuli_generation_V21.m`
+- Move the V21 config-driven one-dot generator from active root to `oldies`, keeping the full generator implementation available while preparing the active path for V22.
+
+# 28 Mar 2026 15:23
+
+## Experiment folder archival and active v6/V21 layout
+
+### `experiment/CreateInputFiles_v14_threeRunsPerBlock_catch.m`
+- Add the v14 catch-aware TrialStruct builder at the active experiment root, now wired to `Config_schedule_CreateInputV14_MoveDotV6` for schedule, catch-rate, and question timing controls.
+- Preserve the three-runs-per-block data flow (always-visible in run 1; mixed occlusion conditions in runs 2/3) while adding deterministic `CatchPlan` metadata aligned to `TrialOrder` slots.
+
+### `experiment/MoveDot1_experiment_occlusion_v6_runColorCue.m`
+- Add the v6 runtime as the active occlusion experiment entry point, including block-aware scheduling, catch-trial question flow, sequence-identity trigger support, and run-family color cue counterbalancing.
+- Keep trigger semantics aligned with the occlusion event map (`occlusion_start`, `occlusion_complete`, `occlusion_end_start`, `occlusion_end_complete`) and catch-response events used by DataPixx/MEG workflows.
+
+### `experiment/lib/Config_schedule_CreateInputV14_MoveDotV6.m`
+- Add the active v6 schedule config class for run partitioning, catch-rate controls, and run-color cue toggles used by both input-file creation and runtime execution.
+
+### `experiment/lib/Config_stimuli_generation_V21.m`
+- Add a dedicated V21 generator config class that isolates one-dot occlusion synthesis parameters, fixed-frame occlusion timing defaults, and output naming controls from the legacy multi-version `Config` class.
+
+### `experiment/runExperiment.m`
+- Add a small convenience launcher that pre-sets subject/block/debug run variables and calls the selected occlusion runtime from an absolute local path.
+
+### `experiment/stimuli_generation_V21.m`
+- Add the active V21 config-driven generator that synthesizes one-dot trajectories without source subject MAT transforms while preserving fixed-frame occlusion geometry and metadata compatibility expectations.
+- Export observed condition sets plus predicted occluded-deviant outputs in the current one-dot format used by downstream simulation tooling.
+
+### `experiment/trigger_codes_occlusion_v6.md`
+- Add the v6 trigger reference table, including condition onsets, sequence-identity range, occlusion event pulses, catch-question lifecycle, and response/timeout events.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with V20/V21 capability notes, fixed-frame occlusion timing rules, and usage guidance for choosing transformed-source versus config-driven generation paths.
+
+## Legacy experiment archive moves (`experiment` -> `experiment/oldies`)
+
+### Legacy CreateInput script moves
+- Move `experiment/CreateInputFiles_v10.m` to `experiment/oldies/CreateInputFiles_v10.m` without behavior changes.
+- Move `experiment/CreateInputFiles_v11.m` to `experiment/oldies/CreateInputFiles_v11.m` without behavior changes.
+- Move `experiment/CreateInputFiles_v12_temporary.m` to `experiment/oldies/CreateInputFiles_v12_temporary.m`, keeping compatibility-helper logic while updating internal script-name references.
+- Add `experiment/oldies/CreateInputFiles_v13_threeRunsPerBlock.m` to preserve the prior v13 schedule builder in the archive area.
+
+### Legacy MoveDot runtime moves
+- Move `experiment/MoveDot1_experiment_vX.m` to `experiment/oldies/MoveDot1_experiment_vX.m` as a pure archive relocation.
+- Move `experiment/MoveDot1_experiment_vX_occlusion_v1.m` to `experiment/oldies/MoveDot1_experiment_occlusion_v1.m` and align script-name references in comments.
+- Add archived copies of intermediate occlusion runtime variants:
+  `experiment/oldies/MoveDot1_experiment_occlusion_v2_threeRunsPerBlock.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v3_blocksBreak.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v4_catchTrials.m`,
+  `experiment/oldies/MoveDot1_experiment_occlusion_v5_sequenceTriggers.m`.
+
+### Legacy config class moves and archival
+- Move `experiment/lib/Config.m` to `experiment/oldies/lib/Config.m`, keeping legacy generator constants available under the archive tree.
+- Add `experiment/oldies/lib/Config_occlusion_schedule_v1.m` and `experiment/oldies/lib/Config_schedule_CreateInputV14_MoveDotV5.m` to retain earlier scheduling config versions alongside archived runtimes.
+
+### Legacy stimulus generator moves
+- Move legacy generators from the active root to `experiment/oldies/`:
+  `stimuli_generation_v05.m`, `stimuli_generation_v06.m`, `stimuli_generation_v07.m`, `stimuli_generation_v08.m`, `stimuli_generation_v09.m`, `stimuli_generation_v10.m`, `stimuli_generation_v12.m`, `stimuli_generation_v13.m`, `stimuli_generation_v14.m`, `stimuli_generation_v15.m`, `stimuli_generation_v15_experimentalPathScale.m`, `stimuli_generation_v16_Displacement.m`, `stimuli_generation_v17.m`, `stimuli_generation_v18.m`, and `stimuli_generation_v19.m`.
+- Add `experiment/oldies/stimuli_generation_V20.m` as the archived fixed-frame V20 generator.
+- Normalize authorship comments in moved v09-v19 scripts to the maintained naming convention.
+
+### Legacy trigger doc moves
+- Move `experiment/trigger_codes.md` to `experiment/oldies/trigger_codes.md` with updated runtime-name references.
+- Add archived trigger maps `experiment/oldies/trigger_codes_occlusion_v4.md` and `experiment/oldies/trigger_codes_occlusion_v5.md` next to their archived runtime variants.
+
+### `experiment/triggers_report_sub03_copy_withNotes.pdf` (deleted)
+- Remove the tracked trigger-report PDF from the active `experiment/` root as part of the folder cleanup; an unstaged copy remains in `experiment/oldies/` for local archival.
+
+## One-dot occlusion simulation/report refresh
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v1.m`
+- Add matrix-guide overlays keyed to occlusion event timing (full disappearance and first reappearance) and propagate resolved event metadata into reproducibility outputs.
+- Keep guide-time conversion explicit for both standard and PE-cut analysis windows so plotted markers stay aligned after frame trimming.
+
+### `simulations/scripts/one-dot/run_pipeline_occlusion.m`
+- Extend the batch runner to branch cleanly across `dRSAtypeToRun` values (`PCR` vs `corr`), normalize strategy inputs, and avoid redundant per-strategy reruns for the `corr` branch.
+- Update participant default and runtime logging so batch invocations print both dRSA branch and strategy context per run.
+
+### `simulations/report/PE_simulation_diff_1Dot.md`
+- Append a generated Subject 67 section (`<!-- SUBJECT:67:START/END -->`) with matrix embeds and path checks across observed/predicted/PE comparisons and corr/PCR strategy variants.
+- Preserve report structure and section conventions so future scripted subject refreshes can replace bounded subject blocks in place.
+
+# 19 Mar 2026 15:52
+
+## Occlusion PE report refresh
+
+### `simulations/report/PE_simulation_diff_1Dot.md`
+- Append a generated Subject 70 section (`<!-- SUBJECT:70:START/END -->`) for the one-dot occlusion outputs under `Sub70_oneDot_occlusion`.
+- Add matrix embeds and path-check lines for `occluded_deviant` across Observed/Predicted/PE comparisons, including correlation and PCR strategy variants (legacy, ARC1, Ridge Full, Ridge Tapered) with both common and separate colorbar layouts.
+- Add matrix embeds and path-check lines for `occluded_nondeviant` observed-only comparisons across the same corr/PCR strategy set and colorbar layout variants.
+- Preserve the existing report structure so section-level updates remain script-replaceable for future subject refreshes.
+
+# 19 Mar 2026 15:52
+
+## One-dot occlusion simulation pipeline
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v1.m`
+- Add a dedicated one-dot occlusion PE simulation entry point that runs only `occluded_nondeviant` and `occluded_deviant`, with strict one-dot input validation and extensive runtime/parameter documentation.
+- Keep canonical PE construction explicit (`observed - predicted`) and run deviant-only PE analyses against three neural targets (`neuralPE`, `neuralPredicted`, `neuralObserved`).
+- Add post-reappearance enforcement for occluded-deviant PE streams, deriving cut points from per-trial metadata with controlled fallback behavior when metadata is missing.
+- Support both `corr` and `PCR` dRSA modes and expose the full PCR regression-strategy surface (`baseline_pcr_border`, `ridge_full_autocorr`, `ridge_tapered_autocorr`, `ar1_prewhite_ridge`) with reproducibility-oriented defaults.
+- Organize outputs under `simulations/output/SubXX_oneDot_occlusion/...`, including strategy-tagged filenames to avoid collisions with legacy PCR outputs.
+
+### `simulations/scripts/one-dot/plot_occlusion_paths_1Dot.m`
+- Add a lightweight plotting helper to compare shared trial identities across `always_visible`, `occluded_nondeviant`, and `occluded_deviant` with shared axis limits.
+- Load one-dot center-relative paths from `MovDot_SubXX.mat`, align samples by `sequence` when available, and fall back to index-based sampling when no full sequence intersection exists.
+- Save reproducible path-comparison figures into the occlusion output tree for quick geometry sanity checks.
+
+### `simulations/scripts/one-dot/run_pipeline_occlusion.m`
+- Add a batch runner that loops participants and PCR strategies, then calls `PE_simulation_diff_1Dot_occlusion_v1.m` with explicit per-run parameter initialization.
+- Set default batch behavior to rerun/overwrite existing outputs (`existingResultsAction = 2`) for non-interactive pipeline use.
+
+### `simulations/scripts/one-dot/run_pipeline.m`
+- Extend the one-dot strategy list to include `baseline_pcr_border` alongside ridge and AR1 strategies so baseline PCR outputs are regenerated in the same batch workflow.
+
+# 19 Mar 2026 15:51
+
+## Occlusion TrialStruct compatibility helper
+
+### `experiment/CreateInputFiles_v12_temporary.m`
+- Add a temporary converter that builds `SubXX_TrialStruct.mat` from occlusion-era `MovDot_SubXX.mat` inputs without reintroducing catch-trial logic.
+- Preserve occlusion condition traceability by copying condition label, source trial index, sequence identity, and occlusion-enabled metadata into each `TrialStruct` row.
+- Build balanced run orders across `always_visible`, `occluded_nondeviant`, and `occluded_deviant` pools by truncating to the minimum shared count per condition.
+- Emit a no-catch `Catch` struct and legacy-compatible `TrialOrder`/`BlockOrder` containers so older workflows that require `SubXX_TrialStruct.mat` can run unchanged.
+- Add numeric input validation and overwrite guards (including optional non-interactive `overwriteExisting`) to keep batch runs deterministic.
+
+# 19 Mar 2026 15:51
+
+## One-dot occlusion experiment core
+
+### `experiment/stimuli_generation_v18.m`
+- Add a v18 occlusion dataset builder that transforms an existing one-dot source into three aligned condition sets: `always_visible`, `occluded_nondeviant`, and `occluded_deviant`.
+- Add configurable deviance-centered timing controls (`deviance-X`, `deviance+Y`) and emit per-trial twocircle geometry plus alpha fallback visibility profiles.
+- Export trigger-aligned occlusion event frames (`start`, `complete`, `end_start`, `end_complete`) and construct predicted occluded-deviant trials that match observed trajectories until reappearance before diverging.
+- Keep strict one-dot validation and deterministic trial pairing so generated observed/predicted outputs remain aligned for downstream runtime and simulations.
+
+### `experiment/stimuli_generation_v19.m`
+- Add a v19 generator variant that enforces a matched pre-deviance branch for occluded deviant trials and splices in the deviant suffix with translation for position-continuous continuity at deviance.
+- Preserve the v18 output contract (three observed conditions, predicted branch, twocircle/alpha metadata, and event-frame fields) while changing only the deviant-branch construction rule.
+- Add non-interactive overwrite control (`overwriteExisting`) so batch regeneration can run without prompt loops when target files already exist.
+
+### `experiment/MoveDot1_experiment_occlusion_v1.m`
+- Add a dedicated one-dot occlusion runtime that consumes `MovDot_SubXX.mat` metadata from v18/v19, validates required occlusion fields, and enforces one-dot trajectory shape.
+- Implement condition-specific trial-onset triggers (`31`, `41`, `51`) and occlusion event triggers (`111`, `112`, `114`, `115`) with per-frame logging for debug/replay workflows.
+- Support two rendering paths (`twocircle` default, `alpha` fallback), balancing trial scheduling via `SubXX_TrialStruct.mat` when available and an internal balanced fallback otherwise.
+- Save run outputs and optional debug trigger CSVs under `experiment/output_files` with explicit no-overwrite guards.
+
+### `experiment/trigger_codes.md`
+- Add the canonical trigger-code table for `MoveDot1_experiment_occlusion_v1.m`, including condition onset pulses and the four occlusion event pulses.
+- Clarify that event frames come from generator metadata and that condition and event trigger emissions are independent during a trial.
+
+### `experiment/stimuli_generation_versions.md`
+- Extend the version guide with v18/v19 selection guidance and capability summaries, including occlusion timing controls, twocircle metadata, event-frame exports, and v19 matched pre-deviance behavior.
+- Document how v18/v19 differ from earlier versions so users can choose between de-novo generation and occlusion-paradigm transformation workflows.
+
 # 17 Mar 2026 15:48
 
 ## Report tracking and ignore scope
