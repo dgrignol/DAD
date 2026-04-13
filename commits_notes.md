@@ -1,3 +1,30 @@
+# 13 Apr 2026 12:12
+
+## Update experiment documentation and add simulation/methods notes
+
+### `.gitignore`
+- Add a root `*.gdoc` ignore rule so Google Docs link-export sidecar files are not accidentally tracked in future documentation updates.
+
+### `experiment/MEG_lab_procedure.md`
+- Add an explicit pre-session check item for confirming Polhemus power state in the "Before subject" preparation checklist.
+- Keep checklist formatting aligned with the existing operations flow used during acquisition setup.
+
+### `experiment/TODO.md`
+- Replace the short legacy TODO header with a dated, structured list that separates active priorities from completed items and older deferred tasks.
+- Document recent decisions and implementation outcomes for EyeLink calibration flow, replay behavior, abort messaging, save policy, and display color/mask adjustments.
+
+### `experiment/timing.md`
+- Add a dedicated timing-assessment note for the path-band runtime with MEG-oriented interpretation, current risks, and a prioritized hardening checklist.
+- Record scope limits (static inspection vs live capture), trigger/flip alignment caveats, and acceptance criteria for production timing validation.
+
+### `paper/methods.md`
+- Add a methods draft covering V27 block-resume stimulus generation, occlusion geometry/timing anchors, schedule and catch-trial policies, message flow, and trigger-code mapping.
+- Include explicit parameter values and assumptions used by the current runtime/generator stack so manuscript text stays synchronized with implementation.
+
+### `simulations/report/PCR_full_ridge_timeline_explainer_Sub52_V27.md`
+- Add a detailed explainer of the one-dot occlusion PCR `ridge_full_autocorr` strategy, including design-matrix construction, penalty behavior, and timeline-window interpretation for standard vs PE branches.
+- Document metadata-backed frame/timeline values from the referenced Sub52 run so result interpretation remains reproducible.
+
 # 13 Apr 2026 12:11
 
 ## Add block-resume v17/v20/v27 experiment pipeline and retire legacy active files

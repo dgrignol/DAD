@@ -31,3 +31,4 @@ simulations/report/**/*.pdf
 simulations/report_old/**/*.pdf
 /$MDN
 **/.Rhistory
+*.gdoc
