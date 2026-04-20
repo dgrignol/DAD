@@ -59,5 +59,3 @@ experiment/practice/input_files/
 experiment/practice/output_files/
 triggers_check/oldTriggerChecks_asBakcup/*
 !triggers_check/oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py
-!triggers_check/oldTriggerChecks_asBakcup/original_trigger_checks_with_expected/
-!triggers_check/oldTriggerChecks_asBakcup/original_trigger_checks_with_expected/**
