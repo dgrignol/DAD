@@ -162,6 +162,10 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
 - **Generate config-driven occlusion stimuli with fixation-zone collision
   handling modes (`off`, `retry`, `move`) where `move` preserves trajectory
   shape via minimal rigid translation when feasible**: use **V22**.
+- **Generate config-driven occlusion stimuli with shared-placement turn-magnitude
+  rescue (reduce deviant turn before rejection) to keep clockwise/counterclockwise
+  balance closer to 50/50 while preserving matched pre-deviance branches**:
+  use **V28_rescueTraject**.
 - **Reduce residual position-direction coupling while preserving constant
   within-trial curvature**: use **v14**.
 - **Experimentation version: half-length paths to reduce
@@ -601,6 +605,40 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   `% In Config_stimuli_generation_V22:`
   `% fixationCollisionMode = 'move'; % or 'retry' / 'off'`
   `stimuli_generation_V22;`
+
+### V28_rescueTraject — `stimuli_generation_V28_rescueTraject.m`
+
+**Adds**
+- **Versioned rescueTraject branch with no source-subject dependency**:
+  keeps config-driven one-dot occlusion generation from the V21/V22 family and
+  writes dedicated `V28_rescueTraject` outputs so legacy
+  block-resume artifacts stay untouched.
+- **Shared-placement turn-magnitude rescue fallback before rejection**:
+  when a sampled deviant turn makes shared placement infeasible, generation
+  retries the same trial with progressively reduced deviant-turn magnitude
+  (sign preserved) instead of rejecting immediately.
+  *Example*: large turn samples that would fail bounds can be rescued with a
+  smaller same-sign turn while keeping the same shared pre-deviance segment.
+- **Rescue diagnostics in per-trial metadata**:
+  output trials include `sampledDeviantTurnDeg`, `usedDeviantTurnDeg`,
+  `turnRescueScale`, and `turnRescueApplied` for downstream QC and bias audits.
+
+**Keeps from V22**
+- Fixed-frame occlusion timeline controlled by config defaults.
+- Matched pre-deviance branch construction for deviant vs nondeviant variants.
+- Fixation collision handling modes (`off`, `retry`, `move`) with optional
+  rigid-translation rescue around fixation.
+
+**Usage examples (MATLAB code style)**
+- Interactive generation from `experiment/`:
+  `addpath('lib');`
+  `stimuli_generation_V28_rescueTraject;`
+- Keep rescue on (default) and override scale grid:
+  `addpath('lib');`
+  `enableTurnMagnitudeRescue = true;`
+  `% Provide a descending in-[0,1] rescue scale vector (first value 1).`
+  `turnRescueScaleGrid = [1.0 0.8 0.6 0.4 0.2 0.0];`
+  `stimuli_generation_V28_rescueTraject;`
 
 ### v15_experimentalPathScale — `stimuli_generation_v15_experimentalPathScale.m`
 

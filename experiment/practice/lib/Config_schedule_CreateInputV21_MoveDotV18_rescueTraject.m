@@ -1,25 +1,25 @@
-classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
+classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
     properties(Constant)
 
-        % CONFIG_SCHEDULE_CREATEINPUTV20_MOVEDOTV17_BLOCKRESUME
+        % CONFIG_SCHEDULE_CREATEINPUTV21_MOVEDOTV18_RESCUETRAJECT
         %
         % Purpose:
         %   Centralize block/run schedule controls and catch-trial controls
         %   for:
-        %     - experiment/CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m
-        %     - experiment/MoveDot1_experiment_occlusion_v17_blockResume.m
+        %     - experiment/CreateInputFiles_v21_rescueTraject.m
+        %     - experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
         %
         % Usage example (interactive):
         %   In MATLAB, open this file and set:
-        %       Config_schedule_CreateInputV20_MoveDotV17_blockResume.numBlocks
+        %       Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.numBlocks
         %   then run:
-        %       CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume
+        %       CreateInputFiles_v21_rescueTraject
         %
         % Usage example (non-interactive):
         %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
         %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
         %    iSub=66; randomSeed=6601; ...
-        %    run('CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m');"
+        %    run('CreateInputFiles_v21_rescueTraject.m');"
         %
         % Scheduling model:
         %   - Exactly 3 runs per block.
@@ -39,7 +39,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
 
         % Number of blocks generated in TrialOrder.
         % Example: 2 -> block 1 and block 2 each with runs 1..3.
-        numBlocks = 10;
+        numBlocks = 1;
 
         % Runs per block (kept fixed for this exp version family).
         % Example: 3 -> run1(always_visible), run2/3(occluded mix).
@@ -63,10 +63,10 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         %   runs2+3 type-2 catches total = round((20+20) * 0.10) = 4
         % Catch fraction for run-1 (always_visible) base trials.
         % Example: 0.10 with 20 base trials -> 2 type-1 catches.
-        catchRateType1Run1 = 0.10;
+        catchRateType1Run1 = 0.00;
         % Catch fraction across pooled runs 2+3 occluded base trials.
         % Example: 0.10 with 40 pooled base trials -> 4 type-2 catches total.
-        catchRateType2Runs23 = 0.10;
+        catchRateType2Runs23 = 0.00;
 
         % Catch type 1 timing controls.
         % Allowed disappearance onset range for type-1 catches.
@@ -105,7 +105,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         % response (1 or 8) with no timeout.
         % Enable pre-run message before run 1.
         % Example: true shows welcome/instruction screen.
-        startMessageEnabled = true;
+        startMessageEnabled = false;
         % Text shown in the pre-run message.
         % Example: includes button-box instructions.
         startMessageText = sprintf(['Welcome!\n\n' ...
@@ -120,7 +120,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         % the following run (typically run 2).
         % Enable transition message between run 1 and run 2.
         % Example: true adds a short rest prompt after run 1.
-        run1TransitionMessageEnabled = true;
+        run1TransitionMessageEnabled = false;
         % Text shown in the run1->run2 transition screen.
         % Example: remind participant to rest before continuing.
         run1TransitionMessageText = sprintf(['End of first task.\n\n' ...
@@ -128,10 +128,10 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
             'Second task will start soon.']);
         % Transition message duration in seconds.
         % Example: 5.0 -> auto-continue after 5 s.
-        run1TransitionMessageDurationSec = 5.0;
+        run1TransitionMessageDurationSec = 0.0;
         % If true, append a visible seconds countdown to the run1->run2 message.
         % Example: true shows "Second task starts in: 5 s ... 1 s".
-        run1TransitionCountdownEnabled = true;
+        run1TransitionCountdownEnabled = false;
 
         % End-of-block message (non-final blocks).
         % Runtime fills the two %d placeholders with:
@@ -139,7 +139,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         %   2) remaining block count
         % Enable message shown between non-final blocks.
         % Example: true shows "block ended / remaining blocks" prompt.
-        endOfBlockMessageEnabled = true;
+        endOfBlockMessageEnabled = false;
         % End-of-block template with placeholders:
         %   first %d = completed block index, second %d = remaining blocks.
         % IMPORTANT:
@@ -153,7 +153,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         endOfBlockMessageDurationSec = 0.0;
         % If true, show a second screen after the end-of-block continue gate:
         % skip calibration or run calibration now, then continue.
-        betweenBlockCalibrationChoiceEnabled = true;
+        betweenBlockCalibrationChoiceEnabled = false;
         % Between-block calibration choice text.
         % Response mapping:
         %   - NO CALIBRATION: Red / key 1
@@ -169,29 +169,29 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         % End-of-experiment message shown after the last block.
         % Enable final message after last block.
         % Example: true shows closing text before quit.
-        finalMessageEnabled = true;
+        finalMessageEnabled = false;
         % Closing text at experiment end.
         % Example: replace with lab-standard thank-you wording.
         finalMessageText = 'you completed the experiment bye thanks';
         % Final message duration in seconds.
         % Example: 5.0 -> auto-close after 5 s.
-        finalMessageDurationSec = 5.0;
+        finalMessageDurationSec = 0.0;
 
         % Shared controls for message transitions.
         % Add fixation period immediately after message screens.
         % Example: true enforces short recentering interval.
-        postMessageFixationEnabled = true;
+        postMessageFixationEnabled = false;
         % Duration of post-message fixation interval.
         % Example: 3.0 seconds.
-        postMessageFixationDurationSec = 3.0;
+        postMessageFixationDurationSec = 0.0;
 
         % For message screens that require button confirmation (except
         % catch trials), wait this long before accepting inputs.
         % Ignore button responses during initial lockout period.
         % Example: 1.0 prevents accidental carry-over presses.
-        messageResponseLockoutSec = 1.0;
+        messageResponseLockoutSec = 0.0;
 
-        % Run-color cue switch for experiment v17.
+        % Run-color cue switch for experiment v18.
         % If true, run 1 and runs 2/3 use different dot colors with
         % odd/even subject counterbalancing in runtime.
         % Enable run-family color cue metadata used by runtime.
@@ -273,7 +273,7 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         % Example: 1e-6 ignores tiny numerical noise around zero.
         flipMissedEpsilonSec = 1e-6;
 
-        % Eye-tracker controls for MoveDot1_experiment_occlusion_v17_blockResume.
+        % Eye-tracker controls for MoveDot1_experiment_occlusion_v18_rescueTraject.
         % Master switch for eye-tracker support.
         % Example: true enables EyeLink setup and trial recording.
         eyeTrackerEnabled = false;
@@ -317,19 +317,19 @@ classdef Config_schedule_CreateInputV20_MoveDotV17_blockResume
         % If true, attempt EDF retrieval immediately after each block.
         eyeTrackerReceiveFileAfterBlock = true;
         % If true and eye tracking is enabled, allow between-block calibration.
-        eyeTrackerAllowBetweenBlockCalibration = true;
+        eyeTrackerAllowBetweenBlockCalibration = false;
         % Path to fixation bitmap used for EyeLink host image transfer.
         eyeTrackerFixBmpPath = './fixation.bmp';
         % Dedicated trigger code for termination by ESC.
         % Keep this outside sequence range and outside existing fixed triggers.
         triggerEscTermination = 152;
 
-        % Input/output naming for additive v20 block-resume schedule artifacts.
+        % Input/output naming for additive v21 rescueTraject schedule artifacts.
         % Input stimulus filename pattern.
-        % Example: subject 66 -> MovDot_Sub66_V27_eyeTrackerReplay_blockResume.mat
-        inputFilePattern = 'MovDot_Sub%02d_V27_eyeTrackerReplay_blockResume.mat';
+        % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject.mat
+        inputFilePattern = 'MovDot_Sub%02d_V28_rescueTraject.mat';
         % Output schedule filename pattern.
-        % Example: subject 66 -> Sub66_TrialStruct_v20_threeRunsPerBlock_catch_eyeTrackerReplay_blockResume.mat
-        outputFilePattern = 'Sub%02d_TrialStruct_v20_threeRunsPerBlock_catch_eyeTrackerReplay_blockResume.mat';
+        % Example: subject 66 -> Sub66_TrialStruct_v21_rescueTraject.mat
+        outputFilePattern = 'Sub%02d_TrialStruct_v21_rescueTraject.mat';
     end
 end

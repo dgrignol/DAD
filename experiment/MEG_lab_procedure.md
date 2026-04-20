@@ -118,6 +118,7 @@
   - Blue changes; orange stays same.
   - Copy = CTRL + INS.
   - Paste = up arrow + INS.
+- At the end of the block when you save, there is a pop-up window about the **head position** (to see if the head position changed), good values for the difference is anything <40/60mm 
 
 ## After recording
 - Lower chair, unplug coils/electrodes. Take them to prep room and take off coils/electrodes. Let them change. Get them to fill out payment forms.

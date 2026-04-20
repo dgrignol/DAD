@@ -2,7 +2,7 @@
 """
 Compare reported trigger logs against observed trigger windows extracted from a FIF.
 
-This script is designed for the V17 block-resume derivatives where a MATLAB
+This script is designed for versioned occlusion derivatives where a MATLAB
 debug CSV ("reported" triggers) must be checked against the trigger channel
 stored in an MEG FIF file ("observed" triggers). The script builds explicit
 trigger windows (start/end samples and times) from the FIF stim channel,
@@ -16,7 +16,7 @@ aligns the reported and observed trigger sequences, and writes:
 5) Optional interactive trigger-channel scroller with faded vertical lines at
    reported-trigger anchors.
 
-V17-focused behavior
+Version-focused behavior
 - FIF extraction uses MNE step events and includes non-zero -> non-zero overlaps.
 - Observed triggers are represented as windows with start/end sample and time.
 - Short transition pulses from digital line updates (e.g., 0->A->B->0 with
@@ -28,7 +28,7 @@ V17-focused behavior
   - insertions/deletions are preserved as REPORTED_ONLY / OBSERVED_ONLY rows.
 
 Inputs
-- reported CSV columns expected (V17): trigger, trial, frame, seconds, label
+- reported CSV columns expected (current derivatives): trigger, trial, frame, seconds, label
 - FIF file with a stim channel (default: STI101)
 
 Outputs
@@ -42,12 +42,12 @@ Outputs
 Usage examples
 1) Basic comparison (explicit paths)
    python compare_reported_vs_observed_triggers.py \
-     --reported-csv /path/debug_actual_triggers_occlusion_v17_blockResume_sub52_block01_run01.csv \
+     --reported-csv /path/debug_actual_triggers_occlusion_v18_rescueTraject_sub52_block01_run01.csv \
      --fif /path/subj52_provaTrigger.fif \
      --out-csv /tmp/sub52_block01_run01_confrontation.csv \
      --out-report /tmp/sub52_block01_run01_confrontation_report.md
 
-2) V17 auto-resolution from subject/block/run
+2) Auto-resolution from subject/block/run
    python compare_reported_vs_observed_triggers.py \
      --subject 52 \
      --block 1 \
@@ -86,7 +86,7 @@ Usage examples
      --run 1 \
      --disable-plot-transition-pulses
 
-7) Override transition warning plot window (default: +/-50 ms)
+7) Override transition warning plot window (default: +/-3 ms)
    python compare_reported_vs_observed_triggers.py \
      --subject 52 \
      --block 1 \
@@ -105,6 +105,7 @@ from __future__ import annotations
 import argparse
 import csv
 import os
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -412,7 +413,7 @@ def load_reported_csv(path: Path) -> list[ReportedTrigger]:
     """
     Load reported trigger rows from the debug CSV file.
 
-    V17 derivatives are expected to provide:
+    V18 derivatives are expected to provide:
     - trigger, trial, frame, seconds, label
     """
     out: list[ReportedTrigger] = []
@@ -1782,7 +1783,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build command-line parser."""
     parser = argparse.ArgumentParser(
         description=(
-            "Compare V17 block-resume reported trigger CSV against observed FIF "
+            "Compare reported trigger CSV against observed FIF "
             "trigger windows and write CSV + Markdown confrontation outputs."
         )
     )
@@ -1800,7 +1801,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help=(
-            "Subject number for V17 auto-resolution (e.g., 52). "
+            "Subject number for auto-resolution (e.g., 52). "
             "Used when --reported-csv or --fif are omitted."
         ),
     )
@@ -1808,21 +1809,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--block",
         type=int,
         default=None,
-        help="Block number for V17 auto-resolution (e.g., 1).",
+        help="Block number for auto-resolution (e.g., 1).",
     )
     parser.add_argument(
         "--run",
         type=int,
         default=None,
-        help="Run number for V17 auto-resolution (e.g., 1).",
+        help="Run number for auto-resolution (e.g., 1).",
     )
     parser.add_argument(
         "--variant",
         type=str,
-        default="blockResume",
+        default=None,
         help=(
-            "V17 derivative variant name used in filenames "
-            "(default: blockResume)."
+            "Optional variant token used to filter auto-resolved CSV names "
+            "(e.g., rescueTraject). If omitted, any variant/version is allowed."
         ),
     )
     parser.add_argument(
@@ -1928,7 +1929,7 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help=(
             "Include WIDTH_OUTLIER anomaly detection based on pulse-width mode "
-            "(disabled by default for V17)."
+            "(disabled by default)."
         ),
     )
     parser.add_argument(
@@ -1971,10 +1972,10 @@ def _require_subject_block_run(
     block: Optional[int],
     run: Optional[int],
 ) -> tuple[int, int, int]:
-    """Validate and return subject/block/run for V17 auto-resolution."""
+    """Validate and return subject/block/run for auto-resolution."""
     if subject is None or block is None or run is None:
         raise ValueError(
-            "subject/block/run are required when using V17 auto-resolved paths."
+            "subject/block/run are required when using auto-resolved paths."
         )
     return int(subject), int(block), int(run)
 
@@ -1985,18 +1986,40 @@ def _resolve_default_reported_csv(
     subject: int,
     block: int,
     run: int,
-    variant: str,
+    variant: Optional[str],
 ) -> Path:
-    """Resolve the V17 reported CSV path from subject/block/run."""
-    return (
-        project_root
-        / "experiment"
-        / "output_files"
-        / (
-            f"debug_actual_triggers_occlusion_v17_{variant}_"
-            f"sub{subject:02d}_block{block:02d}_run{run:02d}.csv"
+    """
+    Resolve the reported CSV path from subject/block/run using wildcard matching.
+
+    Match pattern:
+      debug_actual_triggers*_subXX_blockYY_runZZ.csv
+    If --variant is provided, candidates are filtered by that token.
+    When multiple candidates remain, the highest parsed _vNN version wins.
+    """
+    output_dir = project_root / "experiment" / "output_files"
+    pattern = f"debug_actual_triggers*_sub{subject:02d}_block{block:02d}_run{run:02d}.csv"
+    candidates = sorted(output_dir.glob(pattern))
+
+    if variant:
+        variant_token = f"_{variant}_"
+        candidates = [p for p in candidates if variant_token in p.name]
+
+    if not candidates:
+        variant_hint = f" with variant {variant!r}" if variant else ""
+        raise FileNotFoundError(
+            f"No reported CSV found in {output_dir} matching {pattern!r}{variant_hint}."
         )
-    )
+
+    def _candidate_rank(path: Path) -> tuple[int, float, str]:
+        match = re.search(r"_v(\\d+)", path.name)
+        version_num = int(match.group(1)) if match else -1
+        return (version_num, path.stat().st_mtime, path.name)
+
+    # Pick the best match deterministically:
+    # 1) highest parsed version (_vNN),
+    # 2) newest modified time,
+    # 3) lexical filename order.
+    return max(candidates, key=_candidate_rank)
 
 
 def _resolve_default_fif(project_root: Path, *, subject: int) -> Path:

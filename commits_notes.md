@@ -1,3 +1,126 @@
+# 20 Apr 2026 11:13
+
+## Stage rescueTraject migration, practice runner, trigger-check expansion, and artifact hygiene
+
+### `.gitignore`
+- Add default-ignore rules for generated/binary artifacts: `*.mat`, `*.png`, `*.csv`, `*.html`, `*.fif`.
+- Add folder-level ignore rules for practice generated outputs: `experiment/practice/input_files/` and `experiment/practice/output_files/`.
+- Add ignore rules for `triggers_check/oldTriggerChecks_asBakcup/*` while explicitly allowing the archived source script `triggers_check/oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py`.
+- Keep ignore strategy aligned with the hygiene request so `paper/figures/*.png` stays out of the index unless explicitly forced.
+
+### `experiment/CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m` -> `experiment/CreateInputFiles_v21_rescueTraject.m`
+- Rename the scheduler/input-builder entry point to the rescueTraject lineage and expand script-header documentation with purpose, data-flow assumptions, and MATLAB usage examples.
+- Keep deterministic three-runs-per-block partitioning while documenting catch insertion policy and v21 output structures (`TrialStruct`, `CatchPlan`, `Schedule`, `TrialOrder`).
+
+### `experiment/MEG_lab_procedure.md`
+- Add an operator note about the end-of-block head-position popup and acceptable displacement range guidance (`<40/60 mm`).
+
+### `experiment/MoveDot1_experiment_occlusion_v17_blockResume.m` -> `experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m`
+- Rename the runtime experiment script to the v18 rescueTraject variant and update top-level documentation for restored EyeLink flow, replay triggers, flip diagnostics, and runtime override surface.
+- Preserve condition/catch trigger behavior while documenting timing guardrails and calibration/recalibration controls.
+
+### `experiment/TODO.md`
+- Rewrite the TODO header to reflect the current active rescueTraject script/config set.
+- Add open tasks for block-end accuracy printouts, EyeLink recalibration escape flow, and participant feedback about catch-trial density.
+- Mark practice launcher work as done and reformat completed/open sections for the current workflow snapshot.
+
+### `experiment/decreasing_speed.md` (deleted)
+- Remove the legacy speed-scaling note file that referenced older config/script names no longer used in the active rescueTraject flow.
+
+### `experiment/lib/Config_runtime_v17_blockResume.m` -> `experiment/lib/Config_runtime_v18_rescueTraject.m`
+- Rename runtime preset script to match v18 rescueTraject and refresh configuration documentation blocks, defaults, and accepted override semantics.
+- Keep preset-driven launch flow (config script then runtime script) explicit for batch and interactive operation.
+
+### `experiment/lib/Config_schedule_CreateInputV20_MoveDotV17_blockResume.m` -> `experiment/lib/Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.m`
+- Rename schedule config class to v21/v18 rescueTraject naming and keep schedule/catch/message/timing policy centralized in one constant config surface.
+- Preserve fixed three-run assumptions and catch parametrization while aligning usage docs to the new script family.
+
+### `experiment/lib/Config_stimuli_generation_V28_rescueTraject.m`
+- Add the dedicated V28 rescueTraject generation config class in active `experiment/lib` with fixed-frame occlusion controls, turn-window limits, and rescue-related parameters.
+- Document one-dot assumptions, path-band geometry controls, and fixation-collision handling modes used by the new generator.
+
+### `experiment/practice/CreateInputFiles_v21_rescueTraject.m`
+- Add a practice-local copy of the v21 input-builder to keep practice generation isolated from main experiment directories.
+- Keep same catch/schedule model but scoped to `experiment/practice` paths.
+
+### `experiment/practice/MoveDot1_experiment_occlusion_v18_rescueTraject.m`
+- Add a practice-local runtime copy for non-MEG practice execution with the same rescueTraject runtime behavior surface.
+- Maintain trigger/debug/eye-tracker compatibility while constraining file IO to the practice tree.
+
+### `experiment/practice/fixation.bmp`
+- Add a fixed bitmap asset used by the practice-local EyeLink/visual setup path (`eyeTrackerFixBmpPath`).
+- Keep it versioned as a required runtime asset for the isolated practice launcher.
+
+### `experiment/practice/lib/Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.m`
+- Add practice-local schedule config with run/catch/message defaults tuned for practice execution.
+- Keep class-level constants self-contained so practice does not depend on parent config files.
+
+### `experiment/lib/Config_stimuli_generation_V27_blockResume.m` -> `experiment/practice/lib/Config_stimuli_generation_V28_rescueTraject.m`
+- Move the prior active config lineage into the practice-local tree as part of the practice package.
+- Update naming/content toward V28 rescueTraject controls inside practice scope.
+
+### `experiment/practice/lib/Utils.m`
+- Add practice-local `Utils` support class to decouple practice scripts from parent-path dependency resolution.
+
+### `experiment/practice/run_practice_occlusion_v1.m`
+- Add a dedicated top-level practice orchestrator with extensive script docs, safety preflight, repeat-loop controls, run1/run2 trial-count selection, and consolidated participant metrics output.
+- Implement practice input caching/generation and runtime execution flow fully within `experiment/practice`.
+
+### `experiment/stimuli_generation_V27_blockResume.m` -> `experiment/practice/stimuli_generation_V28_rescueTraject.m`
+- Move the previous active generator lineage into the practice-local package and align naming/docs with V28 rescueTraject.
+- Keep generation behavior available for practice input regeneration without mutating the active experiment tree.
+
+### `experiment/stimuli_generation_V28_rescueTraject.m`
+- Add the active config-driven V28 rescueTraject generator in `experiment/` with explicit turn-magnitude rescue fallback (`turnRescueScaleGrid`) before candidate rejection.
+- Preserve fixed-frame occlusion timing, shared pre-deviance branch behavior, and metadata exports needed by runtime/analysis.
+
+### `experiment/stimuli_generation_versions.md`
+- Add a new V28_rescueTraject section documenting added turn-magnitude rescue behavior and per-trial rescue metadata fields.
+- Update the “which version to use” guidance to include V28_rescueTraject for better CW/CCW balance under shared placement constraints.
+
+### `experiment/trigger_codes_occlusion_v8_blockResume.md` -> `experiment/trigger_codes_occlusion_v9_rescueTraject.md`
+- Rename trigger-code documentation file to v9 rescueTraject and keep trigger map aligned to the renamed runtime lineage.
+
+### `paper/methods.md`
+- Update methods text for the new deviant turn bounds (`[-81,-15] U [15,81]`) and add a curvature-unit clarification (`deg/frame`).
+- Note schedule flexibility wording for total block count.
+
+### `paper/plot_baseline_curvature_limit_paths.m`
+- Add a standalone plotting script that visualizes post-deviance trajectory outcomes for curvature-window boundary values while enforcing a shared pre-deviance segment.
+- Include documented workspace overrides, validation, and deterministic PNG export path.
+
+### `paper/plot_deviant_turn_limit_paths.m`
+- Add a complementary plotting script for deviant-turn boundary values with shared-prefix enforcement and translated suffix continuity.
+- Keep plotting/export behavior parallel to the baseline-curvature plot helper for reproducible methods figures.
+
+### `reports/sub04/sub04_report.html` (deleted)
+- Remove tracked generated report artifact from `reports/sub04` to reduce repository noise from export outputs.
+
+### `reports/sub04/sub04_run01_report.html` (deleted)
+- Remove tracked run-level generated report artifact from `reports/sub04`.
+
+### `triggers_check/compare_reported_vs_observed_triggers.md`
+- Add usage and flag reference documentation for the single-run confrontation script, including explicit-path mode and auto-resolution behavior.
+
+### `triggers_check/compare_reported_vs_observed_triggers.py`
+- Generalize script language from V17-only to version-agnostic derivative handling.
+- Add wildcard-based reported-CSV auto-resolution with optional `--variant` filtering and deterministic candidate ranking by parsed version and mtime.
+- Refresh CLI help text and examples to rescueTraject naming and update transition warning plot-window default documentation.
+
+### `triggers_check/compare_reported_vs_observed_triggers_subject.md`
+- Add subject-level workflow documentation covering concatenated multi-run confrontation, memory model, output bundle, and scroller usage.
+
+### `triggers_check/compare_reported_vs_observed_triggers_subject.py`
+- Add a subject-level confrontation driver that discovers all subject CSV runs, maps block/run coverage to FIFs, concatenates reported/observed timelines, and emits one global report bundle.
+- Keep memory footprint bounded by reading one FIF trigger channel at a time and storing compact window metadata.
+
+### `oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py` -> `triggers_check/oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py`
+- Move archived trigger-check script into the `triggers_check/oldTriggerChecks_asBakcup` location.
+- Preserve file contents unchanged (`R100`) to keep archival provenance while consolidating trigger-check assets under one tree.
+
+Suggested commit message:
+`Migrate rescueTraject experiment flow and add practice tooling`
+
 # 13 Apr 2026 12:27
 
 ## Stop tracking archived `oldies` source trees while keeping files on disk

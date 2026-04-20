@@ -1,6 +1,6 @@
-%% Stimuli Generation V27 eyeTrackerReplay blockResume (config-driven one-dot occlusion, no source subject files)
-% Script: stimuli_generation_V27_blockResume.m
-% Author: Dami (V27 block-resume refresh by Codex)
+%% Stimuli Generation V28 rescueTraject (config-driven one-dot occlusion, no source subject files)
+% Script: stimuli_generation_V28_rescueTraject.m
+% Author: Dami (V28 rescueTraject refresh by Codex)
 %
 % Purpose:
 %   Generate a complete one-dot occlusion dataset directly from config
@@ -17,20 +17,20 @@
 %     1) always_visible
 %     2) occluded_nondeviant
 %     3) occluded_deviant
-%   plus occluded_deviant_predicted in MovDot_SubXX_V27_eyeTrackerReplay_blockResume_predicted.mat.
+%   plus occluded_deviant_predicted in MovDot_SubXX_V28_rescueTraject_predicted.mat.
 %
 % Optional central-fixation collision handling:
-%   - configured through Config_stimuli_generation_V27_blockResume.fixationCollisionMode.
+%   - configured through Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode.
 %   - modes:
 %       * 'off'   : no special handling.
 %       * 'retry' : reject colliding candidates and resample.
 %       * 'move'  : minimally translate colliding paired trajectories out of
 %                   the fixation exclusion zone when feasible, otherwise retry.
 %   - exclusion radius is controlled by
-%     Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg.
+%     Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg.
 %
 % Fixed occlusion timeline:
-%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V27_blockResume)
+%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V28_rescueTraject)
 %   - first fully occluded frame fixed at 130
 %   - fully occluded through frame 190 (inclusive)
 %   - nominal reappearance search starts at frame 191
@@ -47,52 +47,60 @@
 %         (for deviant trials this switches to deviant branch at deviance)
 %       * remains active to trial end so reappearance is geometric
 %   - width:
-%       * controlled by Config_stimuli_generation_V27_blockResume.pathBandWidthDeg
+%       * controlled by Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg
 %       * constrained to be strictly larger than dot diameter
 %   - terminal style:
-%       * controlled by Config_stimuli_generation_V27_blockResume.pathBandTerminalStyle
+%       * controlled by Config_stimuli_generation_V28_rescueTraject.pathBandTerminalStyle
 %       * 'round' keeps rounded terminal caps; 'straight' uses wall-like
 %         straight terminals with configurable start backshift
 %
 % Trigger/event metadata compatibility:
 %   The exported trial fields are aligned with:
-%     - experiment/MoveDot1_experiment_occlusion_v17_blockResume.m
+%     - experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
 %     - experiment/trigger_codes_occlusion_v8_blockResume.md
 %
 % Usage example (interactive from experiment/):
 %   addpath('lib');
-%   stimuli_generation_V27_blockResume;
+%   stimuli_generation_V28_rescueTraject;
 %
 % Usage example (set fixed-frame overrides before running):
 %   addpath('lib');
 %   fixedDevianceFrame = 130;
 %   fixedOcclusionEndFrame = 190;
 %   overwriteExisting = true;
-%   stimuli_generation_V27_blockResume;
+%   stimuli_generation_V28_rescueTraject;
 %
 % Usage example (force round terminal metadata for comparison):
 %   addpath('lib');
 %   pathBandTerminalStyle = 'round';
 %   pathBandStraightBackshiftDotRadiusScale = 0.0;
-%   stimuli_generation_V27_blockResume;
+%   stimuli_generation_V28_rescueTraject;
 %
 % Usage example (enable fixation-cross avoidance in config and run):
 %   addpath('lib');
-%   % In Config_stimuli_generation_V27_blockResume:
+%   % In Config_stimuli_generation_V28_rescueTraject:
 %   %   fixationCollisionMode = 'move'; % or 'retry' / 'off'
-%   stimuli_generation_V27_blockResume;
+%   stimuli_generation_V28_rescueTraject;
+%
+% Usage example (save paths plot without showing a figure window):
+%   addpath('lib');
+%   showPathPlots = false; % default behavior (headless plot save)
+%   stimuli_generation_V28_rescueTraject;
 %
 % Inputs:
-%   - Config_stimuli_generation_V27_blockResume class on MATLAB path.
+%   - Config_stimuli_generation_V28_rescueTraject class on MATLAB path.
 %   - targetSubjectID optional workspace override; otherwise prompted.
 %
 % Outputs:
-%   - input_files/MovDot_SubXX_V27_eyeTrackerReplay_blockResume.mat
+%   - input_files/MovDot_SubXX_V28_rescueTraject.mat
 %       with xySeqs containing always_visible / occluded_nondeviant /
 %       occluded_deviant and full occlusion metadata fields.
-%   - input_files/MovDot_SubXX_V27_eyeTrackerReplay_blockResume_predicted.mat
+%   - input_files/MovDot_SubXX_V28_rescueTraject_predicted.mat
 %       with xySeqsPredicted containing occluded_deviant_predicted trials
 %       and matching metadata.
+%   - input_files/MovDot_SubXX_V28_rescueTraject_paths.png
+%       with one plot_paths panel per observed condition
+%       (always_visible / occluded_nondeviant / occluded_deviant).
 %
 % Key assumptions:
 %   - One-dot only: xy is frames x 2 ([x y]) in visual degrees.
@@ -100,31 +108,54 @@
 %     deviant value (>0); the first deviant value is used for generation.
 %   - Trial pairing is sequence-index based and one-to-one across conditions.
 %   - Output directories are relative to experiment/ unless overridden by
-%     Config_stimuli_generation_V27_blockResume.
+%     Config_stimuli_generation_V28_rescueTraject.
 
 addpath('lib/');
+scriptDir = fileparts(mfilename('fullpath'));
+repoRoot = fileparts(scriptDir);
+plotHelperDir = fullfile(repoRoot, 'simulations', 'debug');
+if exist(plotHelperDir, 'dir')
+    addpath(plotHelperDir);
+end
 
 %% Setup and runtime parameter defaults
-% Data flow: caller overrides + Config_stimuli_generation_V27_blockResume constants -> validated controls.
-clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale;
+% Data flow: caller overrides + Config_stimuli_generation_V28_rescueTraject constants -> validated controls.
+%
+% Rescue controls (shared-placement preserving):
+%   - enableTurnMagnitudeRescue:
+%       if true, when shared-placement fails, retry same sampled trajectory
+%       controls while reducing deviant-turn magnitude (sign preserved) before
+%       rejecting the attempt.
+%   - turnRescueScaleGrid:
+%       turn scales in [0,1], tried in order. 1 means no change.
+clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale enableTurnMagnitudeRescue turnRescueScaleGrid showPathPlots;
 clc;
 
 if ~(exist('fixedDevianceFrame', 'var') && ~isempty(fixedDevianceFrame))
-    fixedDevianceFrame = Config_stimuli_generation_V27_blockResume.fixedDevianceFrame;
+    fixedDevianceFrame = Config_stimuli_generation_V28_rescueTraject.fixedDevianceFrame;
 end
 if ~(exist('fixedOcclusionEndFrame', 'var') && ~isempty(fixedOcclusionEndFrame))
-    fixedOcclusionEndFrame = Config_stimuli_generation_V27_blockResume.fixedOcclusionEndFrame;
+    fixedOcclusionEndFrame = Config_stimuli_generation_V28_rescueTraject.fixedOcclusionEndFrame;
 end
 if ~(exist('overwriteExisting', 'var') && ~isempty(overwriteExisting))
     overwriteExisting = true;
 end
 if ~(exist('pathBandTerminalStyle', 'var') && ~isempty(pathBandTerminalStyle))
-    pathBandTerminalStyle = Config_stimuli_generation_V27_blockResume.pathBandTerminalStyle;
+    pathBandTerminalStyle = Config_stimuli_generation_V28_rescueTraject.pathBandTerminalStyle;
 end
 if ~(exist('pathBandStraightBackshiftDotRadiusScale', 'var') && ...
         ~isempty(pathBandStraightBackshiftDotRadiusScale))
     pathBandStraightBackshiftDotRadiusScale = ...
-        Config_stimuli_generation_V27_blockResume.pathBandStraightBackshiftDotRadiusScale;
+        Config_stimuli_generation_V28_rescueTraject.pathBandStraightBackshiftDotRadiusScale;
+end
+if ~(exist('enableTurnMagnitudeRescue', 'var') && ~isempty(enableTurnMagnitudeRescue))
+    enableTurnMagnitudeRescue = true;
+end
+if ~(exist('turnRescueScaleGrid', 'var') && ~isempty(turnRescueScaleGrid))
+    turnRescueScaleGrid = [1.0, 0.85, 0.70, 0.55, 0.40, 0.25, 0.10, 0.0];
+end
+if ~(exist('showPathPlots', 'var') && ~isempty(showPathPlots))
+    showPathPlots = false;
 end
 
 if ~isscalar(fixedDevianceFrame) || ~isscalar(fixedOcclusionEndFrame) || ...
@@ -136,6 +167,8 @@ fixedOcclusionEndFrame = round(fixedOcclusionEndFrame);
 overwriteExisting = logical(overwriteExisting);
 pathBandTerminalStyle = lower(strtrim(char(pathBandTerminalStyle)));
 pathBandStraightBackshiftDotRadiusScale = double(pathBandStraightBackshiftDotRadiusScale);
+enableTurnMagnitudeRescue = logical(enableTurnMagnitudeRescue);
+turnRescueScaleGrid = double(turnRescueScaleGrid(:)');
 if ~ismember(pathBandTerminalStyle, {'round', 'straight'})
     error('pathBandTerminalStyle must be ''round'' or ''straight''.');
 end
@@ -143,12 +176,27 @@ if ~isfinite(pathBandStraightBackshiftDotRadiusScale) || ...
         pathBandStraightBackshiftDotRadiusScale < 0
     error('pathBandStraightBackshiftDotRadiusScale must be a non-negative finite scalar.');
 end
+if ~isscalar(enableTurnMagnitudeRescue)
+    error('enableTurnMagnitudeRescue must be a logical scalar.');
+end
+if ~isscalar(showPathPlots)
+    error('showPathPlots must be a logical scalar.');
+end
+if isempty(turnRescueScaleGrid) || any(~isfinite(turnRescueScaleGrid)) || ...
+        any(turnRescueScaleGrid < 0) || any(turnRescueScaleGrid > 1)
+    error('turnRescueScaleGrid must be a non-empty numeric vector with values in [0,1].');
+end
+showPathPlots = logical(showPathPlots);
+% Guarantee a first attempt with original turn magnitude.
+if ~any(abs(turnRescueScaleGrid - 1.0) < 1e-12)
+    turnRescueScaleGrid = [1.0, turnRescueScaleGrid];
+end
 
 %% Resolve target subject ID (workspace override or interactive prompt)
 % Data flow: optional caller-provided subject ID -> fallback dialog -> validated ID.
 if ~(exist('targetSubjectID', 'var') && ~isempty(targetSubjectID))
     prompt = {'Target subject ID (new config-driven occlusion dataset):'};
-    dlgTitle = 'V27 block-resume target subject';
+    dlgTitle = 'V28 rescueTraject target subject';
     dims = [1 70];
     definput = {''}; % no default target by design.
     userInput = inputdlg(prompt, dlgTitle, dims, definput);
@@ -165,16 +213,16 @@ end
 targetSubjectID = round(targetSubjectID);
 
 %% Resolve output paths and overwrite guard
-% Data flow: targetSubjectID + Config_stimuli_generation_V27_blockResume directories -> output files.
-inputDir = Config_stimuli_generation_V27_blockResume.inputDirectory;
+% Data flow: targetSubjectID + Config_stimuli_generation_V28_rescueTraject directories -> output files.
+inputDir = Config_stimuli_generation_V28_rescueTraject.inputDirectory;
 if ~exist(inputDir, 'dir')
     mkdir(inputDir);
 end
 
 targetObservedFile = fullfile(inputDir, sprintf( ...
-    Config_stimuli_generation_V27_blockResume.observedFilePattern, targetSubjectID));
+    Config_stimuli_generation_V28_rescueTraject.observedFilePattern, targetSubjectID));
 targetPredictedFile = fullfile(inputDir, sprintf( ...
-    Config_stimuli_generation_V27_blockResume.predictedFilePattern, targetSubjectID));
+    Config_stimuli_generation_V28_rescueTraject.predictedFilePattern, targetSubjectID));
 
 if isfile(targetObservedFile) || isfile(targetPredictedFile)
     doOverwrite = logical(overwriteExisting);
@@ -191,21 +239,21 @@ if isfile(targetObservedFile) || isfile(targetPredictedFile)
     end
 end
 
-%% Build generation controls from Config_stimuli_generation_V27_blockResume
-% Data flow: Config_stimuli_generation_V27_blockResume constants -> trajectory synthesis controls.
-stimulusTypeConfig = Config_stimuli_generation_V27_blockResume.likelihood;
-framesPerTrial = round(Config_stimuli_generation_V27_blockResume.trialDuration * Config_stimuli_generation_V27_blockResume.frameFrequency);
-nTrials = Config_stimuli_generation_V27_blockResume.trialsPerCondition;
-fps = double(Config_stimuli_generation_V27_blockResume.frameFrequency);
+%% Build generation controls from Config_stimuli_generation_V28_rescueTraject
+% Data flow: Config_stimuli_generation_V28_rescueTraject constants -> trajectory synthesis controls.
+stimulusTypeConfig = Config_stimuli_generation_V28_rescueTraject.likelihood;
+framesPerTrial = round(Config_stimuli_generation_V28_rescueTraject.trialDuration * Config_stimuli_generation_V28_rescueTraject.frameFrequency);
+nTrials = Config_stimuli_generation_V28_rescueTraject.trialsPerCondition;
+fps = double(Config_stimuli_generation_V28_rescueTraject.frameFrequency);
 alphaFadeInFrames = max(1, round(0.25 * fps));
-dotRadiusDeg = double(Config_stimuli_generation_V27_blockResume.dotWidth) / 2;
-pathBandWidthDeg = double(Config_stimuli_generation_V27_blockResume.pathBandWidthDeg);
+dotRadiusDeg = double(Config_stimuli_generation_V28_rescueTraject.dotWidth) / 2;
+pathBandWidthDeg = double(Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg);
 pathBandStyle = struct( ...
     'terminalStyle', pathBandTerminalStyle, ...
     'straightBackshiftDotRadiusScale', pathBandStraightBackshiftDotRadiusScale);
 
 if nTrials < 1
-    error('Config_stimuli_generation_V27_blockResume.trialsPerCondition must be >= 1.');
+    error('Config_stimuli_generation_V28_rescueTraject.trialsPerCondition must be >= 1.');
 end
 if framesPerTrial < 2
     error('Computed framesPerTrial (trialDuration * frameFrequency) must be >= 2.');
@@ -218,16 +266,16 @@ if fixedOcclusionEndFrame < fixedDevianceFrame || fixedOcclusionEndFrame > frame
         'precede fixedDevianceFrame.'], fixedOcclusionEndFrame, fixedDevianceFrame, framesPerTrial);
 end
 if ~isfinite(pathBandWidthDeg) || pathBandWidthDeg <= (2 * dotRadiusDeg)
-    error(['Config_stimuli_generation_V27_blockResume.pathBandWidthDeg must be finite and ' ...
+    error(['Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg must be finite and ' ...
         'strictly larger than the dot diameter (%g deg).'], 2 * dotRadiusDeg);
 end
 
 directionVariance = double(stimulusTypeConfig.directionVariance(:)');
 if ~any(directionVariance == 0)
-    error('Config_stimuli_generation_V27_blockResume.likelihood.directionVariance must include nondeviant value 0.');
+    error('Config_stimuli_generation_V28_rescueTraject.likelihood.directionVariance must include nondeviant value 0.');
 end
 if ~any(directionVariance > 0)
-    error('Config_stimuli_generation_V27_blockResume.likelihood.directionVariance must include at least one deviant value > 0.');
+    error('Config_stimuli_generation_V28_rescueTraject.likelihood.directionVariance must include at least one deviant value > 0.');
 end
 deviantConditionCode = directionVariance(find(directionVariance > 0, 1, 'first'));
 if numel(directionVariance(directionVariance > 0)) > 1
@@ -236,67 +284,69 @@ if numel(directionVariance(directionVariance > 0)) > 1
 end
 
 if numel(stimulusTypeConfig.pathDuration) > 1
-    warning(['Config_stimuli_generation_V27_blockResume.likelihood.pathDuration has multiple values. ' ...
-        'V27 block-resume uses the first value for one-dot occlusion generation.']);
+    warning(['Config_stimuli_generation_V28_rescueTraject.likelihood.pathDuration has multiple values. ' ...
+        'V28 rescueTraject uses the first value for one-dot occlusion generation.']);
 end
 pathDurationSec = double(stimulusTypeConfig.pathDuration(1));
 
 generationCfg = struct();
 generationCfg.framesPerTrial = framesPerTrial;
-generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V27_blockResume.dotSpeedDegPerFrame);
-generationCfg.minPosDeg = [Config_stimuli_generation_V27_blockResume.dotWidth / 2, Config_stimuli_generation_V27_blockResume.dotWidth / 2];
-generationCfg.maxPosDeg = double(Config_stimuli_generation_V27_blockResume.dotRectSize) - generationCfg.minPosDeg;
+generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V28_rescueTraject.dotSpeedDegPerFrame);
+generationCfg.minPosDeg = [Config_stimuli_generation_V28_rescueTraject.dotWidth / 2, Config_stimuli_generation_V28_rescueTraject.dotWidth / 2];
+generationCfg.maxPosDeg = double(Config_stimuli_generation_V28_rescueTraject.dotRectSize) - generationCfg.minPosDeg;
 generationCfg.initialCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V27_blockResume.initialCurvatureWindows, 'Config_stimuli_generation_V27_blockResume.initialCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V28_rescueTraject.initialCurvatureWindows, 'Config_stimuli_generation_V28_rescueTraject.initialCurvatureWindows', false, -inf, inf);
 generationCfg.deviantCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V27_blockResume.deviantCurvatureWindows, 'Config_stimuli_generation_V27_blockResume.deviantCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V28_rescueTraject.deviantCurvatureWindows, 'Config_stimuli_generation_V28_rescueTraject.deviantCurvatureWindows', false, -inf, inf);
 generationCfg.deviantTurnWindowsDeg = local_parse_interval_windows( ...
     stimulusTypeConfig.deviantSignedTurnWindows, ...
-    'Config_stimuli_generation_V27_blockResume.likelihood.deviantSignedTurnWindows', true, -180, 180);
-generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V27_blockResume.flipCurvatureOnDeviant);
-generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V27_blockResume.randomizeCurvatureOnDeviant);
+    'Config_stimuli_generation_V28_rescueTraject.likelihood.deviantSignedTurnWindows', true, -180, 180);
+generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V28_rescueTraject.flipCurvatureOnDeviant);
+generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V28_rescueTraject.randomizeCurvatureOnDeviant);
+generationCfg.enableTurnMagnitudeRescue = enableTurnMagnitudeRescue;
+generationCfg.turnRescueScaleGrid = turnRescueScaleGrid;
 generationCfg.pathDurationSec = pathDurationSec;
 generationCfg.maxAttemptsPerTrial = 60000;
 generationCfg.fixationCollisionMode = lower(strtrim(char( ...
-    Config_stimuli_generation_V27_blockResume.fixationCollisionMode)));
+    Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode)));
 generationCfg.fixationExclusionRadiusDeg = double( ...
-    Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg);
-generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V27_blockResume.dotRectSize(:)') / 2;
+    Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg);
+generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V28_rescueTraject.dotRectSize(:)') / 2;
 generationCfg.fixationMovePaddingDeg = double( ...
-    Config_stimuli_generation_V27_blockResume.fixationMovePaddingDeg);
+    Config_stimuli_generation_V28_rescueTraject.fixationMovePaddingDeg);
 generationCfg.fixationMoveDirectionSamples = double( ...
-    Config_stimuli_generation_V27_blockResume.fixationMoveDirectionSamples);
+    Config_stimuli_generation_V28_rescueTraject.fixationMoveDirectionSamples);
 generationCfg.fixationMoveShiftSamples = double( ...
-    Config_stimuli_generation_V27_blockResume.fixationMoveShiftSamples);
+    Config_stimuli_generation_V28_rescueTraject.fixationMoveShiftSamples);
 
 % Validate fixation-collision controls once, then enforce them per trial.
 if numel(generationCfg.fixationCenterDeg) ~= 2
-    error('Config_stimuli_generation_V27_blockResume.dotRectSize must be [width height].');
+    error('Config_stimuli_generation_V28_rescueTraject.dotRectSize must be [width height].');
 end
 if ~ismember(generationCfg.fixationCollisionMode, {'off', 'retry', 'move'})
-    error(['Config_stimuli_generation_V27_blockResume.fixationCollisionMode must be one of: ' ...
+    error(['Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode must be one of: ' ...
         '''off'', ''retry'', ''move''.']);
 end
 if ~isfinite(generationCfg.fixationExclusionRadiusDeg) || generationCfg.fixationExclusionRadiusDeg < 0
-    error('Config_stimuli_generation_V27_blockResume.fixationExclusionRadiusDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg must be finite and >= 0.');
 end
 if ~isfinite(generationCfg.fixationMovePaddingDeg) || generationCfg.fixationMovePaddingDeg < 0
-    error('Config_stimuli_generation_V27_blockResume.fixationMovePaddingDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V28_rescueTraject.fixationMovePaddingDeg must be finite and >= 0.');
 end
 if generationCfg.fixationMoveDirectionSamples < 4 || ...
         floor(generationCfg.fixationMoveDirectionSamples) ~= generationCfg.fixationMoveDirectionSamples
-    error('Config_stimuli_generation_V27_blockResume.fixationMoveDirectionSamples must be an integer >= 4.');
+    error('Config_stimuli_generation_V28_rescueTraject.fixationMoveDirectionSamples must be an integer >= 4.');
 end
 if generationCfg.fixationMoveShiftSamples < 10 || ...
         floor(generationCfg.fixationMoveShiftSamples) ~= generationCfg.fixationMoveShiftSamples
-    error('Config_stimuli_generation_V27_blockResume.fixationMoveShiftSamples must be an integer >= 10.');
+    error('Config_stimuli_generation_V28_rescueTraject.fixationMoveShiftSamples must be an integer >= 10.');
 end
 
 % Match v17 geometric floor logic to avoid near-straight paths that cannot
 % fit inside the movement rectangle under fixed speed/frame constraints.
-maxTurnRadiusDeg = min(double(Config_stimuli_generation_V27_blockResume.dotRectSize) - double(Config_stimuli_generation_V27_blockResume.dotWidth)) / 2;
+maxTurnRadiusDeg = min(double(Config_stimuli_generation_V28_rescueTraject.dotRectSize) - double(Config_stimuli_generation_V28_rescueTraject.dotWidth)) / 2;
 if maxTurnRadiusDeg <= 0
-    error('Config_stimuli_generation_V27_blockResume.dotRectSize minus dotWidth must be > 0.');
+    error('Config_stimuli_generation_V28_rescueTraject.dotRectSize minus dotWidth must be > 0.');
 end
 generationCfg.minimumAbsCurvatureDeg = rad2deg(generationCfg.dotSpeedDegPerFrame / maxTurnRadiusDeg);
 
@@ -394,26 +444,26 @@ end
 xySeqsPredicted = vertcat(predictedCell{:});
 
 %% Build Cfg and reproducibility metadata
-% Data flow: Config_stimuli_generation_V27_blockResume snapshot + runtime values -> Cfg + repro outputs.
+% Data flow: Config_stimuli_generation_V28_rescueTraject snapshot + runtime values -> Cfg + repro outputs.
 Cfg = struct();
-Cfg.dpf = Config_stimuli_generation_V27_blockResume.dotSpeedDegPerFrame;
-Cfg.fps = Config_stimuli_generation_V27_blockResume.frameFrequency;
-Cfg.Stimulitype = Config_stimuli_generation_V27_blockResume.stimulusType;
-Cfg.dot_w = Config_stimuli_generation_V27_blockResume.dotWidth;
-Cfg.rectSize = Config_stimuli_generation_V27_blockResume.dotRectSize;
+Cfg.dpf = Config_stimuli_generation_V28_rescueTraject.dotSpeedDegPerFrame;
+Cfg.fps = Config_stimuli_generation_V28_rescueTraject.frameFrequency;
+Cfg.Stimulitype = Config_stimuli_generation_V28_rescueTraject.stimulusType;
+Cfg.dot_w = Config_stimuli_generation_V28_rescueTraject.dotWidth;
+Cfg.rectSize = Config_stimuli_generation_V28_rescueTraject.dotRectSize;
 Cfg.DirChange = stimulusTypeConfig.directionChange;
 
-configProps = properties('Config_stimuli_generation_V27_blockResume');
+configProps = properties('Config_stimuli_generation_V28_rescueTraject');
 configSnapshot = struct();
 for iProp = 1:numel(configProps)
     propName = configProps{iProp};
-    configSnapshot.(propName) = Config_stimuli_generation_V27_blockResume.(propName);
+    configSnapshot.(propName) = Config_stimuli_generation_V28_rescueTraject.(propName);
 end
 
 repro = struct();
 repro.script = struct( ...
     'name', mfilename, ...
-    'version', 'V27_eyeTrackerReplay_blockResume', ...
+    'version', 'V28_rescueTraject', ...
     'parameters', struct( ...
         'fixedDevianceFrame', fixedDevianceFrame, ...
         'fixedOcclusionEndFrame', fixedOcclusionEndFrame, ...
@@ -425,6 +475,8 @@ repro.script = struct( ...
         'pathDurationSec', pathDurationSec, ...
         'minimumAbsCurvatureDeg', generationCfg.minimumAbsCurvatureDeg, ...
         'maxAttemptsPerTrial', generationCfg.maxAttemptsPerTrial, ...
+        'enableTurnMagnitudeRescue', generationCfg.enableTurnMagnitudeRescue, ...
+        'turnRescueScaleGrid', generationCfg.turnRescueScaleGrid, ...
         'fixationCollisionMode', generationCfg.fixationCollisionMode, ...
         'fixationExclusionRadiusDeg', generationCfg.fixationExclusionRadiusDeg, ...
         'fixationMovePaddingDeg', generationCfg.fixationMovePaddingDeg, ...
@@ -433,7 +485,7 @@ repro.script = struct( ...
 repro.inputs = struct('targetSubjectID', targetSubjectID);
 repro.rng = rngState;
 repro.config = configSnapshot;
-repro.v27_blockResume_pathband_occlusion = struct( ...
+repro.v28_rescueTraject_pathband_occlusion = struct( ...
     'script', mfilename, ...
     'targetSubjectID', targetSubjectID, ...
     'fixedDevianceFrame', fixedDevianceFrame, ...
@@ -454,12 +506,15 @@ repro.v27_blockResume_pathband_occlusion = struct( ...
         'occluded_deviant', deviantConditionCode));
 
 %% Save outputs
-% Data flow: generated structs -> MAT files in Config_stimuli_generation_V27_blockResume.inputDirectory.
+% Data flow: generated structs -> MAT files in Config_stimuli_generation_V28_rescueTraject.inputDirectory.
 save(targetObservedFile, 'xySeqs', 'Cfg', 'repro');
 save(targetPredictedFile, 'xySeqsPredicted', 'Cfg');
+pathsPlotFile = local_save_observed_condition_paths_plot( ...
+    xySeqs, Cfg, targetObservedFile, showPathPlots);
 
 fprintf('Saved observed occlusion dataset: %s\n', targetObservedFile);
 fprintf('Saved predicted occlusion dataset: %s\n', targetPredictedFile);
+fprintf('Saved condition paths plot: %s\n', pathsPlotFile);
 fprintf('Trials per condition: %d (always_visible / occluded_nondeviant / occluded_deviant).\n', nTrials);
 fprintf(['Fixed occlusion timing: deviance=%d, first full occlusion=%d, ' ...
     'last required full occlusion=%d, nominal reappearance search start=%d.\n'], ...
@@ -488,11 +543,10 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
 
     nSteps = generationCfg.framesPerTrial - 1;
     turnNondevDeg = zeros(nSteps, 1);
-    turnDeviantDeg = zeros(nSteps, 1);
+    sampledTurnDeg = 0;
     if nSteps > 0 && devFrame > 1
         sampledTurnDeg = local_sample_deviant_turn( ...
             generationCfg.deviantTurnWindowsDeg, deviantConditionCode);
-        turnDeviantDeg(devFrame - 1) = sampledTurnDeg;
     end
 
     curvatureNondevDeg = repmat(baselineCurvatureDeg, nSteps, 1);
@@ -509,24 +563,65 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
 
     directionNondevDeg = local_integrate_direction( ...
         initialDirectionDeg, turnNondevDeg, curvatureNondevDeg);
-    directionDeviantDegRaw = local_integrate_direction( ...
-        initialDirectionDeg, turnDeviantDeg, curvatureDeviantDeg);
-
     relativeNondevXY = local_integrate_xy(directionNondevDeg, generationCfg.dotSpeedDegPerFrame);
-    relativeDeviantRawXY = local_integrate_xy(directionDeviantDegRaw, generationCfg.dotSpeedDegPerFrame);
 
-    % Explicitly enforce nondeviant-prefix identity through devFrame.
-    relativeDeviantXY = relativeDeviantRawXY;
-    relativeDeviantXY(1:devFrame, :) = relativeNondevXY(1:devFrame, :);
-    if devFrame < generationCfg.framesPerTrial
-        suffix = relativeDeviantRawXY(devFrame:end, :);
-        shiftVec = relativeDeviantXY(devFrame, :) - suffix(1, :);
-        relativeDeviantXY(devFrame:end, :) = suffix + shiftVec;
+    % Shared-placement preserving rescue:
+    %   If the sampled turn makes shared placement infeasible, retry with
+    %   reduced turn magnitudes while preserving sign and curvature samples.
+    if generationCfg.enableTurnMagnitudeRescue
+        rescueScales = generationCfg.turnRescueScaleGrid;
+    else
+        rescueScales = 1.0;
     end
 
-    % Place both trajectories together so every frame fits the movement bounds.
-    [isFeasible, startOffset] = local_sample_feasible_start( ...
-        relativeNondevXY, relativeDeviantXY, generationCfg.minPosDeg, generationCfg.maxPosDeg);
+    isFeasible = false;
+    startOffset = [NaN, NaN];
+    usedTurnDeg = sampledTurnDeg;
+    turnRescueScale = 1.0;
+    turnRescueApplied = false;
+    directionDeviantDegRaw = zeros(generationCfg.framesPerTrial, 1);
+    relativeDeviantXY = zeros(generationCfg.framesPerTrial, 2);
+
+    for iRescue = 1:numel(rescueScales)
+        rescueScale = rescueScales(iRescue);
+
+        turnDeviantDeg = zeros(nSteps, 1);
+        if nSteps > 0 && devFrame > 1
+            candidateTurnDeg = sampledTurnDeg * rescueScale;
+            turnDeviantDeg(devFrame - 1) = candidateTurnDeg;
+        else
+            candidateTurnDeg = 0;
+        end
+
+        directionDeviantDegRawCandidate = local_integrate_direction( ...
+            initialDirectionDeg, turnDeviantDeg, curvatureDeviantDeg);
+        relativeDeviantRawXYCandidate = local_integrate_xy( ...
+            directionDeviantDegRawCandidate, generationCfg.dotSpeedDegPerFrame);
+
+        % Explicitly enforce nondeviant-prefix identity through devFrame.
+        relativeDeviantXYCandidate = relativeDeviantRawXYCandidate;
+        relativeDeviantXYCandidate(1:devFrame, :) = relativeNondevXY(1:devFrame, :);
+        if devFrame < generationCfg.framesPerTrial
+            suffix = relativeDeviantRawXYCandidate(devFrame:end, :);
+            shiftVec = relativeDeviantXYCandidate(devFrame, :) - suffix(1, :);
+            relativeDeviantXYCandidate(devFrame:end, :) = suffix + shiftVec;
+        end
+
+        [candidateFeasible, candidateStartOffset] = local_sample_feasible_start( ...
+            relativeNondevXY, relativeDeviantXYCandidate, ...
+            generationCfg.minPosDeg, generationCfg.maxPosDeg);
+        if candidateFeasible
+            isFeasible = true;
+            startOffset = candidateStartOffset;
+            usedTurnDeg = candidateTurnDeg;
+            turnRescueScale = rescueScale;
+            turnRescueApplied = abs(rescueScale - 1.0) > 1e-12;
+            directionDeviantDegRaw = directionDeviantDegRawCandidate;
+            relativeDeviantXY = relativeDeviantXYCandidate;
+            break;
+        end
+    end
+
     if ~isFeasible
         continue;
     end
@@ -591,11 +686,27 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
     trialPred = local_build_base_trial( ...
         deviantConditionCode, generationCfg.pathDurationSec, sequenceIndex, predictedXY, ...
         pathAllNondev, curvynessNondev, directionNondevDeg);
+
+    % Keep turn-rescue metadata for downstream diagnostics.
+    trialNondev.sampledDeviantTurnDeg = sampledTurnDeg;
+    trialNondev.usedDeviantTurnDeg = usedTurnDeg;
+    trialNondev.turnRescueScale = turnRescueScale;
+    trialNondev.turnRescueApplied = turnRescueApplied;
+
+    trialDev.sampledDeviantTurnDeg = sampledTurnDeg;
+    trialDev.usedDeviantTurnDeg = usedTurnDeg;
+    trialDev.turnRescueScale = turnRescueScale;
+    trialDev.turnRescueApplied = turnRescueApplied;
+
+    trialPred.sampledDeviantTurnDeg = sampledTurnDeg;
+    trialPred.usedDeviantTurnDeg = usedTurnDeg;
+    trialPred.turnRescueScale = turnRescueScale;
+    trialPred.turnRescueApplied = turnRescueApplied;
     return;
 end
 
 error(['Failed to generate a feasible trial after %d attempts (sequence %d). ' ...
-    'Check Config_stimuli_generation_V27_blockResume geometry and curvature settings.'], ...
+    'Check Config_stimuli_generation_V28_rescueTraject geometry and curvature settings.'], ...
     generationCfg.maxAttemptsPerTrial, sequenceIndex);
 end
 
@@ -910,7 +1021,7 @@ end
 end
 
 function timing = local_build_occlusion_timing(nFrames, devFrame, occlusionEndFrameInclusive, fadeInFrames)
-% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V27 block-resume occlusion event indices.
+% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V28 rescueTraject occlusion event indices.
 occlusionStartFrame = max(1, devFrame - 1);
 occlusionFullEndFrame = max(devFrame, min(nFrames, round(occlusionEndFrameInclusive)));
 reappearanceStartFrame = min(nFrames, occlusionFullEndFrame + 1);
@@ -1237,6 +1348,150 @@ end
 
 alphaProfile = max(0, min(1, alphaProfile));
 geomProfile = alphaProfile;
+end
+
+function outFile = local_save_observed_condition_paths_plot(xySeqs, Cfg, targetObservedFile, showPathPlots)
+% LOCAL_SAVE_OBSERVED_CONDITION_PATHS_PLOT Save one plot_paths panel per observed condition.
+%
+% Data flow:
+%   observed xySeqs + Cfg -> per-condition trial tensors ->
+%   tiled plot_paths panels -> PNG named after the observed MovDot file.
+if exist('plot_paths', 'file') ~= 2
+    error('plot_paths.m not found on MATLAB path. Expected in simulations/debug.');
+end
+if ~isfield(Cfg, 'fps') || ~isfinite(double(Cfg.fps)) || double(Cfg.fps) <= 0
+    error('Cfg.fps must be a finite positive scalar for plot_paths colorbar seconds.');
+end
+if ~isfield(Cfg, 'rectSize') || numel(Cfg.rectSize) ~= 2
+    error('Cfg.rectSize must be [width height] to center paths for plotting.');
+end
+
+conditionLabels = {'always_visible', 'occluded_nondeviant', 'occluded_deviant'};
+conditionTitles = {'Always visible', 'Occluded nondeviant', 'Occluded deviant'};
+conditionPaths = cell(1, numel(conditionLabels));
+
+for iCondition = 1:numel(conditionLabels)
+    conditionPaths{iCondition} = local_extract_condition_paths( ...
+        xySeqs, conditionLabels{iCondition}, Cfg);
+end
+axisLimits = local_compute_shared_axis_limits(conditionPaths);
+
+if logical(showPathPlots)
+    figVisibility = 'on';
+else
+    figVisibility = 'off';
+end
+
+[outDir, outBaseName] = fileparts(targetObservedFile);
+outFile = fullfile(outDir, [outBaseName '_paths.png']);
+
+fig = figure('Name', [outBaseName ' paths'], 'NumberTitle', 'off', ...
+    'Visible', figVisibility);
+t = tiledlayout(1, numel(conditionLabels), 'Padding', 'compact', 'TileSpacing', 'compact');
+axHandles = gobjects(1, numel(conditionLabels));
+
+for iCondition = 1:numel(conditionLabels)
+    ax = nexttile(iCondition);
+    axHandles(iCondition) = ax;
+    plot_paths(conditionPaths{iCondition}, ...
+        'ParentAxes', ax, ...
+        'SavePlot', false, ...
+        'Title', conditionTitles{iCondition}, ...
+        'SampleRateHz', double(Cfg.fps), ...
+        'AxisLimits', axisLimits);
+end
+
+% Consolidate to one shared time colorbar across all condition panels.
+delete(findall(fig, 'Type', 'ColorBar'));
+nTime = size(conditionPaths{1}, 3);
+cmap = parula(nTime);
+timeSeconds = (0:(nTime - 1)) / double(Cfg.fps);
+sharedLimits = [timeSeconds(1), timeSeconds(end)];
+for iCondition = 1:numel(axHandles)
+    colormap(axHandles(iCondition), cmap);
+    caxis(axHandles(iCondition), sharedLimits);
+end
+cb = colorbar(axHandles(end), 'eastoutside');
+if isprop(cb, 'Layout')
+    cb.Layout.Tile = 'east';
+end
+cb.Label.String = 'Time (s)';
+cb.Ticks = linspace(sharedLimits(1), sharedLimits(2), 5);
+cb.TickLabels = arrayfun(@(x) sprintf('%.2f', x), cb.Ticks, 'UniformOutput', false);
+
+sgtitle(sprintf('%s paths by condition', outBaseName), 'Interpreter', 'none');
+print(fig, outFile, '-dpng', '-r300');
+close(fig);
+end
+
+function paths = local_extract_condition_paths(xySeqs, conditionLabel, Cfg)
+% LOCAL_EXTRACT_CONDITION_PATHS Convert one condition into trials x 2 x time tensor.
+trials = xySeqs(:);
+if ~isfield(trials, 'condition_label')
+    error('xySeqs entries must include condition_label for condition plotting.');
+end
+
+labels = arrayfun(@(s) string(s.condition_label), trials, 'UniformOutput', true);
+conditionMask = strcmp(labels, conditionLabel);
+conditionTrials = trials(conditionMask);
+if isempty(conditionTrials)
+    error('No trials found for condition %s in xySeqs.', conditionLabel);
+end
+
+frameCounts = arrayfun(@(s) size(s.xy, 1), conditionTrials);
+if any(frameCounts ~= frameCounts(1))
+    error('Condition %s has inconsistent frame counts, cannot build path tensor.', conditionLabel);
+end
+
+nTrials = numel(conditionTrials);
+nFrames = frameCounts(1);
+paths = zeros(nTrials, 2, nFrames);
+for iTrial = 1:nTrials
+    xy = double(conditionTrials(iTrial).xy);
+    if size(xy, 2) ~= 2
+        error('Condition %s contains non one-dot xy format.', conditionLabel);
+    end
+    paths(iTrial, 1, :) = reshape(xy(:, 1), 1, 1, []);
+    paths(iTrial, 2, :) = reshape(xy(:, 2), 1, 1, []);
+end
+
+% Re-center absolute screen coordinates around arena center for symmetric axes.
+rectCenter = reshape(double(Cfg.rectSize(:)') ./ 2, [1, 2, 1]);
+paths = bsxfun(@minus, paths, rectCenter);
+end
+
+function axisLimits = local_compute_shared_axis_limits(pathsByCondition)
+% LOCAL_COMPUTE_SHARED_AXIS_LIMITS Build one square axis box shared by all condition panels.
+allX = [];
+allY = [];
+for iCondition = 1:numel(pathsByCondition)
+    conditionPaths = pathsByCondition{iCondition};
+    xVals = reshape(conditionPaths(:, 1, :), [], 1);
+    yVals = reshape(conditionPaths(:, 2, :), [], 1);
+    allX = [allX; xVals(isfinite(xVals))]; %#ok<AGROW>
+    allY = [allY; yVals(isfinite(yVals))]; %#ok<AGROW>
+end
+
+if isempty(allX) || isempty(allY)
+    axisLimits = [-5, 5, -5, 5];
+    return;
+end
+
+xMin = min(allX);
+xMax = max(allX);
+yMin = min(allY);
+yMax = max(allY);
+span = max([xMax - xMin, yMax - yMin, 1e-6]);
+halfSpan = 0.5 * span;
+padding = 0.08 * span;
+xCenter = 0.5 * (xMin + xMax);
+yCenter = 0.5 * (yMin + yMax);
+
+axisLimits = [ ...
+    xCenter - halfSpan - padding, ...
+    xCenter + halfSpan + padding, ...
+    yCenter - halfSpan - padding, ...
+    yCenter + halfSpan + padding];
 end
 
 function outTrial = local_attach_occlusion_fields(inTrial, conditionCode, conditionLabel, ...

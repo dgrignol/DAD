@@ -13,7 +13,7 @@ For each subject, generation was deterministic (`rng(targetSubjectID)`) and prod
 - `occluded_nondeviant` (`0`)
 - `occluded_deviant` (`45`, from `directionVariance = [0, 45]`)
 
-For each sequence, nondeviant and deviant trajectories shared the same initial direction and were forced identical through the deviance frame. Baseline curvature was sampled from `[-0.8, -0.3755] U [0.3755, 0.8]`. Deviant signed turn at onset was sampled from `[-81, -10] U [10, 81]` deg. Post-onset deviant curvature was re-sampled from the same curvature windows (`randomizeCurvatureOnDeviant = true`, `flipCurvatureOnDeviant = false`). Deviant suffixes were translated at the splice frame to preserve positional continuity.
+For each sequence, nondeviant and deviant trajectories shared the same initial direction and were forced identical through the deviance frame. Baseline curvature was sampled from `[-0.8, -0.3755] U [0.3755, 0.8]` (signed heading increment in `deg/frame`; negative and positive values bend in opposite directions, and excluding near-zero values avoids nearly straight trajectories). Deviant signed turn at onset was sampled from `[-81, -15] U [15, 81]` deg. Post-onset deviant curvature was re-sampled from the same curvature windows (`randomizeCurvatureOnDeviant = true`, `flipCurvatureOnDeviant = false`). Deviant suffixes were translated at the splice frame to preserve positional continuity.
 
 Generation used fixation-zone collision handling (`fixationCollisionMode = 'move'`): trajectories entering a central exclusion radius of `0.55721 deg` were minimally translated out of the zone if feasible; otherwise they were re-sampled.
 
@@ -39,7 +39,7 @@ Timing constraints:
 Scheduling was created by `CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m` with `Config_schedule_CreateInputV20_MoveDotV17_blockResume.m`.
 
 Default schedule:
-- `10` blocks
+- `10` blocks (can vary due to participant fatigue level)
 - `3` runs per block
 - Run 1: shuffled `always_visible`
 - Run 2: shuffled first half of `occluded_nondeviant` + first half of `occluded_deviant`

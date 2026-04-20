@@ -1,16 +1,28 @@
-TODO FROM 2026-04-02 CONVERSATION
+TODO
+Current set of experiment script and config:
+experiment/lib/Config_stimuli_generation_V28_rescueTraject.m
+experiment/stimuli_generation_V28_rescueTraject.m
+experiment/lib/Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.m
+experiment/CreateInputFiles_v21_rescueTraject.m
+experiment/lib/Config_runtime_v18_rescueTraject.m
+experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
 
-Experiment Flow
+
+
+
+**Experiment Flow**
+- [ ] accuracy printed at the end of every block
 - [ ] Debug the current startup EyeLink calibration, which does not seem to work reliably.
-- [ ] Review and finalize post-deviance trajectory controls in `Config_stimuli_generation_V26_eyeTrackerReplay.m`: `initialCurvatureWindows`, `deviantCurvatureWindows`, `deviantSignedTurnWindows`, `likelihood.directionChange`, `flipCurvatureOnDeviant`, and `randomizeCurvatureOnDeviant`.
+  - [ ] at every re-calibration at the end of a block, it stops the experiment because it requires to press esc at the end of the calibration, this does not happen at the end of the very first calibration when you start the exp.
 
-Visual Display
-- [ ] If black side bands are still visible, verify whether they come from display/fading rather than explicit band drawing in the v16 code. -> not needed if background is black [0 0 0]
+**From participant feedback**
+- [ ] consider insertion of higher number of catch trials
 
+**DONE**
+**Procedure**
+- [x] make PRACTICE! a non meg script that launches equal for everyone, only catch trials, tunable number of trials per run1 and 2/3, clear separation between run 1 and 2/3 with instructions of one and the other; Repeatable with a button press; it just ask the particpant number at the start to save a single file with the accuracy and RTs; No MEG part, but there is the eyelink part with calibration and replays but can be switched off with parameter at the start.
 
-DONE
-
-Experiment Flow
+**Experiment Flow**
 - [x] Add an option to call EyeLink calibration again between blocks.
 - [x] Confirm that replayed trials should stay within the same run. The current behavior is run-local: replays are appended to the end of the current run (`run 1 = always_visible`, `runs 2/3 = occluded`). -> They do replay per run. Replay scheduling is run-local: when a fixation break (trigger 150) occurs, that trial’s source index is appended to the end of the current run’s schedule, and replay state resets at each run (no cross-run/block carry-over). With v19-generated TrialOrder, run 1 sources are always_visible and runs 2/3 sources are occluded, so replayed trials inherit the current run’s condition family; this condition split depends on the input schedule.
 - [x] Decide the EyeLink calibration policy. The current v16 runtime calls calibration once at experiment start, before the block loop.
@@ -20,17 +32,17 @@ Experiment Flow
       - `esc pressed during block [block_number]`
       - `esc pressed at the end of block [block_number]`
 - [x] Keep the current overwrite refusal, but add the help message: `if you intended to run from a specific block, set iBlock variable`
+- [x] Review and finalize post-deviance trajectory controls in `Config_stimuli_generation_V26_eyeTrackerReplay.m`: `initialCurvatureWindows`, `deviantCurvatureWindows`, `deviantSignedTurnWindows`, `likelihood.directionChange`, `flipCurvatureOnDeviant`, and `randomizeCurvatureOnDeviant`.
 
-Saving and Output
+**Saving and Output**
 - [x] Keep the current block-level `.mat` save, which already happens before the end-of-block screen.
 - [x] Make the EyeLink output block-independent as well, so all files needed for analysis exist by the time the end-of-block message appears.
 - [x] Decide whether EyeLink should use one EDF per block. The current code opens one EDF before the block loop and receives/moves it only once during final cleanup.
 
-Visual Display
+**Visual Display**
 - [x] Set `background`, `rectColor`, and `rectBorderColor` to the same black color: `[0 0 0]`. The current mismatch is mainly the dark-gray arena fill against a black background.
 - [x] Check the full-screen mask appearance after the color change. The post-trial grid mask still uses non-black colors. -> mask has been removed for now.
-
-
+- [X] If black side bands are still visible, verify whether they come from display/fading rather than explicit band drawing in the v16 code. -> not needed if background is black [0 0 0]
 
 
 

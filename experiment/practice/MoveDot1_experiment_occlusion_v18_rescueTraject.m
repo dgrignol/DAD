@@ -1,18 +1,18 @@
-% MoveDot1_experiment_occlusion_v17_blockResume.m
+% MoveDot1_experiment_occlusion_v18_rescueTraject.m
 %
 % Purpose:
 %   Run the one-dot occlusion paradigm with three runs per block and
 %   catch-trial logic planned upstream by:
-%     CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m
+%     CreateInputFiles_v21_rescueTraject.m
 %
-% Schedule model (from v20 TrialOrder/CatchPlan):
+% Schedule model (from v21 TrialOrder/CatchPlan):
 %   - Run 1: always_visible base trials + inserted type-1 catches.
 %   - Run 2: mixed occluded_nondeviant + occluded_deviant base trials +
 %            inserted type-2 catches.
 %   - Run 3: mixed occluded_nondeviant + occluded_deviant base trials +
 %            inserted type-2 catches.
 %
-% Timing-focused v17 block-resume additions:
+% Timing-focused v18 rescueTraject additions:
 %   - SkipSyncTests policy is no longer forced in MEG mode.
 %   - Full flip diagnostics are stored per frame:
 %       * VBLTimestamp
@@ -39,17 +39,17 @@
 %       * 151 replay start
 %
 % Usage example (interactive from experiment/):
-%   MoveDot1_experiment_occlusion_v17_blockResume
+%   MoveDot1_experiment_occlusion_v18_rescueTraject
 %
 % Usage example (non-interactive shell from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
 %    iSub=66; iBlock=1; viewingDistanceMm=1000; ...
-%    run('MoveDot1_experiment_occlusion_v17_blockResume.m');"
+%    run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');"
 %
 % Inputs:
-%   - experiment/input_files/MovDot_SubXX_V27_eyeTrackerReplay_blockResume.mat
-%   - experiment/input_files/SubXX_TrialStruct_v20_threeRunsPerBlock_catch_eyeTrackerReplay_blockResume.mat
+%   - experiment/input_files/MovDot_SubXX_V28_rescueTraject.mat
+%   - experiment/input_files/SubXX_TrialStruct_v21_rescueTraject.mat
 %
 % Workspace overrides (optional):
 %   - iSub, iBlock, viewingDistanceMm
@@ -60,6 +60,8 @@
 %   - debugShowFrameInfoOverlay, debugShowFullPathOverlay
 %   - pathBandEntranceStyle and straight-terminal tuning parameters
 %   - debugSkipSyncTests (0/1; explicit development override for SkipSyncTests)
+%   - disablePriorityBoost (0/1; practice safety guard for unsupported
+%     PTB Priority/Mach MEX environments)
 %   - flipMissedWarnThresholdCount / flipMissedAbortEnabled /
 %     flipMissedAbortThresholdCount (runtime guardrail overrides)
 %   - trackeye, ignoreEyeTracker, fakeEyeTracker, fakeGazeBreakRate
@@ -71,8 +73,8 @@
 %   - run1TransitionCountdownEnabled
 %
 % Outputs:
-%   - experiment/output_files/MoveDot1_occlusion_v17_eyeTrackerReplay_blockResume_SUBXX_BLOCKYY.mat
-%   - experiment/output_files/debug_actual_triggers_occlusion_v17_blockResume_subXX_blockYY_runZZ.csv
+%   - experiment/output_files/MoveDot1_occlusion_v18_rescueTraject_SUBXX_BLOCKYY.mat
+%   - experiment/output_files/debug_actual_triggers_occlusion_v18_rescueTraject_subXX_blockYY_runZZ.csv
 %     (debug mode; columns: trigger, trial, frame, seconds, label, iti_duration_sec)
 %
 % Assumptions:
@@ -83,7 +85,7 @@
 
 %% Clear state and define runtime configuration
 % Data flow: static conf values + user input -> runtime settings and file paths.
-clearvars -except iSub iBlock viewingDistanceMm dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec debugShowFrameInfoOverlay debugShowFullPathOverlay pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled;
+clearvars -except iSub iBlock viewingDistanceMm dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec debugShowFrameInfoOverlay debugShowFullPathOverlay pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests disablePriorityBoost flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled;
 clc;
 sca;
 format shortG;
@@ -107,6 +109,10 @@ end
 if ~exist('debugSkipSyncTests', 'var')
     debugSkipSyncTests = [];
 end
+if ~exist('disablePriorityBoost', 'var') || isempty(disablePriorityBoost)
+    disablePriorityBoost = true;
+end
+disablePriorityBoost = logical(disablePriorityBoost);
 if ~exist('flipMissedWarnThresholdCount', 'var')
     flipMissedWarnThresholdCount = [];
 end
@@ -167,9 +173,9 @@ end
 debugShowFrameInfoOverlay = logical(debugShowFrameInfoOverlay);
 debugShowFullPathOverlay = logical(debugShowFullPathOverlay);
 
-scheduleCfg = Config_schedule_CreateInputV20_MoveDotV17_blockResume;
+scheduleCfg = Config_schedule_CreateInputV21_MoveDotV18_rescueTraject;
 if scheduleCfg.runsPerBlock ~= 3
-    error('Config_schedule_CreateInputV20_MoveDotV17_blockResume.runsPerBlock must be 3 for this runtime.');
+    error('Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.runsPerBlock must be 3 for this runtime.');
 end
 if ~exist('runColorCueEnabled', 'var') || isempty(runColorCueEnabled)
     runColorCueEnabled = logical(scheduleCfg.runColorCueEnabled);
@@ -183,7 +189,7 @@ Conf.debugTriggerMode = double(debugTriggerMode ~= 0);
 Conf.debug = Conf.debugTriggerMode; % Backward-compatible alias used by legacy debug paths.
 Conf.enableCatchTrials = 1;
 Conf.occlusionMode = 'pathband'; % default: pathband; optional: alpha.
-Conf.experimentName = 'MoveDot1_occlusion_v17_eyeTrackerReplay_blockResume';
+Conf.experimentName = 'MoveDot1_occlusion_v18_rescueTraject';
 Conf.background = [0 0 0];
 Conf.rectColor = [0 0 0];
 Conf.rectBorderColor = [0 0 0];
@@ -194,7 +200,7 @@ Conf.runColorCueEnabled = logical(runColorCueEnabled);
 Conf.fixColor = [180 180 180];
 Conf.fixSizeDeg = 0.2;
 Conf.showFixCrossBetweenTrials = 0; % kept for compatibility; not used in post-trial ITI.
-% ITI policy (v17 jittered): one post-trial blank with fixation.
+% ITI policy (v18 jittered): one post-trial blank with fixation.
 % Data flow: ITIRangeSec override/default -> precomputed per-run vector ->
 % source-trial mapping (replay-safe) -> trial-specific WaitSecs duration.
 Conf.ITIRangeSec = local_resolve_iti_range(ITIRangeSec, [0.500 1.000]);
@@ -427,7 +433,7 @@ Conf.megButtonYesValue = uint32(8); % blue
 Conf.megButtonNoValue = uint32(1); % red
 Conf.enableKeyboardDebugResponse = true;
 
-% Start gate and run-transition messages (v17 block-resume).
+% Start gate and run-transition messages (v18 rescueTraject).
 % Data flow: schedule config constants -> runtime text, toggle, and timing controls.
 Conf.startMessageEnabled = logical(scheduleCfg.startMessageEnabled);
 Conf.startMessageText = char(scheduleCfg.startMessageText);
@@ -527,7 +533,7 @@ end
 % Data flow: dialog -> subject/block/display geometry -> input/output file names.
 if ~(exist('iSub', 'var') && exist('iBlock', 'var') && exist('viewingDistanceMm', 'var') && exist('practice_mode', 'var'))
     prompt = {'Subject Number:', 'Block Number:', 'Viewing Distance (mm):', 'Practice mode (0/1):'};
-    dlgtitle = 'Occlusion v17 block-resume (practice by run) input';
+    dlgtitle = 'Occlusion v18 rescueTraject (practice by run) input';
     dims = [1 50];
     definput = {'70', '1', '1000', '0'};
     userInput = inputdlg(prompt, dlgtitle, dims, definput);
@@ -580,7 +586,7 @@ if ~isfile(inputFile)
 end
 if ~isfile(trialStructFile)
     error(['Required schedule file not found: %s\n' ...
-        'Generate it with CreateInputFiles_v20_threeRunsPerBlock_catch_blockResume.m first.'], trialStructFile);
+        'Generate it with CreateInputFiles_v21_rescueTraject.m first.'], trialStructFile);
 end
 
 outputBase = sprintf('%s_SUB%02d_BLOCK%02d', Conf.experimentName, iSub, iBlock);
@@ -660,7 +666,7 @@ if ~isfield(tsData, 'TrialOrder')
 end
 
 if ndims(tsData.TrialOrder) ~= 3
-    error('TrialOrder in %s must be 3D [block x trial x run] for v17 block-resume mode.', ...
+    error('TrialOrder in %s must be 3D [block x trial x run] for v18 rescueTraject mode.', ...
         trialStructFile);
 end
 
@@ -707,10 +713,10 @@ end
 blocksToExecute = iBlock:nBlocksAvailable;
 
 if isempty(debug_runNumber)
-    fprintf('Using v20 TrialOrder from %s (start block %d, runs 1..%d).\n', ...
+    fprintf('Using v21 TrialOrder from %s (start block %d, runs 1..%d).\n', ...
         trialStructFile, iBlock, runsPerBlockAvailable);
 else
-    fprintf('Using v20 TrialOrder from %s (start block %d, debug run %d only).\n', ...
+    fprintf('Using v21 TrialOrder from %s (start block %d, debug run %d only).\n', ...
         trialStructFile, iBlock, debug_runNumber);
 end
 
@@ -934,7 +940,27 @@ try
     %% Execute selected blocks
     % Data flow: selected blocks -> run loops -> per-block save + break/continue flow.
     HideCursor;
-    Priority(MaxPriority(window));
+    % Priority policy:
+    %   disablePriorityBoost=true is the practice-safe default. This avoids
+    %   Mach time MEX crashes on unsupported/codesign-blocked PTB setups.
+    if disablePriorityBoost
+        fprintf('PTB priority policy: disabled (practice safety mode).\n');
+        try
+            Priority(0);
+        catch
+        end
+    else
+        try
+            Priority(MaxPriority(window));
+        catch MEPriority
+            warning(['Priority boost failed; continuing at normal priority. ' ...
+                'Error was: %s'], MEPriority.message);
+            try
+                Priority(0);
+            catch
+            end
+        end
+    end
 
     stopExperimentAfterBlock = false;
     stopReason = '';
@@ -1324,7 +1350,7 @@ try
                 output(iTrial).catch_reappear_frame = catchReappearFrame;
                 output(iTrial).catch_alt_source_index = catchAltSourceIdx;
 
-                % No pre-trial pause in v17 block-resume mode:
+                % No pre-trial pause in v18 rescueTraject mode:
                 % timing between trials is handled by an explicit post-trial interval.
 
                 % Start EyeLink recording for this trial (real hardware mode).
@@ -1667,7 +1693,7 @@ try
 
             if Conf.debug || ~isempty(debugTriggerLog)
                 debugTriggerFile = fullfile(outputDir, sprintf( ...
-                    'debug_actual_triggers_occlusion_v17_blockResume_sub%02d_block%02d_run%02d.csv', ...
+                    'debug_actual_triggers_occlusion_v18_rescueTraject_sub%02d_block%02d_run%02d.csv', ...
                     iSub, currentBlock, currentRun));
                 debugTriggerItiSec = nan(size(debugTriggerTrial(:)));
                 if ~isempty(output)
@@ -1930,7 +1956,7 @@ Conf.eyeTrackerEdfFile = [selectedBase '.edf'];
 Conf.eyeTrackerLocalEdfPath = selectedLocalPath;
 Eyelink('Openfile', Conf.eyeTrackerEdfFile);
 Eyelink('command', sprintf(['add_file_preamble_text ' ...
-    '''MoveDot occlusion v17 block-resume: subject %d ; block %d ; practice %d ; time %s'''], ...
+    '''MoveDot occlusion v18 rescueTraject: subject %d ; block %d ; practice %d ; time %s'''], ...
     iSub, currentBlock, double(Conf.practiceModeEnabled), datestr(now, 'YYYYmmddHHMMSS')));
 Conf.eyeTrackerBlockFileOpen = true;
 end
@@ -2220,7 +2246,7 @@ function itiSeed = local_derive_iti_seed(iSub, blockNum, runNum)
 %
 % Assumption:
 %   Participant ID is the primary seed source; block/run offsets keep seeds
-%   deterministic per block/run for block-resume sessions.
+%   deterministic per block/run for rescueTraject sessions.
 subjectSeed = max(0, round(double(iSub)));
 blockSeed = max(0, round(double(blockNum)));
 runSeed = max(0, round(double(runNum)));
@@ -2349,7 +2375,7 @@ end
 end
 
 function trialOrder = local_resolve_block_run_order(rawTrialOrder, iBlock, iRun, nTrialsAvailable)
-% LOCAL_RESOLVE_BLOCK_RUN_ORDER Return one block/run trial order from v20 TrialOrder.
+% LOCAL_RESOLVE_BLOCK_RUN_ORDER Return one block/run trial order from v21 TrialOrder.
 %
 % Inputs:
 %   rawTrialOrder    : numeric TrialOrder array from MAT file.
@@ -3694,7 +3720,7 @@ function drawOpts = local_make_pathband_draw_options( ...
 %
 % Data flow:
 %   validated runtime Conf + trial geometry metadata -> drawing flags.
-%   Geometry shifts are generated in stimuli_generation_V27_blockResume
+%   Geometry shifts are generated in stimuli_generation_V28_rescueTraject
 %   and serialized into pathband_*_xy. Runtime still applies small terminal
 %   compensations in straight mode to preserve frame-locked occlusion
 %   timing and avoid entrance leakage artifacts.

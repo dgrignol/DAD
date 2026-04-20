@@ -1,8 +1,8 @@
-% Config_runtime_v17_blockResume.m
+% Config_runtime_v18_rescueTraject.m
 %
 % Purpose:
 %   Define workspace variables consumed by:
-%     MoveDot1_experiment_occlusion_v17_blockResume.m
+%     MoveDot1_experiment_occlusion_v18_rescueTraject.m
 %   so the experiment can be started non-interactively with a reproducible
 %   runtime preset (subject/block/mode/debug/eye-tracker/occluder settings).
 %
@@ -13,18 +13,18 @@
 %     clearvars -except list and uses them as runtime overrides.
 %
 % Usage example (inside experiment/):
-%   run('lib/Config_runtime_v17_blockResume.m');
-%   run('MoveDot1_experiment_occlusion_v17_blockResume.m');
+%   run('lib/Config_runtime_v18_rescueTraject.m');
+%   run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');
 %
 % Usage example (MATLAB batch from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
-%    run('lib/Config_runtime_v17_blockResume.m'); ...
-%    run('MoveDot1_experiment_occlusion_v17_blockResume.m');"
+%    run('lib/Config_runtime_v18_rescueTraject.m'); ...
+%    run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');"
 %
 % Notes:
 %   - Set optional fields to [] to use schedule defaults from:
-%     Config_schedule_CreateInputV20_MoveDotV17_blockResume.
+%     Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.
 %   - This preset does NOT set Conf.MEG directly because the current
 %     experiment script does not expose a workspace override for Conf.MEG.
 %
@@ -34,8 +34,8 @@
 % Outputs:
 %   Variables in workspace:
 %     iSub, iBlock, viewingDistanceMm, practice_mode, ...
-%     ITIRangeSec, and all optional override variables supported by v17
-%     block-resume.
+%     ITIRangeSec, and all optional override variables supported by v18
+%     rescueTraject.
 
 %% Core session identity and run mode
 % Data flow: these values define participant/session selection and suppress
@@ -62,7 +62,7 @@ debugShowFullPathOverlay = false; % Accepted: logical scalar. Default when unset
 run1TransitionCountdownEnabled = []; % Accepted: [] or logical. Default when []/unset: scheduleCfg.run1TransitionCountdownEnabled (current default: true).
 
 %% Post-trial ITI jitter controls
-% Data flow: ITIRangeSec override -> v17 runtime ITI precompute at run start
+% Data flow: ITIRangeSec override -> v18 runtime ITI precompute at run start
 % -> trial-specific ITI hold (replay-safe via source-trial mapping).
 ITIRangeSec = [0.500, 1.000]; % Accepted: [] or finite 1x2 [min max] sec with min<=max and both >=0. Default when unset/[] in runtime script: [0.500, 1.000].
 
@@ -118,7 +118,7 @@ itiRangeForPrint = ITIRangeSec;
 if isempty(itiRangeForPrint)
     itiRangeForPrint = [0.500, 1.000];
 end
-fprintf(['Loaded runtime preset for MoveDot1 v17 eyeTrackerReplay blockResume: ' ...
+fprintf(['Loaded runtime preset for MoveDot1 v18 rescueTraject: ' ...
     'SUB=%02d startBlock=%02d practice=%d dryRun=%d debugRun=%s ITI=[%.3f %.3f] entranceStyle=%s\n'], ...
     iSub, iBlock, practice_mode, double(dryRunValidateScheduleOnly), ...
     mat2str(debug_runNumber), itiRangeForPrint(1), itiRangeForPrint(2), char(pathBandEntranceStyle));

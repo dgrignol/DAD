@@ -44,3 +44,18 @@ triggers_check/__pycache__/
 
 # Ignore archived source trees anywhere in repo
 **/oldies/
+
+# Commit hygiene: generated/binary artifacts are ignored by default.
+# If a file is intentionally versioned, add an explicit negation rule
+# above these globs (or use: git add -f <path>).
+*.mat
+*.png
+*.csv
+*.html
+*.fif
+
+# Practice and trigger-check artifact trees
+experiment/practice/input_files/
+experiment/practice/output_files/
+triggers_check/oldTriggerChecks_asBakcup/*
+!triggers_check/oldTriggerChecks_asBakcup/compare_reported_vs_observed_triggers.py
