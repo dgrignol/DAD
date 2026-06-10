@@ -1,3 +1,24 @@
+# 10 Jun 2026 15:04
+
+## Update current methods and preserve pilot protocols
+
+### `experiment/timing.md` (deleted)
+- Remove the obsolete static timing assessment for the V14/V24 path-band stack.
+- Its completed hardening items, including strict MEG sync policy, full flip diagnostics, missed-frame guardrails, and precomputed occluder geometry, are implemented and documented in the current V20 runtime and methods.
+
+### `paper/methods.md`
+- Update the primary methods to the V30 generation, v23 scheduling, V20 runtime, and v10 trigger map used for subjects 04-07.
+- Add participant-specific presented-stack, completed-trial, replay, catch, trigger-range, ITI, fixation-window, color-cue, and eye-recording differences for subjects 01-07.
+- Describe 40-path generation, zero-inclusive deviant-turn sampling with effective-deviance guards, 15% catch insertion, centered prompts, 1000-1500 ms ITIs, fixation cues, blink breaks, message cushions, and current timing estimates.
+- Clarify that reported counts come from saved/presented data rather than prepared schedules and that subject 01 retained online replay behavior despite loss of offline eye-tracker files.
+
+### `paper/methods_pilot_sub01_02_03/methods_subjects_01_02_03.md`
+- Preserve the earlier V29/v22/v19 protocol as a dedicated reference for analyses of subjects 01-03.
+- Document the 20-path schedule, legacy trigger codes, catch counts, visual timing, message flow, and run-color behavior separately from the current V30/v23/v20 methods.
+
+Suggested commit message:
+`Update methods and archive pilot protocols`
+
 # 10 Jun 2026 15:03
 
 ## Add the MEG preprocessing, trigger-QA, and dRSA pipeline
