@@ -1,3 +1,22 @@
+# 10 Jun 2026 14:56
+
+## Ignore generated MEG, experiment, and Python artifacts
+
+### `.gitignore`
+- Ignore Python bytecode and cache directories repository-wide through `**/__pycache__/`, `*.py[cod]`, and `.pytest_cache/`.
+- Ignore generated input/output trees for both standalone experiment bundles so subject schedules, recordings, trigger CSVs, and preview images cannot be staged accidentally.
+- Exclude the MEG raw-data, derivatives, and temporary-work trees, including nested repositories and large FIF intermediates under `meg/tmp/`.
+- Exclude generated PDF and SVG exports of the MEG pipeline diagram while retaining its editable Mermaid source and render script.
+
+### `__pycache__/inspect_fif_report.cpython-313.pyc` (deleted)
+- Remove the tracked CPython bytecode artifact; future regenerated copies are covered by the repository-wide cache rules.
+
+### `__pycache__/trigger_events.cpython-313.pyc` (deleted)
+- Remove the tracked trigger-tool bytecode artifact and prevent Python interpreter output from re-entering version control.
+
+Suggested commit message:
+`Ignore generated MEG and Python artifacts`
+
 # 20 Apr 2026 11:13
 
 ## Stage rescueTraject migration, practice runner, trigger-check expansion, and artifact hygiene

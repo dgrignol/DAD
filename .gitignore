@@ -1,10 +1,20 @@
 .DS_Store
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
 control-center/presentation/
 experiment/input_files/
 experiment/output_files/
 experiment/output/
+experiment/run_MEG_lab/input_files/
+experiment/run_MEG_lab/output_files/
+experiment/run_outside_lab/input_files/
+experiment/run_outside_lab/output_files/
 .venv/
 data/
+meg/data/
+meg/derivatives/
+meg/tmp/
 experiment/triggers_report_sub03_copy_withNotes.pdf
 experiment/oldies/triggers_report_sub03_copy_withNotes.pdf
 reports/old_reports/
@@ -32,6 +42,8 @@ simulations/report_old/**/*.pdf
 /$MDN
 **/.Rhistory
 *.gdoc
+meg/docs/meg_preprocessing_pipeline.pdf
+meg/docs/meg_preprocessing_pipeline.svg
 
 # Archived experiment and trigger-check generated artifacts
 experiment/oldies/input_files/
