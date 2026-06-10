@@ -1,0 +1,43 @@
+# sub-01.yaml
+#
+# Purpose:
+#   Subject-level override file for sub-01 (single session: ses-01).
+#   Values in this file take precedence over pipeline_default.yaml.
+#
+# Usage examples:
+#   1) Run pipeline with default + sub-01 overrides:
+#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/run_pipeline.py \
+#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml
+#
+#   2) Trigger-only debug on sub-01:
+#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/02_trigger_extraction_custom.py \
+#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml
+#
+# Data flow summary:
+#   Subject selector + local data roots -> sub-01 FIF and trigger CSV discovery ->
+#   preprocessing pipeline outputs under derivatives/sub-01/ses-01.
+
+subject:
+  id: "01" # Human-readable subject identifier used for logs and report labels.
+  label_bids: "sub-01" # BIDS-like subject label used in output path templates.
+  session_label_bids: "ses-01" # Single-session convention for this dataset.
+
+layout:
+  subject_bids_id: "sub-01" # Forces derivatives/templates to write under sub-01.
+  session_bids_id: "ses-01" # Forces derivatives/templates to write under ses-01.
+  raw_subject_folder_name: "sub01" # Matches current raw folder name in meg/data/sub01.
+
+data_discovery:
+  meg_fif_glob: "SUB01_block*_meg.fif" # Matches all current sub01 MNE-conformant FIF blocks (single and merged block files).
+  reported_trigger_csv_glob: "debug_actual_triggers*_sub01_block*_run*.csv" # Matches known experiment debug trigger CSV naming.
+  reported_trigger_search_roots:
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/experiment/output_files/sub01" # Preferred local project path when outputs are moved under meg/.
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment/output_files/sub01" # Fallback path currently containing available sub01 outputs.
+  eye_search_glob_roots:
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/sub01" # Search eye files next to moved sub01 MEG data.
+
+runtime:
+  save_intermediates: true # Keep stepwise products to support resume and debugging without full reruns.
+  overwrite_existing: false # Protect prior derivatives during iterative development.

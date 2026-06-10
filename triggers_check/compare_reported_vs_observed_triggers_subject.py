@@ -61,10 +61,13 @@ Usage examples
      --scroller-duration 12
 
 Status behavior
-- MATCH_WARNING marks reverse transition warnings where a collapsed short pulse
-  carried the reported trigger before the kept observed trigger:
-  0 -> reported -> random -> 0
-  These rows are treated as matched-with-warning (yellow) instead of mismatch.
+- Transition pairs are resolved with expected-trigger-first symmetric logic:
+  keep the code that matches the reported/expected stream and drop the other
+  code, for both 0->A->B->0 and 0->B->A->0.
+- If expected identity is unavailable or ambiguous, the resolver falls back to
+  width-based collapse, then deterministic fallback with unresolved warning.
+- MATCH_WARNING is used for transition-warning contexts that remain mismatch-like
+  after sequence alignment and should be treated as warning-level matches.
 """
 
 from __future__ import annotations
@@ -160,6 +163,11 @@ class TransitionPulseWarning:
     next_start_sample: int
     next_start_s: float
     source_fif: str
+    expected_trigger: Optional[int]
+    decision_source: str
+    unresolved_transition: bool
+    transition_resolution_confidence: float
+    order_pattern: str
     detail: str
     window_start_s: Optional[float] = None
     window_end_s: Optional[float] = None
@@ -472,12 +480,12 @@ def discover_reported_csvs(
 def discover_fif_entries(fif_dir: Path, *, subject: int) -> list[FifEntry]:
     """Discover FIF files and decode block spans from filenames."""
     fif_re = re.compile(
-        rf"sub{subject:02d}_block(?P<b1>\d{{2}})(?:_(?P<b2>\d{{2}}))?\.fif$",
+        rf"sub{subject:02d}_block(?P<b1>\d{{2}})(?:_(?P<b2>\d{{2}}))?(?:_meg)?\.fif(?:\.gz)?$",
         re.IGNORECASE,
     )
 
     out: list[FifEntry] = []
-    for path in sorted(fif_dir.glob("*.fif")):
+    for path in sorted(list(fif_dir.glob("*.fif")) + list(fif_dir.glob("*.fif.gz"))):
         match = fif_re.match(path.name)
         if not match:
             continue
@@ -490,7 +498,7 @@ def discover_fif_entries(fif_dir: Path, *, subject: int) -> list[FifEntry]:
     out.sort(key=lambda e: (e.block_start, e.block_end, e.path.name))
     if not out:
         raise FileNotFoundError(
-            f"No FIF files matching sub{subject:02d}_block*.fif found in {fif_dir}."
+            f"No FIF files matching sub{subject:02d}_block*_meg.fif (or legacy .fif) found in {fif_dir}."
         )
     return out
 
@@ -664,60 +672,164 @@ def reconstruct_observed_windows_one_fif(
     return windows, sfreq, first_samp, n_times
 
 
+def _find_expected_match_index(
+    *,
+    expected_sequence: list[int],
+    start_idx: int,
+    candidate_codes: set[int],
+    max_lookahead: int,
+) -> Optional[int]:
+    """Return first expected index in lookahead window matching candidate code."""
+    if start_idx >= len(expected_sequence):
+        return None
+    end_idx = min(len(expected_sequence), start_idx + max_lookahead + 1)
+    for idx in range(start_idx, end_idx):
+        if expected_sequence[idx] in candidate_codes:
+            return idx
+    return None
+
+
 def collapse_transition_windows(
     windows: list[ObservedWindow],
     *,
     transient_max_samples: int,
-) -> tuple[list[ObservedWindow], list[TransitionPulseWarning]]:
-    """Collapse short contiguous transition pulses (0->A->B->0 transients)."""
-    if transient_max_samples < 1 or len(windows) < 2:
-        return windows, []
+    expected_sequence: list[int],
+    expected_start_idx: int = 0,
+    expected_lookahead: int = 6,
+) -> tuple[list[ObservedWindow], list[TransitionPulseWarning], int]:
+    """
+    Collapse contiguous transition pairs with expected-trigger-first symmetry.
 
-    keep = [True] * len(windows)
-    warnings: list[TransitionPulseWarning] = []
-
-    for idx in range(len(windows) - 1):
-        cur = windows[idx]
-        nxt = windows[idx + 1]
-        if cur.width_samples <= transient_max_samples and cur.end_sample == nxt.start_sample:
-            keep[idx] = False
-            warnings.append(
-                TransitionPulseWarning(
-                    warning_idx_1based=len(warnings) + 1,
-                    dropped_trigger=cur.trigger,
-                    dropped_start_sample=cur.start_sample,
-                    dropped_end_sample=cur.end_sample,
-                    dropped_start_s=cur.start_s,
-                    dropped_end_s=cur.end_s,
-                    dropped_width_samples=cur.width_samples,
-                    next_trigger=nxt.trigger,
-                    next_start_sample=nxt.start_sample,
-                    next_start_s=nxt.start_s,
-                    source_fif=cur.source_fif,
-                    detail=(
-                        "Collapsed short contiguous transition pulse "
-                        f"{cur.trigger}->{nxt.trigger} (line-update transient)."
-                    ),
-                )
-            )
+    Resolution policy
+    - Primary: expected-trigger-first using the reported trigger stream.
+    - Fallback: width heuristic when expected identity is unavailable/ambiguous.
+    - Final fallback: deterministic keep-first + unresolved warning.
+    """
+    if len(windows) < 2:
+        return windows, [], expected_start_idx
 
     collapsed: list[ObservedWindow] = []
-    for old, is_keep in zip(windows, keep):
-        if not is_keep:
+    warnings: list[TransitionPulseWarning] = []
+    expected_idx = expected_start_idx
+    i = 0
+
+    while i < len(windows):
+        cur = windows[i]
+        nxt = None
+        if i + 1 < len(windows):
+            candidate = windows[i + 1]
+            if cur.end_sample == candidate.start_sample:
+                nxt = candidate
+
+        if nxt is None:
+            matched_idx = _find_expected_match_index(
+                expected_sequence=expected_sequence,
+                start_idx=expected_idx,
+                candidate_codes={cur.trigger},
+                max_lookahead=expected_lookahead,
+            )
+            if (
+                matched_idx is not None
+                and matched_idx < len(expected_sequence)
+                and expected_sequence[matched_idx] == cur.trigger
+            ):
+                expected_idx = matched_idx + 1
+
+            collapsed.append(
+                ObservedWindow(
+                    idx_1based=len(collapsed) + 1,
+                    trigger=cur.trigger,
+                    start_sample=cur.start_sample,
+                    end_sample=cur.end_sample,
+                    start_s=cur.start_s,
+                    end_s=cur.end_s,
+                    source_fif=cur.source_fif,
+                )
+            )
+            i += 1
             continue
+
+        pair_codes = {cur.trigger, nxt.trigger}
+        matched_idx = _find_expected_match_index(
+            expected_sequence=expected_sequence,
+            start_idx=expected_idx,
+            candidate_codes=pair_codes,
+            max_lookahead=expected_lookahead,
+        )
+        expected_code = None
+        if matched_idx is not None:
+            expected_code = expected_sequence[matched_idx]
+
+        keep = cur
+        drop = nxt
+        decision_source = "deterministic_fallback"
+        unresolved = True
+        confidence = 0.0
+
+        if expected_code is not None and expected_code in pair_codes:
+            if cur.trigger == expected_code:
+                keep, drop = cur, nxt
+            else:
+                keep, drop = nxt, cur
+            decision_source = "expected_trigger"
+            unresolved = False
+            confidence = 1.0
+            expected_idx = matched_idx + 1
+        elif transient_max_samples >= 1:
+            cur_short = cur.width_samples <= transient_max_samples
+            nxt_short = nxt.width_samples <= transient_max_samples
+            if cur_short and not nxt_short:
+                keep, drop = nxt, cur
+                decision_source = "width_fallback"
+                unresolved = False
+                confidence = 0.7
+            elif nxt_short and not cur_short:
+                keep, drop = cur, nxt
+                decision_source = "width_fallback"
+                unresolved = False
+                confidence = 0.7
+
         collapsed.append(
             ObservedWindow(
                 idx_1based=len(collapsed) + 1,
-                trigger=old.trigger,
-                start_sample=old.start_sample,
-                end_sample=old.end_sample,
-                start_s=old.start_s,
-                end_s=old.end_s,
-                source_fif=old.source_fif,
+                trigger=keep.trigger,
+                start_sample=keep.start_sample,
+                end_sample=keep.end_sample,
+                start_s=keep.start_s,
+                end_s=keep.end_s,
+                source_fif=keep.source_fif,
             )
         )
 
-    return collapsed, warnings
+        warnings.append(
+            TransitionPulseWarning(
+                warning_idx_1based=len(warnings) + 1,
+                dropped_trigger=drop.trigger,
+                dropped_start_sample=drop.start_sample,
+                dropped_end_sample=drop.end_sample,
+                dropped_start_s=drop.start_s,
+                dropped_end_s=drop.end_s,
+                dropped_width_samples=drop.width_samples,
+                next_trigger=keep.trigger,
+                next_start_sample=keep.start_sample,
+                next_start_s=keep.start_s,
+                source_fif=keep.source_fif,
+                expected_trigger=expected_code,
+                decision_source=decision_source,
+                unresolved_transition=unresolved,
+                transition_resolution_confidence=confidence,
+                order_pattern=f"{cur.trigger}_then_{nxt.trigger}",
+                detail=(
+                    "Collapsed transition pair "
+                    f"{cur.trigger}->{nxt.trigger}; kept {keep.trigger} and dropped "
+                    f"{drop.trigger} via {decision_source}."
+                ),
+            )
+        )
+
+        i += 2
+
+    return collapsed, warnings, expected_idx
 
 
 def build_concatenated_observed_sequence(
@@ -726,6 +838,8 @@ def build_concatenated_observed_sequence(
     trigger_channel: str,
     min_duration: float,
     transition_max_samples: int,
+    expected_sequence: list[int],
+    expected_lookahead: int,
 ) -> tuple[list[ObservedWindow], list[TransitionPulseWarning], float, list[FifTimelineSegment]]:
     """
     Build one observed sequence by concatenating FIF files in block-name order.
@@ -739,6 +853,7 @@ def build_concatenated_observed_sequence(
     sfreq_ref: Optional[float] = None
     time_offset_s = 0.0
     sample_offset = 0
+    expected_idx = 0
 
     for fif_entry in used_fif_entries:
         local_windows, sfreq, first_samp, n_times = reconstruct_observed_windows_one_fif(
@@ -754,9 +869,12 @@ def build_concatenated_observed_sequence(
                 f"Got {sfreq_ref} and {sfreq}."
             )
 
-        local_windows, local_warnings = collapse_transition_windows(
+        local_windows, local_warnings, expected_idx = collapse_transition_windows(
             local_windows,
             transient_max_samples=transition_max_samples,
+            expected_sequence=expected_sequence,
+            expected_start_idx=expected_idx,
+            expected_lookahead=expected_lookahead,
         )
 
         local_t0_s = first_samp / sfreq
@@ -787,6 +905,11 @@ def build_concatenated_observed_sequence(
                     next_start_sample=sample_offset + (warning.next_start_sample - first_samp),
                     next_start_s=time_offset_s + (warning.next_start_s - local_t0_s),
                     source_fif=warning.source_fif,
+                    expected_trigger=warning.expected_trigger,
+                    decision_source=warning.decision_source,
+                    unresolved_transition=warning.unresolved_transition,
+                    transition_resolution_confidence=warning.transition_resolution_confidence,
+                    order_pattern=warning.order_pattern,
                     detail=warning.detail,
                 )
             )
@@ -1715,7 +1838,7 @@ def plot_transition_warning_windows(
         ax.set_ylabel(trigger_channel)
         ax.set_title(
             f"TRANSITION_WARNING {warning.warning_idx_1based} | "
-            f"dropped={warning.dropped_trigger} next={warning.next_trigger}"
+            f"dropped={warning.dropped_trigger} kept={warning.next_trigger}"
         )
         ax.grid(True, alpha=0.25)
         ax.set_xlim(actual_start, actual_end)
@@ -1759,12 +1882,9 @@ def build_alignment_rows(
     Build full row-wise output with run/block marker labels.
 
     Transition-warning handling
-    - If a PAIR row corresponds to a collapsed short transition pulse and the
-      reported trigger participates in that transition, mark status as
-      MATCH_WARNING.
-    - This covers both orders:
-      0 -> reported -> unexpected -> 0
-      0 -> unexpected -> reported -> 0
+    - Transition collapse is expected-trigger-first and symmetric by order.
+    - If a PAIR row still lands in a warning context where the reported code
+      participates in the transition pair, mark status as MATCH_WARNING.
     """
     stats = {
         "MATCH": 0,
@@ -2140,10 +2260,13 @@ def write_markdown_report(
     else:
         lines.append("")
         lines.append(
-            "| idx | status | dropped | next | dropped_start_s | width_samples | "
+            "| idx | status | dropped | kept | expected | decision_source | "
+            "unresolved | confidence | dropped_start_s | width_samples | "
             "source_fif | detail | plot_path |"
         )
-        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        lines.append(
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+        )
         for w in transition_warnings:
             lines.append(
                 "| "
@@ -2153,6 +2276,10 @@ def write_markdown_report(
                         "WARNING",
                         str(w.dropped_trigger),
                         str(w.next_trigger),
+                        _fmt_optional_int(w.expected_trigger),
+                        w.decision_source,
+                        "yes" if w.unresolved_transition else "no",
+                        f"{w.transition_resolution_confidence:.2f}",
                         f"{w.dropped_start_s:.6f}",
                         str(w.dropped_width_samples),
                         Path(w.source_fif).name,
@@ -2282,6 +2409,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Max width (samples) treated as transition transient (default: 1).",
     )
     parser.add_argument(
+        "--expected-lookahead",
+        type=int,
+        default=6,
+        help=(
+            "Lookahead length in expected trigger stream when resolving "
+            "contiguous transition pairs (default: 6)."
+        ),
+    )
+    parser.add_argument(
         "--include-width-outliers",
         action="store_true",
         help="Include WIDTH_OUTLIER anomalies (disabled by default).",
@@ -2369,6 +2505,8 @@ def main() -> None:
         trigger_channel=args.trigger_channel,
         min_duration=args.min_duration,
         transition_max_samples=args.transition_max_samples,
+        expected_sequence=[row.trigger for row in reported],
+        expected_lookahead=args.expected_lookahead,
     )
 
     if not observed:

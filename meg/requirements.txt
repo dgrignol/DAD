@@ -1,0 +1,28 @@
+# Runtime dependencies for the MEG preprocessing pipeline.
+# Install with:
+#   python -m pip install -r /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/requirements.txt
+
+# YAML configuration loading in pipeline_config.py.
+PyYAML>=6.0,<7.0
+
+# Core numerical and MEG processing stack used by inventory and preprocessing.
+numpy>=1.24,<3.0
+mne>=1.6,<2.0
+
+# Needed at runtime because step 02 runs deep trigger confrontation plotting by default.
+matplotlib>=3.8,<4.0
+
+# Needed for terminal/IPython interactive MNE browsers and Qt matplotlib plots.
+mne-qt-browser>=0.7,<1.0
+pyqt6>=6.7,<7.0
+
+# Needed at runtime because MNE annotation CSV export (raw.annotations.save(...csv))
+# requires pandas dataframe integration.
+pandas>=2.2,<4.0
+
+# Needed at runtime because FLUX ICA step uses method='fastica' (scikit-learn backend).
+scikit-learn>=1.4,<2.0
+
+# Needed at runtime for MEGNet-based automatic ICA labeling in 03_C_ICA_auto.py.
+mne-icalabel>=0.8,<1.0
+onnxruntime>=1.18,<2.0

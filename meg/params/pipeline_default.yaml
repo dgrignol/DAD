@@ -1,0 +1,138 @@
+# pipeline_default.yaml
+#
+# Purpose:
+#   Global defaults for the MEG preprocessing + analysis-prep pipeline.
+#   Subject-specific files (for example, sub-01.yaml) override values here.
+#
+# Usage examples:
+#   1) Run preflight + trigger extraction with a subject override:
+#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/run_pipeline.py \
+#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml
+#
+#   2) Validate configuration only:
+#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/pipeline_config.py \
+#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --validate-only --print-summary
+#
+# Data flow summary:
+#   project paths + dataset selectors -> inventory/load -> trigger extraction ->
+#   preprocessing -> ICA -> epoching -> dRSA export -> optional eye model.
+
+project:
+  root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg" # Canonical implementation root so all relative templates resolve consistently.
+  data_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data" # Local raw-data root after moving subject data under meg/.
+  derivatives_root: "/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives" # Single root for all generated outputs and intermediates; separate from the read-only data tree.
+  docs_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/docs" # Documentation root to keep specs and run logs colocated with code.
+  params_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params" # Parameter-file root for default + subject overrides.
+
+layout:
+  subject_bids_id: "sub-01" # BIDS-like subject label used in derivative paths and reports.
+  session_bids_id: "ses-01" # Single-session convention requested for this dataset.
+  raw_subject_folder_name: "sub01" # Actual on-disk raw folder name under data_root.
+  derivatives_preprocessing_template: "preprocessing/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
+  derivatives_analysis_template: "analysis/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
+  derivatives_reports_template: "reports/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
+
+data_discovery:
+  meg_fif_glob: "SUB01_block*_meg.fif" # Matches MNE-conformant sub01 naming style (single and merged block FIFs).
+  reported_trigger_csv_glob: "debug_actual_triggers*_sub01_block*_run*.csv" # Matches experiment debug trigger exports used for trigger alignment checks.
+  reported_trigger_search_roots: # Search both local-first and original project path for robustness.
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/experiment/output_files/sub01" # Preferred local path if experiment outputs are moved under meg/.
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment/output_files/sub01" # Fallback legacy path currently containing known sub01 trigger CSVs.
+  eye_search_extensions: # Accepted eye-tracker sidecar formats for optional eye-model stage.
+    - ".edf" # Native EyeLink EDF is the primary expected format.
+    - ".asc" # ASCII export fallback used in some labs.
+    - ".tsv" # Tabular pre-export fallback for already-converted gaze data.
+  eye_search_glob_roots:
+    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/sub01" # Search near subject raw data first because eye data may be placed alongside FIF.
+
+trigger_parser:
+  stim_channel: "STI101" # Neuromag standard trigger channel confirmed present in sub01 FIF files.
+  min_duration_sec: 0.0 # Keep all pulses initially; short artifacts are handled explicitly by transition-collapse logic.
+  transition_max_samples: 1 # Collapse 1-sample digital-line transients observed in trigger-check reports.
+  expected_lookahead: 6 # Resolve transition pairs against near-future expected stream without allowing large alignment jumps.
+  collapse_short_transition_pulses: true # Enable robust handling of 0->A->B->0 transition artifacts.
+  mark_transition_match_warning: true # Preserve transparency by labeling collapsed-transition alignments as warnings.
+  include_width_outliers: false # Keep default report focused on alignment mismatches, not width diagnostics.
+  enable_deep_confrontation_report: true # Run subject-level reported-vs-observed deep QA report during step 02 by default.
+  deep_report_output_subdir: "02_triggers_extraction_custum_report_deeper" # Keep deep report artifacts in a stable subfolder under derivatives reports.
+  deep_report_variant: "rescueTraject" # Restrict deep comparator to rescueTraject CSV variant to avoid mixing trigger generator versions.
+  expected_sequence_code_min: 1 # Dynamic trial sequence codes start at 1 in this experiment.
+  expected_sequence_code_max: 20 # Default generator produced 20 sequence identities per condition.
+  required_trigger_codes: # Mandatory fixed codes required by experiment design and checks.
+    - 31 # Condition onset: always_visible.
+    - 41 # Condition onset: occluded_nondeviant.
+    - 51 # Condition onset: occluded_deviant.
+    - 111 # Occlusion start.
+    - 112 # Occlusion complete.
+    - 114 # Occlusion end start.
+    - 115 # Occlusion end complete.
+    - 116 # Catch type-1 disappear.
+    - 117 # Catch type-1 reappear.
+    - 118 # Catch question start.
+    - 201 # Catch question correct.
+    - 202 # Catch question incorrect.
+    - 113 # Catch question timeout.
+    - 150 # Gaze break.
+    - 151 # Replay start.
+    - 152 # ESC termination.
+  write_machine_readable_events: true # Needed for downstream epoching/export scripts and testability.
+  write_human_summary: true # Needed for quick QC and run-log reporting.
+
+preprocessing:
+  # FLUX alignment note:
+  # Keep SSS configurable; default is enabled and can be overridden per subject.
+  enable_maxwell_sss: true # Default enabled per your latest decision, with documented ability to override for representational analyses.
+  maxwell_st_duration_sec: 10.0 # Conservative temporal SSS window commonly used to stabilize compensation without overfragmenting data.
+  maxwell_origin: "auto" # Use sensor-geometry-derived origin to avoid hard-coded head origin assumptions.
+  enable_ssp: false # Keep SSP disabled by default to avoid stacking denoising methods unless explicitly requested.
+  line_freq_hz: 50.0 # Mains frequency for Italy/Europe power grid.
+  highpass_hz: 0.01 # Very low cutoff to preserve slow components; stronger high-pass can be set per analysis need.
+  lowpass_hz: 40.0 # Standard low-pass for ERP-like analyses and stable ICA behavior.
+  notch_freqs_hz:
+    - 50.0 # Primary mains notch.
+    - 100.0 # First harmonic notch.
+  resample_sfreq_hz: null # Keep native sampling by default to avoid premature decimation choices.
+  annotate_artifacts: true # Enable explicit artifact annotation before ICA/epoch rejection.
+
+ica:
+  enabled: true # ICA is part of planned FLUX-aligned preprocessing flow.
+  method: "fastica" # Deterministic and widely used baseline ICA method in MNE pipelines.
+  n_components: 0.99 # Variance-based dimensionality cap to keep near-full-rank decomposition.
+  random_state: 97 # Fixed seed for reproducible ICA decomposition.
+  max_iter: "auto" # Let MNE choose convergence iterations based on data behavior.
+  eog_channel_names:
+    - "EOG001" # Detected as EOG in sub01 FIF channel metadata.
+    - "EOG002" # Detected as EOG in sub01 FIF channel metadata.
+  ecg_channel_names: [] # Kept empty because no ECG channel was found in sub01 FIF files.
+
+epoching:
+  enabled: true # Epoch extraction is required for condition-level analyses and dRSA export.
+  tmin_sec: -0.5 # Requested pre-onset buffer before condition onset trigger.
+  tmax_sec: 2.667 # Matches trial motion duration (2.67 s) from methods document.
+  baseline_sec:
+    - -0.4 # baseline start to reduce risk of previous-trial carryover with short ITIs (ITIs were between 500 and 1000 ms).
+    - -0.1 # End before onset to avoid contamination by onset-locked sensory response.
+  reject_by_annotation: true # Drop/ignore segments marked as artifacts during preprocessing.
+  event_id_map:
+    always_visible: 31 # Condition-onset event used for always-visible epochs.
+    occluded_nondeviant: 41 # Condition-onset event used for occluded nondeviant epochs.
+    occluded_deviant: 51 # Condition-onset event used for occluded deviant epochs.
+
+export:
+  enabled: true # dRSA prep requires explicit export artifacts.
+  output_format: "npz" # Compact, numpy-native format for fast Python analysis loading.
+  include_evoked: true # Save condition averages for quick QC and summary analyses.
+  include_epochs_metadata: true # Preserve trial-level provenance for model-alignment checks.
+
+eye_model:
+  enabled: true # Keep eye-model stage available when eye data exists.
+  skip_if_missing: true # Non-negotiable requirement: pipeline must succeed without EDF.
+  skip_reason_when_missing: "No EDF/eye-tracker input found under configured eye search roots." # Explicit metadata reason when eye stage is skipped.
+
+runtime:
+  stop_on_error: true # Fail fast so broken steps do not silently propagate.
+  save_intermediates: true # Persist each major step to support restart/resume without rerunning raw ingest.
+  overwrite_existing: false # Protect existing derivatives by default; force overwrite only intentionally.
+  log_level: "INFO" # Balanced verbosity for routine runs and debugging context.

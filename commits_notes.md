@@ -1,3 +1,118 @@
+# 10 Jun 2026 15:03
+
+## Add the MEG preprocessing, trigger-QA, and dRSA pipeline
+
+### `meg/code/analysis/A_dRSA.m`
+- Add real-neural dRSA for observed/predicted one-dot models, prediction-error models, channel consistency checks, NaN-channel removal, correlation/PCR execution, and MAT/figure output.
+
+### `meg/code/analysis/A_dRSA_alt.m`
+- Add a configurable single-condition dRSA variant with observed/predicted model selection and whole-brain or lobe-specific MEGIN sensor groups.
+
+### `meg/code/analysis/dRSA_simulations.m`
+- Add model-vs-model and neural-vs-neural simulation analyses across conditions and sensor groups with redirectable output roots.
+
+### `meg/code/preprocessing_basic/02_trigger_extraction_custom.py`
+- Add config-driven FIF trigger reconstruction, expected-trigger-first transition resolution, machine-readable event outputs, QA summaries, and integrated deep reported-vs-observed confrontation reporting.
+- Preserve both global concatenated timing and source-FIF timing fields for downstream epoching and auditability.
+
+### `meg/code/preprocessing_basic/03_A_MaxFilt.py`
+- Add first-look QC, Maxwell bad-channel detection, calibration/cross-talk checks, SSS/Maxwell filtering, PSD figures, HTML reporting, and bad-channel propagation.
+
+### `meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py`
+- Add blink/muscle annotation, subject-01 EOG exception handling, annotation CSV/FIF output, QC figures, reports, and bad-channel preservation.
+
+### `meg/code/preprocessing_basic/03_C_ICA.py`
+- Add the manual ICA branch with FastICA fitting, subject-specific component exclusion, blink-window handling, cleaned FIF/model output, figures, and HTML reporting.
+
+### `meg/code/preprocessing_basic/03_C_ICA_auto.py`
+- Add an automatic MEGNet ICA-label branch with probability-threshold exclusions for eye and heart components, saved models/labels, cleaned FIF output, and reports.
+
+### `meg/code/preprocessing_basic/04_epoching.py`
+- Add trigger-table-to-annotation reconstruction, cross-run concatenation, condition epoching, sequence-identity metadata assignment, integrity validation, saved epochs, and report figures.
+
+### `meg/code/preprocessing_basic/06_export_neural_for_drsa.py`
+- Add condition/identity averaging, canonical-channel alignment, NaN placeholders for bad or absent channels, 120 Hz export, MAT output, and dRSA-preparation QC reporting.
+
+### `meg/code/preprocessing_basic/XX_ERF_manual.py`
+- Add an interactive IPython ERF inspection workflow for condition averages, trial images, topo traces, and topomaps without writing derivatives.
+
+### `meg/code/preprocessing_basic/dataset_inventory.py`
+- Add read-only dataset discovery and FIF-header preflight with optional JSON/Markdown inventories and explicit no-EDF skip reporting.
+
+### `meg/code/preprocessing_basic/drsa_canonical_meg_channels.txt`
+- Add the stable ordered MEG channel axis used to keep dRSA tensor dimensions consistent across subjects and preprocessing outcomes.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+- Add recursive YAML loading/merging, required-section validation, path resolution, provenance snapshots, and guards that reject outputs inside the raw-data tree.
+
+### `meg/code/preprocessing_basic/run_pipeline.py`
+- Add the orchestration entry point for configuration resolution, automatic preflight, run logging, dry runs, and the currently registered trigger-extraction stage.
+
+### `meg/code/sanity_checks/01_dot_side_decoding.py`
+- Add time-resolved left/right dot-side decoding with balanced and unbalanced classifiers, contra/ipsi posterior ERFs, summary data, and MNE report output.
+
+### `meg/docs/MULTISUBJECT_REFACTOR_PROMPTS.md`
+- Record staged implementation prompts and shared constraints for extending the currently subject-01-oriented pipeline to heterogeneous subjects 01-07.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Document implemented infrastructure and scientific stages, FLUX anchors, data flow, outputs, and the editable Mermaid pipeline diagram.
+
+### `meg/docs/RUN_LOG.md`
+- Record configuration/inventory refactoring, derivative-root migration, test baselines, and prior trigger-extraction execution evidence.
+
+### `meg/docs/TOOD_AND_DISCUSS.md`
+- Capture unresolved preprocessing, cleaning, head-shift, decoding, ERF, and eye-tracking discussion items.
+
+### `meg/docs/TRIGGERS_EVENTS.md`
+- Define the trigger/event contract, expected fixed and dynamic codes, transition-pulse policy, event fields, QA requirements, and downstream epoching interface.
+
+### `meg/docs/deviations/DEVIATION_03B_SUB01_SKIP_EOG_BLINK.md`
+- Document the subject-01 deviation that skips unreliable EOG blink annotation in step 03_B and defers blink handling to ICA.
+
+### `meg/docs/deviations/DEVIATION_03C_ICA_DEV_HEAD_T.md`
+- Document the ICA fitting decision around device-to-head transforms, cross-run application, risks, alternatives, and validation evidence.
+
+### `meg/docs/meg_preprocessing_pipeline.mmd`
+- Add the editable Mermaid source for the preprocessing, trigger, ICA, epoching, and dRSA export workflow.
+
+### `meg/docs/render_meg_preprocessing_pipeline.sh`
+- Add a location-independent Mermaid CLI renderer for ignored SVG and PDF pipeline exports.
+
+### `meg/params/pipeline_default.yaml`
+- Add global project/layout paths, FIF/trigger/eye discovery rules, trigger-parser settings, required-code coverage, stage defaults, and runtime policies.
+
+### `meg/params/sub-01.yaml`
+- Add subject-01 path, naming, discovery, and overwrite/save-intermediate overrides.
+
+### `meg/requirements-dev.txt`
+- Add pytest and coverage dependencies on top of the runtime requirements.
+
+### `meg/requirements.txt`
+- Define the YAML, numerical, MNE, plotting, Qt, pandas, scikit-learn, ICA-label, and ONNX runtime dependency ranges.
+
+### `meg/tests/test_no_edf_behavior.py`
+- Test that missing eye files produce an explicit, valid eye-model skip rather than a pipeline failure when configured to skip.
+
+### `meg/tests/test_pipeline_config.py`
+- Test derivative-template rooting, raw-tree write protection, and configuration path behavior.
+
+### `meg/tests/test_trigger_parser.py`
+- Test symmetric expected-trigger-first collapse, width fallback, and unresolved deterministic fallback for contiguous trigger transitions.
+
+### `triggers_check/compare_reported_vs_observed_triggers_subject.py`
+- Extend FIF discovery to `_meg.fif`, legacy `.fif`, and gzipped FIF names.
+- Resolve transition pairs symmetrically against the expected trigger stream, then use width and deterministic fallbacks while reporting decision source, confidence, order, expected code, and unresolved state.
+- Add configurable expected-stream lookahead and expose the richer transition metadata in plots and Markdown reports.
+
+### Validation
+- `python3 -m pytest meg/tests -q`: 6 passed.
+- `python3 -m compileall -q meg/code triggers_check/compare_reported_vs_observed_triggers_subject.py`: passed.
+- `bash -n meg/docs/render_meg_preprocessing_pipeline.sh`: passed.
+- MATLAB `checkcode` parsed all three dRSA scripts; two had zero messages and `dRSA_simulations.m` had one advisory message.
+
+Suggested commit message:
+`Add MEG preprocessing and dRSA pipeline`
+
 # 10 Jun 2026 15:01
 
 ## Add a standalone laptop-safe experiment bundle
