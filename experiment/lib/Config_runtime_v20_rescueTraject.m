@@ -1,8 +1,8 @@
-% Config_runtime_v18_rescueTraject.m
+% Config_runtime_v20_rescueTraject.m
 %
 % Purpose:
 %   Define workspace variables consumed by:
-%     MoveDot1_experiment_occlusion_v18_rescueTraject.m
+%     MoveDot1_experiment_occlusion_v20_rescueTraject.m
 %   so the experiment can be started non-interactively with a reproducible
 %   runtime preset (subject/block/mode/debug/eye-tracker/occluder settings).
 %
@@ -13,28 +13,27 @@
 %     clearvars -except list and uses them as runtime overrides.
 %
 % Usage example (inside experiment/):
-%   run('lib/Config_runtime_v18_rescueTraject.m');
-%   run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');
+%   run('lib/Config_runtime_v20_rescueTraject.m');
+%   run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');
 %
 % Usage example (MATLAB batch from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
-%    run('lib/Config_runtime_v18_rescueTraject.m'); ...
-%    run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');"
+%    run('lib/Config_runtime_v20_rescueTraject.m'); ...
+%    run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');"
 %
 % Notes:
 %   - Set optional fields to [] to use schedule defaults from:
-%     Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.
-%   - This preset does NOT set Conf.MEG directly because the current
-%     experiment script does not expose a workspace override for Conf.MEG.
+%     Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.
+%   - MEG mode is controlled by workspace variable MEG (0/1).
 %
 % Inputs:
 %   None (manual edits to values below).
 %
 % Outputs:
 %   Variables in workspace:
-%     iSub, iBlock, viewingDistanceMm, practice_mode, ...
-%     ITIRangeSec, and all optional override variables supported by v18
+%     iSub, iBlock, viewingDistanceMm, practice_mode, MEG, ...
+%     ITIRangeSec, and all optional override variables supported by v20
 %     rescueTraject.
 
 %% Core session identity and run mode
@@ -44,6 +43,7 @@ iSub = 50; % Accepted: finite integer subject ID. Default when unset in workspac
 iBlock = 1; % Accepted: finite integer block index in [1..numBlocks]. Default when unset: input dialog opens (dialog default value is 1).
 viewingDistanceMm = 1000; % Accepted: finite scalar > 0 (mm). Default when unset: input dialog opens (dialog default value is 1000).
 practice_mode = 0; % Accepted: {0,1}. Default when unset/empty: 0 (full mode). 1 enables practice-by-run trimming.
+MEG = true; % Accepted: [] or logical/{0,1}. Default when unset/[] in runtime script: 0 (disabled). true enables DataPixx/MEG trigger path.
 
 %% Execution mode controls
 % Data flow: dry-run controls bypass PTB drawing and validate schedule logic.
@@ -62,9 +62,38 @@ debugShowFullPathOverlay = false; % Accepted: logical scalar. Default when unset
 run1TransitionCountdownEnabled = []; % Accepted: [] or logical. Default when []/unset: scheduleCfg.run1TransitionCountdownEnabled (current default: true).
 
 %% Post-trial ITI jitter controls
-% Data flow: ITIRangeSec override -> v18 runtime ITI precompute at run start
+% Data flow: ITIRangeSec override -> v20 runtime ITI precompute at run start
 % -> trial-specific ITI hold (replay-safe via source-trial mapping).
-ITIRangeSec = [0.500, 1.000]; % Accepted: [] or finite 1x2 [min max] sec with min<=max and both >=0. Default when unset/[] in runtime script: [0.500, 1.000].
+ITIRangeSec = [1.000, 1.500]; % Accepted: [] or finite 1x2 [min max] sec with min<=max and both >=0. Default when unset/[] in runtime script: [0.500, 1.000].
+
+%% ITI visual separation style
+% Data flow: runtime ITI visual-mode overrides -> post-trial ITI renderer.
+% Supported:
+%   - 'screen_gray': full screen AND arena rectangle turn gray during ITI
+%     only during the configured ITI visual-separation window.
+%   - 'fixation_gray': only fixation turns gray during the configured
+%     ITI visual-separation window (background stays black).
+%   - 'fixation_short': fixation-only cue during ITI with start delay and
+%     fixed cue duration (no tail guard and no full-screen color change).
+%   - 'off': no ITI visual-separation cue.
+itiVisualMode = 'fixation_short'; % Accepted: [] or {'screen_gray','fixation_gray','fixation_short','off'}. Default when unset/[] in runtime script: 'screen_gray'.
+itiGreyColor = [90, 90, 90]; % Accepted: [] or finite RGB triplet in [0,255]. Default when unset/[]: [90 90 90]. Also used as fixation cue color in 'fixation_short'.
+itiVisualSeparationDur = [0.300, 0.700]; % Accepted: [] or finite 1x2 [startSec endSec] with 0<=start<=end. Default when unset/[]: [0.300, 0.700].
+itiFixationShortDelaySec = 0.100; % Accepted: [] or finite scalar >= 0 (sec). Used only when itiVisualMode='fixation_short'. Default when unset/[]: 0.100.
+itiFixationShortDurationSec = 0.300; % Accepted: [] or finite scalar >= 0 (sec). Used only when itiVisualMode='fixation_short'. Default when unset/[]: 0.300.
+
+%% Catch-question layout controls
+% Data flow: catch-question layout fractions -> question/YES/NO draw positions.
+catchQuestionTopYFrac = 0.42; % Accepted: [] or finite scalar in (0,1). Vertical fraction for question text.
+catchQuestionBottomYFrac = 0.58; % Accepted: [] or finite scalar in (0,1). Vertical fraction for YES/NO labels.
+catchBottomLeftXFrac = 0.38; % Accepted: [] or finite scalar in (0,1). Horizontal fraction for NO label.
+catchBottomRightXFrac = 0.62; % Accepted: [] or finite scalar in (0,1). Horizontal fraction for YES label.
+
+%% Mini blink-break controls
+% Data flow: block trial counter -> optional timed blink-break message.
+miniBlinkBreakEnabled = true; % Accepted: [] or logical. true enables automatic blink-break screens.
+miniBlinkBreakEveryNTrials = 10; % Accepted: [] or integer >= 1. Candidate break interval in executed trials.
+miniBlinkBreakDurationSec = 5.0; % Accepted: [] or finite scalar >= 0. Countdown duration in seconds.
 
 %% Path-band occluder geometry controls
 % Data flow: these values tune straight-terminal entrance/exit behavior.
@@ -118,7 +147,7 @@ itiRangeForPrint = ITIRangeSec;
 if isempty(itiRangeForPrint)
     itiRangeForPrint = [0.500, 1.000];
 end
-fprintf(['Loaded runtime preset for MoveDot1 v18 rescueTraject: ' ...
+fprintf(['Loaded runtime preset for MoveDot1 v20 rescueTraject: ' ...
     'SUB=%02d startBlock=%02d practice=%d dryRun=%d debugRun=%s ITI=[%.3f %.3f] entranceStyle=%s\n'], ...
     iSub, iBlock, practice_mode, double(dryRunValidateScheduleOnly), ...
     mat2str(debug_runNumber), itiRangeForPrint(1), itiRangeForPrint(2), char(pathBandEntranceStyle));

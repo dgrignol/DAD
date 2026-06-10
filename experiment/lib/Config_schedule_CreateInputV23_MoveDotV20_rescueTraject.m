@@ -1,25 +1,25 @@
-classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
+classdef Config_schedule_CreateInputV23_MoveDotV20_rescueTraject
     properties(Constant)
 
-        % CONFIG_SCHEDULE_CREATEINPUTV21_MOVEDOTV18_RESCUETRAJECT
+        % CONFIG_SCHEDULE_CREATEINPUTV23_MOVEDOTV20_RESCUETRAJECT
         %
         % Purpose:
         %   Centralize block/run schedule controls and catch-trial controls
         %   for:
-        %     - experiment/CreateInputFiles_v21_rescueTraject.m
-        %     - experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
+        %     - experiment/CreateInputFiles_v23_rescueTraject.m
+        %     - experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
         %
         % Usage example (interactive):
         %   In MATLAB, open this file and set:
-        %       Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.numBlocks
+        %       Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.numBlocks
         %   then run:
-        %       CreateInputFiles_v21_rescueTraject
+        %       CreateInputFiles_v23_rescueTraject
         %
         % Usage example (non-interactive):
         %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
         %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
         %    iSub=66; randomSeed=6601; ...
-        %    run('CreateInputFiles_v21_rescueTraject.m');"
+        %    run('CreateInputFiles_v23_rescueTraject.m');"
         %
         % Scheduling model:
         %   - Exactly 3 runs per block.
@@ -46,7 +46,7 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         runsPerBlock = 3; % DO NOT CHANGE THIS
 
         % Fraction of each occluded condition sent to run 2.
-        % Example: 0.5 splits 20 trials as 10 in run 2, 10 in run 3.
+        % Example: 0.5 splits 40 trials as 20 in run 2, 20 in run 3.
         run2FractionPerOccluded = 0.5;
 
         % Enforce exact equal source condition counts before catch insertion.
@@ -58,15 +58,15 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         enforceEqualBaseRunLengths = true;
 
         % Catch rates per catch type.
-        % Example with 20 base trials per condition and 0.10:
-        %   run1 type-1 catches = round(20 * 0.10) = 2
-        %   runs2+3 type-2 catches total = round((20+20) * 0.10) = 4
+        % Example with 40 base trials per condition and 0.15:
+        %   run1 type-1 catches = round(40 * 0.15) = 6
+        %   runs2+3 type-2 catches total = round((40+40) * 0.15) = 12
         % Catch fraction for run-1 (always_visible) base trials.
-        % Example: 0.10 with 20 base trials -> 2 type-1 catches.
-        catchRateType1Run1 = 0.10;
+        % Example: 0.15 with 40 base trials -> 6 type-1 catches.
+        catchRateType1Run1 = 0.15;
         % Catch fraction across pooled runs 2+3 occluded base trials.
-        % Example: 0.10 with 40 pooled base trials -> 4 type-2 catches total.
-        catchRateType2Runs23 = 0.10;
+        % Example: 0.15 with 80 pooled base trials -> 12 type-2 catches total.
+        catchRateType2Runs23 = 0.15;
 
         % Catch type 1 timing controls.
         % Allowed disappearance onset range for type-1 catches.
@@ -134,20 +134,18 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         run1TransitionCountdownEnabled = true;
 
         % End-of-block message (non-final blocks).
-        % Runtime fills the two %d placeholders with:
-        %   1) ended block number
-        %   2) remaining block count
+        % Runtime fills the %d placeholder with:
+        %   1) number of blocks completed so far in the current session.
         % Enable message shown between non-final blocks.
         % Example: true shows "block ended / remaining blocks" prompt.
         endOfBlockMessageEnabled = true;
-        % End-of-block template with placeholders:
-        %   first %d = completed block index, second %d = remaining blocks.
+        % End-of-block template with placeholder:
+        %   %d = number of completed blocks so far.
         % IMPORTANT:
         %   Keep this as a raw format template (do not wrap in sprintf here).
-        %   Runtime injects block values with sprintf at display time.
-        endOfBlockMessageTextTemplate = ['Block %d ended.\n' ...
-            'Remaining blocks: %d.\n\n' ...
-            'Press Red or Blue to start the next block.'];
+        %   Runtime injects values with sprintf at display time.
+        endOfBlockMessageTextTemplate = ['Completed blocks so far: %d.\n\n' ...
+            'Press Red or Blue to continue.'];
         % End-of-block message duration. <=0 waits for response.
         % Example: 0.0 -> participant must press button to continue.
         endOfBlockMessageDurationSec = 0.0;
@@ -169,10 +167,11 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         % End-of-experiment message shown after the last block.
         % Enable final message after last block.
         % Example: true shows closing text before quit.
-        finalMessageEnabled = true;
+        % #Final message was removed (Runtime has the function ut does not call it anymore in flow)
+        % finalMessageEnabled = true;
         % Closing text at experiment end.
         % Example: replace with lab-standard thank-you wording.
-        finalMessageText = 'you completed the experiment bye thanks';
+        finalMessageText = 'You completed the experiment! /nThank you for you participation';
         % Final message duration in seconds.
         % Example: 5.0 -> auto-close after 5 s.
         finalMessageDurationSec = 5.0;
@@ -191,7 +190,7 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         % Example: 1.0 prevents accidental carry-over presses.
         messageResponseLockoutSec = 1.0;
 
-        % Run-color cue switch for experiment v18.
+        % Run-color cue switch for experiment v20.
         % If true, run 1 and runs 2/3 use different dot colors with
         % odd/even subject counterbalancing in runtime.
         % Enable run-family color cue metadata used by runtime.
@@ -273,7 +272,7 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         % Example: 1e-6 ignores tiny numerical noise around zero.
         flipMissedEpsilonSec = 1e-6;
 
-        % Eye-tracker controls for MoveDot1_experiment_occlusion_v18_rescueTraject.
+        % Eye-tracker controls for MoveDot1_experiment_occlusion_v20_rescueTraject.
         % Master switch for eye-tracker support.
         % Example: true enables EyeLink setup and trial recording.
         eyeTrackerEnabled = false;
@@ -318,18 +317,22 @@ classdef Config_schedule_CreateInputV21_MoveDotV18_rescueTraject
         eyeTrackerReceiveFileAfterBlock = true;
         % If true and eye tracking is enabled, allow between-block calibration.
         eyeTrackerAllowBetweenBlockCalibration = true;
+        % Seconds to wait for keyboard key-release after exiting EyeLink
+        % setup/calibration (usually via ESC), to prevent false runtime ESC aborts.
+        % Example: 0.35 gives a short, robust debounce window.
+        eyeTrackerPostCalibrationKeyReleaseSec = 0.35;
         % Path to fixation bitmap used for EyeLink host image transfer.
         eyeTrackerFixBmpPath = './fixation.bmp';
         % Dedicated trigger code for termination by ESC.
         % Keep this outside sequence range and outside existing fixed triggers.
         triggerEscTermination = 152;
 
-        % Input/output naming for additive v21 rescueTraject schedule artifacts.
+        % Input/output naming for additive v23 rescueTraject schedule artifacts.
         % Input stimulus filename pattern.
-        % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject.mat
-        inputFilePattern = 'MovDot_Sub%02d_V28_rescueTraject.mat';
+        % Example: subject 66 -> MovDot_Sub66_V30_rescueTraject.mat
+        inputFilePattern = 'MovDot_Sub%02d_V30_rescueTraject.mat';
         % Output schedule filename pattern.
-        % Example: subject 66 -> Sub66_TrialStruct_v21_rescueTraject.mat
-        outputFilePattern = 'Sub%02d_TrialStruct_v21_rescueTraject.mat';
+        % Example: subject 66 -> Sub66_TrialStruct_v23_rescueTraject.mat
+        outputFilePattern = 'Sub%02d_TrialStruct_v23_rescueTraject.mat';
     end
 end

@@ -1,4 +1,4 @@
-% CreateInputFiles_v21_rescueTraject.m
+% CreateInputFiles_v23_rescueTraject.m
 %
 % Purpose:
 %   Build an additive, block-aware TrialStruct artifact for the one-dot
@@ -12,7 +12,7 @@
 %   - Run 3: remaining half of occluded_nondeviant + remaining half of
 %            occluded_deviant (shuffled together)
 %
-% Catch schedule model (v21):
+% Catch schedule model (v23):
 %   - Catch type 1 (always_visible disappear/reappear) is inserted in run 1.
 %   - Catch type 2 (normal occlusion trial + end question) is inserted
 %     across runs 2 and 3.
@@ -20,41 +20,43 @@
 %       nCatchType1 = round(catchRateType1Run1 * nRun1BaseTrials)
 %       nCatchType2 = round(catchRateType2Runs23 * (nRun2BaseTrials + nRun3BaseTrials))
 %
-% Why this v21 file exists:
+% Why this v23 file exists:
 %   - Keep existing v13 scheduling scripts untouched.
 %   - Add catch planning upstream (input creation layer) so runtime can
 %     consume deterministic per-slot catch metadata.
 %
 % Usage example (interactive):
 %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment');
-%   CreateInputFiles_v21_rescueTraject
+%   CreateInputFiles_v23_rescueTraject
 %
 % Usage example (non-interactive):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
 %    iSub=66; randomSeed=6601; numBlocks=1; ...
-%    run('CreateInputFiles_v21_rescueTraject.m');"
+%    run('CreateInputFiles_v23_rescueTraject.m');"
 %
 % Inputs:
-%   - input_files/MovDot_SubXX_V28_rescueTraject.mat with:
+%   - input_files/MovDot_SubXX_V30_rescueTraject.mat with:
 %       * xySeqs
 %       * Cfg
-%   - Config_schedule_CreateInputV21_MoveDotV18_rescueTraject constants:
+%   - Config_schedule_CreateInputV23_MoveDotV20_rescueTraject constants:
 %       * schedule controls (numBlocks, runsPerBlock, run2 split)
 %       * catch controls (rates, disappear range, gap, prompt settings)
 %       * message-flow controls consumed by
-%         MoveDot1_experiment_occlusion_v18_rescueTraject.m
+%         MoveDot1_experiment_occlusion_v20_rescueTraject.m
 %
 % Workspace overrides (optional):
 %   - iSub
+%   - targetSubjectID (alias for iSub)
 %   - randomSeed
 %   - numBlocks
 %   - overwriteExisting
+%   - allowInteractivePrompts (logical, default true)
 %
 % Outputs:
-%   - input_files/SubXX_TrialStruct_v21_rescueTraject.mat with:
+%   - input_files/SubXX_TrialStruct_v23_rescueTraject.mat with:
 %       * TrialStruct  (nRuns x nTrialsFlattened; padded slots allowed)
-%       * Catch        (legacy compatibility struct + v21 catch counts)
+%       * Catch        (legacy compatibility struct + v23 catch counts)
 %       * TrialOrder   (numBlocks x maxRunLength x nRuns; NaN padded)
 %       * CatchPlan    (per-slot catch metadata aligned to TrialOrder dims)
 %       * BlockOrder   (1 x numBlocks)
@@ -68,23 +70,60 @@
 
 %% Setup and input collection
 % Data flow: dialog/workspace overrides + config -> file names and controls.
-clearvars -except iSub randomSeed numBlocks overwriteExisting;
+clearvars -except iSub targetSubjectID randomSeed numBlocks overwriteExisting allowInteractivePrompts;
 clc;
 addpath('lib/');
 
-scheduleCfg = Config_schedule_CreateInputV21_MoveDotV18_rescueTraject;
+scheduleCfg = Config_schedule_CreateInputV23_MoveDotV20_rescueTraject;
 if scheduleCfg.runsPerBlock ~= 3
-    error('Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.runsPerBlock must be 3 for this script.');
+    error('Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.runsPerBlock must be 3 for this script.');
 end
 if abs(scheduleCfg.run2FractionPerOccluded - 0.5) > eps
-    error('Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.run2FractionPerOccluded must be 0.5.');
+    error('Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.run2FractionPerOccluded must be 0.5.');
 end
 
-if ~(exist('iSub', 'var') && exist('randomSeed', 'var'))
+if ~exist('allowInteractivePrompts', 'var') || isempty(allowInteractivePrompts)
+    allowInteractivePrompts = true;
+end
+allowInteractivePrompts = logical(allowInteractivePrompts);
+
+% Allow launcher scripts to pass targetSubjectID instead of iSub.
+if (~exist('iSub', 'var') || isempty(iSub)) && ...
+        exist('targetSubjectID', 'var') && ~isempty(targetSubjectID)
+    iSub = targetSubjectID;
+end
+
+missingISub = ~exist('iSub', 'var') || isempty(iSub);
+missingRandomSeed = ~exist('randomSeed', 'var') || isempty(randomSeed);
+
+% Deterministic fallback seed when subject is known and seed is not provided.
+if ~missingISub && missingRandomSeed
+    randomSeed = double(iSub) * 100 + 1;
+    missingRandomSeed = false;
+end
+
+if missingISub || missingRandomSeed
+    if ~allowInteractivePrompts
+        error(['Missing required setup values for non-interactive run.\n' ...
+            'Set iSub and randomSeed (or set targetSubjectID as alias for iSub)\n' ...
+            'before running CreateInputFiles_v23_rescueTraject.m, or set\n' ...
+            'allowInteractivePrompts=true to enable dialogs.']);
+    end
+
     prompt = {'Subject Number:', 'Random seed:'};
-    dlgtitle = 'CreateInputFiles v21 (three runs per block + catches)';
+    dlgtitle = 'CreateInputFiles v23 (three runs per block + catches)';
     dims = [1 60];
-    definput = {'66', '6601'};
+    defaultSub = '66';
+    if exist('iSub', 'var') && ~isempty(iSub) && isfinite(double(iSub))
+        defaultSub = sprintf('%d', round(double(iSub)));
+    end
+    defaultSeed = '6601';
+    if exist('randomSeed', 'var') && ~isempty(randomSeed) && isfinite(double(randomSeed))
+        defaultSeed = sprintf('%d', round(double(randomSeed)));
+    elseif exist('iSub', 'var') && ~isempty(iSub) && isfinite(double(iSub))
+        defaultSeed = sprintf('%d', round(double(iSub) * 100 + 1));
+    end
+    definput = {defaultSub, defaultSeed};
     answer = inputdlg(prompt, dlgtitle, dims, definput);
     if isempty(answer)
         disp('Canceled by user.');
@@ -184,7 +223,7 @@ nRuns = scheduleCfg.runsPerBlock;
 
 if baseRunLength ~= 2 * nOccHalf
     error(['Base run length mismatch: run1=%d but run2/run3 base=%d. ' ...
-        'Use matched condition counts for v21.'], baseRunLength, 2 * nOccHalf);
+        'Use matched condition counts for v23.'], baseRunLength, 2 * nOccHalf);
 end
 
 %% Build sequence->deviant index map for type-1 plausible-path catches
@@ -408,7 +447,7 @@ for iRun = 1:nRuns
 end
 
 %% Build compatibility Catch struct
-% Data flow: legacy fields + v21 counters -> downstream-compatible container.
+% Data flow: legacy fields + v23 counters -> downstream-compatible container.
 Catch = struct();
 Catch.OcclAngleDisplacement = 0;
 Catch.PlacingNewPos = 0;
@@ -440,21 +479,22 @@ Catch.BouncingStart = 0;
 Catch.nCatchPerRun = 0;
 Catch.nCatchTotal = 0;
 
-% Explicit v21 catch counters (mirrored to older fields for legacy readers).
-Catch.V21 = struct();
-Catch.V21.nCatchType1Total = catchCountType1Total;
-Catch.V21.nCatchType2Total = catchCountType2Total;
-Catch.V21.nCatchTotal = catchCountType1Total + catchCountType2Total;
-Catch.V21.catchRateType1Run1 = double(scheduleCfg.catchRateType1Run1);
-Catch.V21.catchRateType2Runs23 = double(scheduleCfg.catchRateType2Runs23);
-Catch.V19 = Catch.V21;
-Catch.V16 = Catch.V21;
-Catch.V14 = Catch.V21;
+% Explicit v23 catch counters (mirrored to older fields for legacy readers).
+Catch.V23 = struct();
+Catch.V23.nCatchType1Total = catchCountType1Total;
+Catch.V23.nCatchType2Total = catchCountType2Total;
+Catch.V23.nCatchTotal = catchCountType1Total + catchCountType2Total;
+Catch.V23.catchRateType1Run1 = double(scheduleCfg.catchRateType1Run1);
+Catch.V23.catchRateType2Runs23 = double(scheduleCfg.catchRateType2Runs23);
+Catch.V21 = Catch.V23;
+Catch.V19 = Catch.V23;
+Catch.V16 = Catch.V23;
+Catch.V14 = Catch.V23;
 
 %% Build explicit schedule metadata
 % Data flow: resolved counts + controls -> Schedule struct for runtime and audit.
 Schedule = struct();
-Schedule.version = 'v21_three_runs_per_block_with_catches_pathband_rescue_traject';
+Schedule.version = 'v23_three_runs_per_block_with_catches_pathband_rescue_traject';
 Schedule.numBlocks = double(numBlocks);
 Schedule.runsPerBlock = double(nRuns);
 Schedule.baseRunLength = double(baseRunLength);
@@ -491,7 +531,7 @@ Schedule.design = struct( ...
 % Data flow: generated structs + metadata -> MAT artifact.
 save(outputFile, 'TrialStruct', 'Catch', 'TrialOrder', 'CatchPlan', 'BlockOrder', 'Schedule');
 
-fprintf('Saved v21 three-runs-per-block catch trial struct: %s\n', outputFile);
+fprintf('Saved v23 three-runs-per-block catch trial struct: %s\n', outputFile);
 fprintf(['Subject %02d | blocks=%d | runs/block=%d | base run=%d | max run=%d | ' ...
     'type1 catches=%d | type2 catches=%d\n'], ...
     iSub, numBlocks, nRuns, baseRunLength, maxRunLength, catchCountType1Total, catchCountType2Total);

@@ -1,6 +1,6 @@
-%% Stimuli Generation V28 rescueTraject (config-driven one-dot occlusion, no source subject files)
-% Script: stimuli_generation_V28_rescueTraject.m
-% Author: Dami (V28 rescueTraject refresh by Codex)
+%% Stimuli Generation V30 rescueTraject (config-driven one-dot occlusion, no source subject files)
+% Script: stimuli_generation_V30_rescueTraject.m
+% Author: Dami (V30 rescueTraject refresh by Codex)
 %
 % Purpose:
 %   Generate a complete one-dot occlusion dataset directly from config
@@ -17,20 +17,20 @@
 %     1) always_visible
 %     2) occluded_nondeviant
 %     3) occluded_deviant
-%   plus occluded_deviant_predicted in MovDot_SubXX_V28_rescueTraject_predicted.mat.
+%   plus occluded_deviant_predicted in MovDot_SubXX_V30_rescueTraject_predicted.mat.
 %
 % Optional central-fixation collision handling:
-%   - configured through Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode.
+%   - configured through Config_stimuli_generation_V30_rescueTraject.fixationCollisionMode.
 %   - modes:
 %       * 'off'   : no special handling.
 %       * 'retry' : reject colliding candidates and resample.
 %       * 'move'  : minimally translate colliding paired trajectories out of
 %                   the fixation exclusion zone when feasible, otherwise retry.
 %   - exclusion radius is controlled by
-%     Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg.
+%     Config_stimuli_generation_V30_rescueTraject.fixationExclusionRadiusDeg.
 %
 % Fixed occlusion timeline:
-%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V28_rescueTraject)
+%   - deviance frame fixed at 130 (default, configurable via Config_stimuli_generation_V30_rescueTraject)
 %   - first fully occluded frame fixed at 130
 %   - fully occluded through frame 190 (inclusive)
 %   - nominal reappearance search starts at frame 191
@@ -47,58 +47,60 @@
 %         (for deviant trials this switches to deviant branch at deviance)
 %       * remains active to trial end so reappearance is geometric
 %   - width:
-%       * controlled by Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg
+%       * controlled by Config_stimuli_generation_V30_rescueTraject.pathBandWidthDeg
 %       * constrained to be strictly larger than dot diameter
 %   - terminal style:
-%       * controlled by Config_stimuli_generation_V28_rescueTraject.pathBandTerminalStyle
+%       * controlled by Config_stimuli_generation_V30_rescueTraject.pathBandTerminalStyle
 %       * 'round' keeps rounded terminal caps; 'straight' uses wall-like
 %         straight terminals with configurable start backshift
 %
 % Trigger/event metadata compatibility:
 %   The exported trial fields are aligned with:
-%     - experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
-%     - experiment/trigger_codes_occlusion_v8_blockResume.md
+%     - experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%     - experiment/trigger_codes_occlusion_v10_rescueTraject.md
 %
 % Usage example (interactive from experiment/):
 %   addpath('lib');
-%   stimuli_generation_V28_rescueTraject;
+%   stimuli_generation_V30_rescueTraject;
 %
 % Usage example (set fixed-frame overrides before running):
 %   addpath('lib');
 %   fixedDevianceFrame = 130;
 %   fixedOcclusionEndFrame = 190;
 %   overwriteExisting = true;
-%   stimuli_generation_V28_rescueTraject;
+%   stimuli_generation_V30_rescueTraject;
 %
 % Usage example (force round terminal metadata for comparison):
 %   addpath('lib');
 %   pathBandTerminalStyle = 'round';
 %   pathBandStraightBackshiftDotRadiusScale = 0.0;
-%   stimuli_generation_V28_rescueTraject;
+%   stimuli_generation_V30_rescueTraject;
 %
 % Usage example (enable fixation-cross avoidance in config and run):
 %   addpath('lib');
-%   % In Config_stimuli_generation_V28_rescueTraject:
+%   % In Config_stimuli_generation_V30_rescueTraject:
 %   %   fixationCollisionMode = 'move'; % or 'retry' / 'off'
-%   stimuli_generation_V28_rescueTraject;
+%   stimuli_generation_V30_rescueTraject;
 %
 % Usage example (save paths plot without showing a figure window):
 %   addpath('lib');
 %   showPathPlots = false; % default behavior (headless plot save)
-%   stimuli_generation_V28_rescueTraject;
+%   stimuli_generation_V30_rescueTraject;
 %
 % Inputs:
-%   - Config_stimuli_generation_V28_rescueTraject class on MATLAB path.
+%   - Config_stimuli_generation_V30_rescueTraject class on MATLAB path.
 %   - targetSubjectID optional workspace override; otherwise prompted.
+%   - iSub optional alias for targetSubjectID.
+%   - allowInteractivePrompts optional logical (default true).
 %
 % Outputs:
-%   - input_files/MovDot_SubXX_V28_rescueTraject.mat
+%   - input_files/MovDot_SubXX_V30_rescueTraject.mat
 %       with xySeqs containing always_visible / occluded_nondeviant /
 %       occluded_deviant and full occlusion metadata fields.
-%   - input_files/MovDot_SubXX_V28_rescueTraject_predicted.mat
+%   - input_files/MovDot_SubXX_V30_rescueTraject_predicted.mat
 %       with xySeqsPredicted containing occluded_deviant_predicted trials
 %       and matching metadata.
-%   - input_files/MovDot_SubXX_V28_rescueTraject_paths.png
+%   - input_files/MovDot_SubXX_V30_rescueTraject_paths.png
 %       with one plot_paths panel per observed condition
 %       (always_visible / occluded_nondeviant / occluded_deviant).
 %
@@ -106,9 +108,11 @@
 %   - One-dot only: xy is frames x 2 ([x y]) in visual degrees.
 %   - Direction variance contains at least one nondeviant value (0) and one
 %     deviant value (>0); the first deviant value is used for generation.
+%   - Deviant candidates are accepted only if they contain at least one
+%     effective change at/after onset (nonzero turn and/or curvature change).
 %   - Trial pairing is sequence-index based and one-to-one across conditions.
 %   - Output directories are relative to experiment/ unless overridden by
-%     Config_stimuli_generation_V28_rescueTraject.
+%     Config_stimuli_generation_V30_rescueTraject.
 
 addpath('lib/');
 scriptDir = fileparts(mfilename('fullpath'));
@@ -119,7 +123,7 @@ if exist(plotHelperDir, 'dir')
 end
 
 %% Setup and runtime parameter defaults
-% Data flow: caller overrides + Config_stimuli_generation_V28_rescueTraject constants -> validated controls.
+% Data flow: caller overrides + Config_stimuli_generation_V30_rescueTraject constants -> validated controls.
 %
 % Rescue controls (shared-placement preserving):
 %   - enableTurnMagnitudeRescue:
@@ -128,25 +132,25 @@ end
 %       rejecting the attempt.
 %   - turnRescueScaleGrid:
 %       turn scales in [0,1], tried in order. 1 means no change.
-clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale enableTurnMagnitudeRescue turnRescueScaleGrid showPathPlots;
+clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID iSub allowInteractivePrompts pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale enableTurnMagnitudeRescue turnRescueScaleGrid showPathPlots;
 clc;
 
 if ~(exist('fixedDevianceFrame', 'var') && ~isempty(fixedDevianceFrame))
-    fixedDevianceFrame = Config_stimuli_generation_V28_rescueTraject.fixedDevianceFrame;
+    fixedDevianceFrame = Config_stimuli_generation_V30_rescueTraject.fixedDevianceFrame;
 end
 if ~(exist('fixedOcclusionEndFrame', 'var') && ~isempty(fixedOcclusionEndFrame))
-    fixedOcclusionEndFrame = Config_stimuli_generation_V28_rescueTraject.fixedOcclusionEndFrame;
+    fixedOcclusionEndFrame = Config_stimuli_generation_V30_rescueTraject.fixedOcclusionEndFrame;
 end
 if ~(exist('overwriteExisting', 'var') && ~isempty(overwriteExisting))
     overwriteExisting = true;
 end
 if ~(exist('pathBandTerminalStyle', 'var') && ~isempty(pathBandTerminalStyle))
-    pathBandTerminalStyle = Config_stimuli_generation_V28_rescueTraject.pathBandTerminalStyle;
+    pathBandTerminalStyle = Config_stimuli_generation_V30_rescueTraject.pathBandTerminalStyle;
 end
 if ~(exist('pathBandStraightBackshiftDotRadiusScale', 'var') && ...
         ~isempty(pathBandStraightBackshiftDotRadiusScale))
     pathBandStraightBackshiftDotRadiusScale = ...
-        Config_stimuli_generation_V28_rescueTraject.pathBandStraightBackshiftDotRadiusScale;
+        Config_stimuli_generation_V30_rescueTraject.pathBandStraightBackshiftDotRadiusScale;
 end
 if ~(exist('enableTurnMagnitudeRescue', 'var') && ~isempty(enableTurnMagnitudeRescue))
     enableTurnMagnitudeRescue = true;
@@ -156,6 +160,9 @@ if ~(exist('turnRescueScaleGrid', 'var') && ~isempty(turnRescueScaleGrid))
 end
 if ~(exist('showPathPlots', 'var') && ~isempty(showPathPlots))
     showPathPlots = false;
+end
+if ~(exist('allowInteractivePrompts', 'var') && ~isempty(allowInteractivePrompts))
+    allowInteractivePrompts = true;
 end
 
 if ~isscalar(fixedDevianceFrame) || ~isscalar(fixedOcclusionEndFrame) || ...
@@ -169,6 +176,7 @@ pathBandTerminalStyle = lower(strtrim(char(pathBandTerminalStyle)));
 pathBandStraightBackshiftDotRadiusScale = double(pathBandStraightBackshiftDotRadiusScale);
 enableTurnMagnitudeRescue = logical(enableTurnMagnitudeRescue);
 turnRescueScaleGrid = double(turnRescueScaleGrid(:)');
+allowInteractivePrompts = logical(allowInteractivePrompts);
 if ~ismember(pathBandTerminalStyle, {'round', 'straight'})
     error('pathBandTerminalStyle must be ''round'' or ''straight''.');
 end
@@ -194,9 +202,19 @@ end
 
 %% Resolve target subject ID (workspace override or interactive prompt)
 % Data flow: optional caller-provided subject ID -> fallback dialog -> validated ID.
+if ~(exist('targetSubjectID', 'var') && ~isempty(targetSubjectID)) && ...
+        exist('iSub', 'var') && ~isempty(iSub)
+    targetSubjectID = iSub;
+end
+
 if ~(exist('targetSubjectID', 'var') && ~isempty(targetSubjectID))
+    if ~allowInteractivePrompts
+        error(['targetSubjectID is required for non-interactive runs.\n' ...
+            'Set targetSubjectID (or iSub as alias) before running,\n' ...
+            'or set allowInteractivePrompts=true to enable dialogs.']);
+    end
     prompt = {'Target subject ID (new config-driven occlusion dataset):'};
-    dlgTitle = 'V28 rescueTraject target subject';
+    dlgTitle = 'V30 rescueTraject target subject';
     dims = [1 70];
     definput = {''}; % no default target by design.
     userInput = inputdlg(prompt, dlgTitle, dims, definput);
@@ -213,16 +231,16 @@ end
 targetSubjectID = round(targetSubjectID);
 
 %% Resolve output paths and overwrite guard
-% Data flow: targetSubjectID + Config_stimuli_generation_V28_rescueTraject directories -> output files.
-inputDir = Config_stimuli_generation_V28_rescueTraject.inputDirectory;
+% Data flow: targetSubjectID + Config_stimuli_generation_V30_rescueTraject directories -> output files.
+inputDir = Config_stimuli_generation_V30_rescueTraject.inputDirectory;
 if ~exist(inputDir, 'dir')
     mkdir(inputDir);
 end
 
 targetObservedFile = fullfile(inputDir, sprintf( ...
-    Config_stimuli_generation_V28_rescueTraject.observedFilePattern, targetSubjectID));
+    Config_stimuli_generation_V30_rescueTraject.observedFilePattern, targetSubjectID));
 targetPredictedFile = fullfile(inputDir, sprintf( ...
-    Config_stimuli_generation_V28_rescueTraject.predictedFilePattern, targetSubjectID));
+    Config_stimuli_generation_V30_rescueTraject.predictedFilePattern, targetSubjectID));
 
 if isfile(targetObservedFile) || isfile(targetPredictedFile)
     doOverwrite = logical(overwriteExisting);
@@ -239,21 +257,21 @@ if isfile(targetObservedFile) || isfile(targetPredictedFile)
     end
 end
 
-%% Build generation controls from Config_stimuli_generation_V28_rescueTraject
-% Data flow: Config_stimuli_generation_V28_rescueTraject constants -> trajectory synthesis controls.
-stimulusTypeConfig = Config_stimuli_generation_V28_rescueTraject.likelihood;
-framesPerTrial = round(Config_stimuli_generation_V28_rescueTraject.trialDuration * Config_stimuli_generation_V28_rescueTraject.frameFrequency);
-nTrials = Config_stimuli_generation_V28_rescueTraject.trialsPerCondition;
-fps = double(Config_stimuli_generation_V28_rescueTraject.frameFrequency);
+%% Build generation controls from Config_stimuli_generation_V30_rescueTraject
+% Data flow: Config_stimuli_generation_V30_rescueTraject constants -> trajectory synthesis controls.
+stimulusTypeConfig = Config_stimuli_generation_V30_rescueTraject.likelihood;
+framesPerTrial = round(Config_stimuli_generation_V30_rescueTraject.trialDuration * Config_stimuli_generation_V30_rescueTraject.frameFrequency);
+nTrials = Config_stimuli_generation_V30_rescueTraject.trialsPerCondition;
+fps = double(Config_stimuli_generation_V30_rescueTraject.frameFrequency);
 alphaFadeInFrames = max(1, round(0.25 * fps));
-dotRadiusDeg = double(Config_stimuli_generation_V28_rescueTraject.dotWidth) / 2;
-pathBandWidthDeg = double(Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg);
+dotRadiusDeg = double(Config_stimuli_generation_V30_rescueTraject.dotWidth) / 2;
+pathBandWidthDeg = double(Config_stimuli_generation_V30_rescueTraject.pathBandWidthDeg);
 pathBandStyle = struct( ...
     'terminalStyle', pathBandTerminalStyle, ...
     'straightBackshiftDotRadiusScale', pathBandStraightBackshiftDotRadiusScale);
 
 if nTrials < 1
-    error('Config_stimuli_generation_V28_rescueTraject.trialsPerCondition must be >= 1.');
+    error('Config_stimuli_generation_V30_rescueTraject.trialsPerCondition must be >= 1.');
 end
 if framesPerTrial < 2
     error('Computed framesPerTrial (trialDuration * frameFrequency) must be >= 2.');
@@ -266,16 +284,16 @@ if fixedOcclusionEndFrame < fixedDevianceFrame || fixedOcclusionEndFrame > frame
         'precede fixedDevianceFrame.'], fixedOcclusionEndFrame, fixedDevianceFrame, framesPerTrial);
 end
 if ~isfinite(pathBandWidthDeg) || pathBandWidthDeg <= (2 * dotRadiusDeg)
-    error(['Config_stimuli_generation_V28_rescueTraject.pathBandWidthDeg must be finite and ' ...
+    error(['Config_stimuli_generation_V30_rescueTraject.pathBandWidthDeg must be finite and ' ...
         'strictly larger than the dot diameter (%g deg).'], 2 * dotRadiusDeg);
 end
 
 directionVariance = double(stimulusTypeConfig.directionVariance(:)');
 if ~any(directionVariance == 0)
-    error('Config_stimuli_generation_V28_rescueTraject.likelihood.directionVariance must include nondeviant value 0.');
+    error('Config_stimuli_generation_V30_rescueTraject.likelihood.directionVariance must include nondeviant value 0.');
 end
 if ~any(directionVariance > 0)
-    error('Config_stimuli_generation_V28_rescueTraject.likelihood.directionVariance must include at least one deviant value > 0.');
+    error('Config_stimuli_generation_V30_rescueTraject.likelihood.directionVariance must include at least one deviant value > 0.');
 end
 deviantConditionCode = directionVariance(find(directionVariance > 0, 1, 'first'));
 if numel(directionVariance(directionVariance > 0)) > 1
@@ -284,69 +302,69 @@ if numel(directionVariance(directionVariance > 0)) > 1
 end
 
 if numel(stimulusTypeConfig.pathDuration) > 1
-    warning(['Config_stimuli_generation_V28_rescueTraject.likelihood.pathDuration has multiple values. ' ...
-        'V28 rescueTraject uses the first value for one-dot occlusion generation.']);
+    warning(['Config_stimuli_generation_V30_rescueTraject.likelihood.pathDuration has multiple values. ' ...
+        'V30 rescueTraject uses the first value for one-dot occlusion generation.']);
 end
 pathDurationSec = double(stimulusTypeConfig.pathDuration(1));
 
 generationCfg = struct();
 generationCfg.framesPerTrial = framesPerTrial;
-generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V28_rescueTraject.dotSpeedDegPerFrame);
-generationCfg.minPosDeg = [Config_stimuli_generation_V28_rescueTraject.dotWidth / 2, Config_stimuli_generation_V28_rescueTraject.dotWidth / 2];
-generationCfg.maxPosDeg = double(Config_stimuli_generation_V28_rescueTraject.dotRectSize) - generationCfg.minPosDeg;
+generationCfg.dotSpeedDegPerFrame = double(Config_stimuli_generation_V30_rescueTraject.dotSpeedDegPerFrame);
+generationCfg.minPosDeg = [Config_stimuli_generation_V30_rescueTraject.dotWidth / 2, Config_stimuli_generation_V30_rescueTraject.dotWidth / 2];
+generationCfg.maxPosDeg = double(Config_stimuli_generation_V30_rescueTraject.dotRectSize) - generationCfg.minPosDeg;
 generationCfg.initialCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V28_rescueTraject.initialCurvatureWindows, 'Config_stimuli_generation_V28_rescueTraject.initialCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V30_rescueTraject.initialCurvatureWindows, 'Config_stimuli_generation_V30_rescueTraject.initialCurvatureWindows', false, -inf, inf);
 generationCfg.deviantCurvatureWindows = local_parse_interval_windows( ...
-    Config_stimuli_generation_V28_rescueTraject.deviantCurvatureWindows, 'Config_stimuli_generation_V28_rescueTraject.deviantCurvatureWindows', false, -inf, inf);
+    Config_stimuli_generation_V30_rescueTraject.deviantCurvatureWindows, 'Config_stimuli_generation_V30_rescueTraject.deviantCurvatureWindows', false, -inf, inf);
 generationCfg.deviantTurnWindowsDeg = local_parse_interval_windows( ...
     stimulusTypeConfig.deviantSignedTurnWindows, ...
-    'Config_stimuli_generation_V28_rescueTraject.likelihood.deviantSignedTurnWindows', true, -180, 180);
-generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V28_rescueTraject.flipCurvatureOnDeviant);
-generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V28_rescueTraject.randomizeCurvatureOnDeviant);
+    'Config_stimuli_generation_V30_rescueTraject.likelihood.deviantSignedTurnWindows', true, -180, 180);
+generationCfg.flipCurvatureOnDeviant = logical(Config_stimuli_generation_V30_rescueTraject.flipCurvatureOnDeviant);
+generationCfg.randomizeCurvatureOnDeviant = logical(Config_stimuli_generation_V30_rescueTraject.randomizeCurvatureOnDeviant);
 generationCfg.enableTurnMagnitudeRescue = enableTurnMagnitudeRescue;
 generationCfg.turnRescueScaleGrid = turnRescueScaleGrid;
 generationCfg.pathDurationSec = pathDurationSec;
 generationCfg.maxAttemptsPerTrial = 60000;
 generationCfg.fixationCollisionMode = lower(strtrim(char( ...
-    Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode)));
+    Config_stimuli_generation_V30_rescueTraject.fixationCollisionMode)));
 generationCfg.fixationExclusionRadiusDeg = double( ...
-    Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg);
-generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V28_rescueTraject.dotRectSize(:)') / 2;
+    Config_stimuli_generation_V30_rescueTraject.fixationExclusionRadiusDeg);
+generationCfg.fixationCenterDeg = double(Config_stimuli_generation_V30_rescueTraject.dotRectSize(:)') / 2;
 generationCfg.fixationMovePaddingDeg = double( ...
-    Config_stimuli_generation_V28_rescueTraject.fixationMovePaddingDeg);
+    Config_stimuli_generation_V30_rescueTraject.fixationMovePaddingDeg);
 generationCfg.fixationMoveDirectionSamples = double( ...
-    Config_stimuli_generation_V28_rescueTraject.fixationMoveDirectionSamples);
+    Config_stimuli_generation_V30_rescueTraject.fixationMoveDirectionSamples);
 generationCfg.fixationMoveShiftSamples = double( ...
-    Config_stimuli_generation_V28_rescueTraject.fixationMoveShiftSamples);
+    Config_stimuli_generation_V30_rescueTraject.fixationMoveShiftSamples);
 
 % Validate fixation-collision controls once, then enforce them per trial.
 if numel(generationCfg.fixationCenterDeg) ~= 2
-    error('Config_stimuli_generation_V28_rescueTraject.dotRectSize must be [width height].');
+    error('Config_stimuli_generation_V30_rescueTraject.dotRectSize must be [width height].');
 end
 if ~ismember(generationCfg.fixationCollisionMode, {'off', 'retry', 'move'})
-    error(['Config_stimuli_generation_V28_rescueTraject.fixationCollisionMode must be one of: ' ...
+    error(['Config_stimuli_generation_V30_rescueTraject.fixationCollisionMode must be one of: ' ...
         '''off'', ''retry'', ''move''.']);
 end
 if ~isfinite(generationCfg.fixationExclusionRadiusDeg) || generationCfg.fixationExclusionRadiusDeg < 0
-    error('Config_stimuli_generation_V28_rescueTraject.fixationExclusionRadiusDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V30_rescueTraject.fixationExclusionRadiusDeg must be finite and >= 0.');
 end
 if ~isfinite(generationCfg.fixationMovePaddingDeg) || generationCfg.fixationMovePaddingDeg < 0
-    error('Config_stimuli_generation_V28_rescueTraject.fixationMovePaddingDeg must be finite and >= 0.');
+    error('Config_stimuli_generation_V30_rescueTraject.fixationMovePaddingDeg must be finite and >= 0.');
 end
 if generationCfg.fixationMoveDirectionSamples < 4 || ...
         floor(generationCfg.fixationMoveDirectionSamples) ~= generationCfg.fixationMoveDirectionSamples
-    error('Config_stimuli_generation_V28_rescueTraject.fixationMoveDirectionSamples must be an integer >= 4.');
+    error('Config_stimuli_generation_V30_rescueTraject.fixationMoveDirectionSamples must be an integer >= 4.');
 end
 if generationCfg.fixationMoveShiftSamples < 10 || ...
         floor(generationCfg.fixationMoveShiftSamples) ~= generationCfg.fixationMoveShiftSamples
-    error('Config_stimuli_generation_V28_rescueTraject.fixationMoveShiftSamples must be an integer >= 10.');
+    error('Config_stimuli_generation_V30_rescueTraject.fixationMoveShiftSamples must be an integer >= 10.');
 end
 
 % Match v17 geometric floor logic to avoid near-straight paths that cannot
 % fit inside the movement rectangle under fixed speed/frame constraints.
-maxTurnRadiusDeg = min(double(Config_stimuli_generation_V28_rescueTraject.dotRectSize) - double(Config_stimuli_generation_V28_rescueTraject.dotWidth)) / 2;
+maxTurnRadiusDeg = min(double(Config_stimuli_generation_V30_rescueTraject.dotRectSize) - double(Config_stimuli_generation_V30_rescueTraject.dotWidth)) / 2;
 if maxTurnRadiusDeg <= 0
-    error('Config_stimuli_generation_V28_rescueTraject.dotRectSize minus dotWidth must be > 0.');
+    error('Config_stimuli_generation_V30_rescueTraject.dotRectSize minus dotWidth must be > 0.');
 end
 generationCfg.minimumAbsCurvatureDeg = rad2deg(generationCfg.dotSpeedDegPerFrame / maxTurnRadiusDeg);
 
@@ -444,26 +462,26 @@ end
 xySeqsPredicted = vertcat(predictedCell{:});
 
 %% Build Cfg and reproducibility metadata
-% Data flow: Config_stimuli_generation_V28_rescueTraject snapshot + runtime values -> Cfg + repro outputs.
+% Data flow: Config_stimuli_generation_V30_rescueTraject snapshot + runtime values -> Cfg + repro outputs.
 Cfg = struct();
-Cfg.dpf = Config_stimuli_generation_V28_rescueTraject.dotSpeedDegPerFrame;
-Cfg.fps = Config_stimuli_generation_V28_rescueTraject.frameFrequency;
-Cfg.Stimulitype = Config_stimuli_generation_V28_rescueTraject.stimulusType;
-Cfg.dot_w = Config_stimuli_generation_V28_rescueTraject.dotWidth;
-Cfg.rectSize = Config_stimuli_generation_V28_rescueTraject.dotRectSize;
+Cfg.dpf = Config_stimuli_generation_V30_rescueTraject.dotSpeedDegPerFrame;
+Cfg.fps = Config_stimuli_generation_V30_rescueTraject.frameFrequency;
+Cfg.Stimulitype = Config_stimuli_generation_V30_rescueTraject.stimulusType;
+Cfg.dot_w = Config_stimuli_generation_V30_rescueTraject.dotWidth;
+Cfg.rectSize = Config_stimuli_generation_V30_rescueTraject.dotRectSize;
 Cfg.DirChange = stimulusTypeConfig.directionChange;
 
-configProps = properties('Config_stimuli_generation_V28_rescueTraject');
+configProps = properties('Config_stimuli_generation_V30_rescueTraject');
 configSnapshot = struct();
 for iProp = 1:numel(configProps)
     propName = configProps{iProp};
-    configSnapshot.(propName) = Config_stimuli_generation_V28_rescueTraject.(propName);
+    configSnapshot.(propName) = Config_stimuli_generation_V30_rescueTraject.(propName);
 end
 
 repro = struct();
 repro.script = struct( ...
     'name', mfilename, ...
-    'version', 'V28_rescueTraject', ...
+    'version', 'V30_rescueTraject', ...
     'parameters', struct( ...
         'fixedDevianceFrame', fixedDevianceFrame, ...
         'fixedOcclusionEndFrame', fixedOcclusionEndFrame, ...
@@ -485,7 +503,7 @@ repro.script = struct( ...
 repro.inputs = struct('targetSubjectID', targetSubjectID);
 repro.rng = rngState;
 repro.config = configSnapshot;
-repro.v28_rescueTraject_pathband_occlusion = struct( ...
+repro.v30_rescueTraject_pathband_occlusion = struct( ...
     'script', mfilename, ...
     'targetSubjectID', targetSubjectID, ...
     'fixedDevianceFrame', fixedDevianceFrame, ...
@@ -506,7 +524,7 @@ repro.v28_rescueTraject_pathband_occlusion = struct( ...
         'occluded_deviant', deviantConditionCode));
 
 %% Save outputs
-% Data flow: generated structs -> MAT files in Config_stimuli_generation_V28_rescueTraject.inputDirectory.
+% Data flow: generated structs -> MAT files in Config_stimuli_generation_V30_rescueTraject.inputDirectory.
 save(targetObservedFile, 'xySeqs', 'Cfg', 'repro');
 save(targetPredictedFile, 'xySeqsPredicted', 'Cfg');
 pathsPlotFile = local_save_observed_condition_paths_plot( ...
@@ -591,6 +609,14 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
             turnDeviantDeg(devFrame - 1) = candidateTurnDeg;
         else
             candidateTurnDeg = 0;
+        end
+
+        % Effective-deviance guard:
+        %   Reject candidates that become behaviorally nondeviant
+        %   (zero turn and unchanged post-onset curvature).
+        if ~local_is_effectively_deviant( ...
+                candidateTurnDeg, curvatureNondevDeg, curvatureDeviantDeg, devFrame)
+            continue;
         end
 
         directionDeviantDegRawCandidate = local_integrate_direction( ...
@@ -706,7 +732,7 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
 end
 
 error(['Failed to generate a feasible trial after %d attempts (sequence %d). ' ...
-    'Check Config_stimuli_generation_V28_rescueTraject geometry and curvature settings.'], ...
+    'Check Config_stimuli_generation_V30_rescueTraject geometry and curvature settings.'], ...
     generationCfg.maxAttemptsPerTrial, sequenceIndex);
 end
 
@@ -917,6 +943,38 @@ elseif sMax < 0
 end
 end
 
+function isEffective = local_is_effectively_deviant(candidateTurnDeg, ...
+        curvatureNondevDeg, curvatureDeviantDeg, devFrame)
+% LOCAL_IS_EFFECTIVELY_DEVIANT Validate that a deviant candidate truly deviates.
+%
+% Purpose:
+%   Prevent degenerate "deviant" trials when turn rescue scales the deviant
+%   turn to zero and post-onset curvature is identical to nondeviant.
+%
+% Inputs:
+%   candidateTurnDeg    - scalar signed turn used at deviance onset.
+%   curvatureNondevDeg  - (nSteps x 1) nondeviant curvature sequence.
+%   curvatureDeviantDeg - (nSteps x 1) candidate deviant curvature sequence.
+%   devFrame            - 1-based deviance frame index in XY-domain.
+%
+% Output:
+%   isEffective         - true if candidate differs by turn and/or
+%                         post-onset curvature; false otherwise.
+
+tolDeg = 1e-9;
+hasTurnChange = abs(candidateTurnDeg) > tolDeg;
+hasCurvatureChange = false;
+
+if ~isempty(curvatureNondevDeg) && ~isempty(curvatureDeviantDeg) && devFrame > 1
+    onsetIndex = max(1, min(numel(curvatureNondevDeg), devFrame - 1));
+    postNondev = curvatureNondevDeg(onsetIndex:end);
+    postDeviant = curvatureDeviantDeg(onsetIndex:end);
+    hasCurvatureChange = any(abs(postDeviant - postNondev) > tolDeg);
+end
+
+isEffective = hasTurnChange || hasCurvatureChange;
+end
+
 function value = local_sample_deviant_turn(turnWindowsDeg, fallbackMagnitudeDeg)
 % LOCAL_SAMPLE_DEVIANT_TURN Sample one signed deviant turn in degrees.
 %
@@ -1021,7 +1079,7 @@ end
 end
 
 function timing = local_build_occlusion_timing(nFrames, devFrame, occlusionEndFrameInclusive, fadeInFrames)
-% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V28 rescueTraject occlusion event indices.
+% LOCAL_BUILD_OCCLUSION_TIMING Build fixed-frame V30 rescueTraject occlusion event indices.
 occlusionStartFrame = max(1, devFrame - 1);
 occlusionFullEndFrame = max(devFrame, min(nFrames, round(occlusionEndFrameInclusive)));
 reappearanceStartFrame = min(nFrames, occlusionFullEndFrame + 1);

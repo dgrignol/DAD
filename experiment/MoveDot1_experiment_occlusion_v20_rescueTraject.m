@@ -1,18 +1,18 @@
-% MoveDot1_experiment_occlusion_v18_rescueTraject.m
+% MoveDot1_experiment_occlusion_v20_rescueTraject.m
 %
 % Purpose:
 %   Run the one-dot occlusion paradigm with three runs per block and
 %   catch-trial logic planned upstream by:
-%     CreateInputFiles_v21_rescueTraject.m
+%     CreateInputFiles_v23_rescueTraject.m
 %
-% Schedule model (from v21 TrialOrder/CatchPlan):
+% Schedule model (from v23 TrialOrder/CatchPlan):
 %   - Run 1: always_visible base trials + inserted type-1 catches.
 %   - Run 2: mixed occluded_nondeviant + occluded_deviant base trials +
 %            inserted type-2 catches.
 %   - Run 3: mixed occluded_nondeviant + occluded_deviant base trials +
 %            inserted type-2 catches.
 %
-% Timing-focused v18 rescueTraject additions:
+% Timing-focused v20 rescueTraject additions:
 %   - SkipSyncTests policy is no longer forced in MEG mode.
 %   - Full flip diagnostics are stored per frame:
 %       * VBLTimestamp
@@ -39,24 +39,30 @@
 %       * 151 replay start
 %
 % Usage example (interactive from experiment/):
-%   MoveDot1_experiment_occlusion_v18_rescueTraject
+%   MoveDot1_experiment_occlusion_v20_rescueTraject
 %
 % Usage example (non-interactive shell from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
 %    iSub=66; iBlock=1; viewingDistanceMm=1000; ...
-%    run('MoveDot1_experiment_occlusion_v18_rescueTraject.m');"
+%    run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');"
 %
 % Inputs:
-%   - experiment/input_files/MovDot_SubXX_V28_rescueTraject.mat
-%   - experiment/input_files/SubXX_TrialStruct_v21_rescueTraject.mat
+%   - experiment/input_files/MovDot_SubXX_V30_rescueTraject.mat
+%   - experiment/input_files/SubXX_TrialStruct_v23_rescueTraject.mat
 %
 % Workspace overrides (optional):
 %   - iSub, iBlock, viewingDistanceMm
+%   - MEG (0/1): force DataPixx/MEG mode on/off
 %   - dryRunValidateScheduleOnly, debug_runNumber, dryRunSimulatedBreakKeys
 %   - question_text, debugTriggerMode, runColorCueEnabled
 %   - practice_mode, practiceRunPercentageTrials
 %   - ITIRangeSec (seconds, [min max], default [0.500 1.000] when unset)
+%   - itiVisualMode ('screen_gray' | 'fixation_gray' | 'fixation_short' | 'off')
+%   - itiGreyColor (RGB for ITI visual-separation cue)
+%   - itiVisualSeparationDur ([startSec endSec] window within each ITI)
+%   - itiFixationShortDelaySec (seconds from ITI onset to short fixation cue)
+%   - itiFixationShortDurationSec (seconds for short fixation cue duration)
 %   - debugShowFrameInfoOverlay, debugShowFullPathOverlay
 %   - pathBandEntranceStyle and straight-terminal tuning parameters
 %   - debugSkipSyncTests (0/1; explicit development override for SkipSyncTests)
@@ -69,11 +75,18 @@
 %     eyeTrackerSendTriggerMessages
 %   - eyeTrackerImageTransferEnabled
 %   - run1TransitionCountdownEnabled
+%   - allowInteractivePrompts (logical, default true)
+%
+% Runtime hotkeys during trial playback:
+%   - i: disable fixation-abort/replay queueing (emergency EyeLink dropout bypass)
+%   - o: re-enable fixation-abort/replay queueing
 %
 % Outputs:
-%   - experiment/output_files/MoveDot1_occlusion_v18_rescueTraject_SUBXX_BLOCKYY.mat
-%   - experiment/output_files/debug_actual_triggers_occlusion_v18_rescueTraject_subXX_blockYY_runZZ.csv
+%   - experiment/output_files/MoveDot1_occlusion_v20_rescueTraject_SUBXX_BLOCKYY.mat
+%   - experiment/output_files/debug_actual_triggers_occlusion_v20_rescueTraject_subXX_blockYY_runZZ.csv
 %     (debug mode; columns: trigger, trial, frame, seconds, label, iti_duration_sec)
+%   - experiment/output_files/MBssbbaa.edf
+%     (real EyeLink mode only; one EDF per block, received at each block end)
 %
 % Assumptions:
 %   - Input trials include condition_label and pathband metadata fields.
@@ -83,7 +96,7 @@
 
 %% Clear state and define runtime configuration
 % Data flow: static conf values + user input -> runtime settings and file paths.
-clearvars -except iSub iBlock viewingDistanceMm dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec debugShowFrameInfoOverlay debugShowFullPathOverlay pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled;
+clearvars -except iSub iBlock viewingDistanceMm MEG dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec itiVisualMode itiGreyColor itiVisualSeparationDur itiFixationShortDelaySec itiFixationShortDurationSec catchQuestionTopYFrac catchQuestionBottomYFrac catchBottomLeftXFrac catchBottomRightXFrac miniBlinkBreakEnabled miniBlinkBreakEveryNTrials miniBlinkBreakDurationSec pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled allowInteractivePrompts;
 clc;
 sca;
 format shortG;
@@ -94,6 +107,9 @@ if ~exist('dryRunValidateScheduleOnly', 'var') || isempty(dryRunValidateSchedule
 end
 if ~exist('debug_runNumber', 'var')
     debug_runNumber = [];
+end
+if ~exist('MEG', 'var')
+    MEG = [];
 end
 if ~exist('debugTriggerMode', 'var') || isempty(debugTriggerMode)
     debugTriggerMode = 0;
@@ -161,15 +177,55 @@ end
 if ~exist('run1TransitionCountdownEnabled', 'var')
     run1TransitionCountdownEnabled = [];
 end
+if ~exist('allowInteractivePrompts', 'var') || isempty(allowInteractivePrompts)
+    allowInteractivePrompts = true;
+end
+allowInteractivePrompts = logical(allowInteractivePrompts);
 if ~exist('ITIRangeSec', 'var')
     ITIRangeSec = [];
+end
+if ~exist('itiVisualMode', 'var')
+    itiVisualMode = [];
+end
+if ~exist('itiGreyColor', 'var')
+    itiGreyColor = [];
+end
+if ~exist('itiVisualSeparationDur', 'var')
+    itiVisualSeparationDur = [];
+end
+if ~exist('itiFixationShortDelaySec', 'var')
+    itiFixationShortDelaySec = [];
+end
+if ~exist('itiFixationShortDurationSec', 'var')
+    itiFixationShortDurationSec = [];
+end
+if ~exist('catchQuestionTopYFrac', 'var')
+    catchQuestionTopYFrac = [];
+end
+if ~exist('catchQuestionBottomYFrac', 'var')
+    catchQuestionBottomYFrac = [];
+end
+if ~exist('catchBottomLeftXFrac', 'var')
+    catchBottomLeftXFrac = [];
+end
+if ~exist('catchBottomRightXFrac', 'var')
+    catchBottomRightXFrac = [];
+end
+if ~exist('miniBlinkBreakEnabled', 'var')
+    miniBlinkBreakEnabled = [];
+end
+if ~exist('miniBlinkBreakEveryNTrials', 'var')
+    miniBlinkBreakEveryNTrials = [];
+end
+if ~exist('miniBlinkBreakDurationSec', 'var')
+    miniBlinkBreakDurationSec = [];
 end
 debugShowFrameInfoOverlay = logical(debugShowFrameInfoOverlay);
 debugShowFullPathOverlay = logical(debugShowFullPathOverlay);
 
-scheduleCfg = Config_schedule_CreateInputV21_MoveDotV18_rescueTraject;
+scheduleCfg = Config_schedule_CreateInputV23_MoveDotV20_rescueTraject;
 if scheduleCfg.runsPerBlock ~= 3
-    error('Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.runsPerBlock must be 3 for this runtime.');
+    error('Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.runsPerBlock must be 3 for this runtime.');
 end
 if ~exist('runColorCueEnabled', 'var') || isempty(runColorCueEnabled)
     runColorCueEnabled = logical(scheduleCfg.runColorCueEnabled);
@@ -179,11 +235,14 @@ end
 
 Conf = struct();
 Conf.MEG = 0;
+if ~isempty(MEG)
+    Conf.MEG = double(logical(MEG));
+end
 Conf.debugTriggerMode = double(debugTriggerMode ~= 0);
 Conf.debug = Conf.debugTriggerMode; % Backward-compatible alias used by legacy debug paths.
 Conf.enableCatchTrials = 1;
 Conf.occlusionMode = 'pathband'; % default: pathband; optional: alpha.
-Conf.experimentName = 'MoveDot1_occlusion_v18_rescueTraject';
+Conf.experimentName = 'MoveDot1_occlusion_v20_rescueTraject';
 Conf.background = [0 0 0];
 Conf.rectColor = [0 0 0];
 Conf.rectBorderColor = [0 0 0];
@@ -191,14 +250,87 @@ Conf.dotColor = [0 255 0];
 Conf.dotColorRun1Base = [0 255 0];
 Conf.dotColorRuns23Base = [242 223 0];
 Conf.runColorCueEnabled = logical(runColorCueEnabled);
-Conf.fixColor = [180 180 180];
+Conf.fixColor = [0 0 0];
+% Keep instructional/catch text readable when fixation baseline is black.
+% This decouples UI text polarity from fixation polarity changes.
+Conf.uiTextColor = [220 220 220];
 Conf.fixSizeDeg = 0.2;
 Conf.showFixCrossBetweenTrials = 0; % kept for compatibility; not used in post-trial ITI.
-% ITI policy (v18 jittered): one post-trial blank with fixation.
+% ITI policy (v20 jittered): one post-trial blank with fixation.
 % Data flow: ITIRangeSec override/default -> precomputed per-run vector ->
 % source-trial mapping (replay-safe) -> trial-specific WaitSecs duration.
 Conf.ITIRangeSec = local_resolve_iti_range(ITIRangeSec, [0.500 1.000]);
 Conf.postTrialBlank1Sec = Conf.ITIRangeSec(1); % fallback used only if trial ITI is invalid.
+Conf.itiVisualMode = 'screen_gray';
+if ~isempty(itiVisualMode)
+    Conf.itiVisualMode = lower(strtrim(char(itiVisualMode)));
+end
+if ~ismember(Conf.itiVisualMode, {'screen_gray', 'fixation_gray', 'fixation_short', 'off'})
+    error('itiVisualMode must be ''screen_gray'', ''fixation_gray'', ''fixation_short'', or ''off''.');
+end
+Conf.itiGreyColor = [90 90 90];
+if ~isempty(itiGreyColor)
+    Conf.itiGreyColor = double(itiGreyColor(:)');
+end
+if numel(Conf.itiGreyColor) ~= 3 || any(~isfinite(Conf.itiGreyColor)) || ...
+        any(Conf.itiGreyColor < 0) || any(Conf.itiGreyColor > 255)
+    error('itiGreyColor must be a finite RGB triplet in [0,255].');
+end
+Conf.itiVisualSeparationDur = [0.300 0.700];
+if ~isempty(itiVisualSeparationDur)
+    Conf.itiVisualSeparationDur = double(itiVisualSeparationDur(:)');
+end
+if numel(Conf.itiVisualSeparationDur) ~= 2 || ...
+        any(~isfinite(Conf.itiVisualSeparationDur)) || ...
+        any(Conf.itiVisualSeparationDur < 0) || ...
+        (Conf.itiVisualSeparationDur(1) > Conf.itiVisualSeparationDur(2))
+    error(['itiVisualSeparationDur must be a finite 1x2 vector [startSec endSec] ' ...
+        'with 0 <= startSec <= endSec.']);
+end
+% fixation_short parameters:
+%   delay from ITI onset to color change + cue duration, without a tail guard.
+Conf.itiFixationShortDelaySec = 0.100;
+if ~isempty(itiFixationShortDelaySec)
+    Conf.itiFixationShortDelaySec = double(itiFixationShortDelaySec);
+end
+if ~isscalar(Conf.itiFixationShortDelaySec) || ~isfinite(Conf.itiFixationShortDelaySec) || ...
+        (Conf.itiFixationShortDelaySec < 0)
+    error('itiFixationShortDelaySec must be a finite scalar >= 0.');
+end
+Conf.itiFixationShortDurationSec = 0.300;
+if ~isempty(itiFixationShortDurationSec)
+    Conf.itiFixationShortDurationSec = double(itiFixationShortDurationSec);
+end
+if ~isscalar(Conf.itiFixationShortDurationSec) || ~isfinite(Conf.itiFixationShortDurationSec) || ...
+        (Conf.itiFixationShortDurationSec < 0)
+    error('itiFixationShortDurationSec must be a finite scalar >= 0.');
+end
+% Safety guard:
+%   If the configured ITI can end too early to include the visual-separation
+%   window plus the required 300 ms tail, disable the ITI visual mode.
+itiVisualTailGuardSec = 0.300;
+requiresVisualTailGuard = ismember(Conf.itiVisualMode, {'screen_gray', 'fixation_gray'});
+if requiresVisualTailGuard && ...
+        (Conf.ITIRangeSec(2) < (Conf.itiVisualSeparationDur(2) + itiVisualTailGuardSec))
+    warning(['ITIRangeSec(2)=%.3f is shorter than itiVisualSeparationDur(2)+0.300=%.3f. ' ...
+        'Switching itiVisualMode to ''off'' for this run.'], ...
+        Conf.ITIRangeSec(2), Conf.itiVisualSeparationDur(2) + itiVisualTailGuardSec);
+    Conf.itiVisualMode = 'off';
+end
+% Non-trial (messages/catch feedback/prompts) palette:
+%   - screen_gray mode keeps non-trial screens gray.
+%   - fixation_gray/off keeps all non-trial screens black/black.
+if strcmpi(Conf.itiVisualMode, 'screen_gray')
+    Conf.nonTrialBackgroundColor = Conf.itiGreyColor;
+    Conf.nonTrialRectColor = Conf.itiGreyColor;
+    Conf.nonTrialRectBorderColor = Conf.itiGreyColor;
+else
+    Conf.nonTrialBackgroundColor = Conf.background;
+    Conf.nonTrialRectColor = Conf.rectColor;
+    Conf.nonTrialRectBorderColor = Conf.rectBorderColor;
+end
+% Message/catch cushion shown before and after message-style screens.
+Conf.messageScreenCushionSec = 0.500;
 Conf.postTrialGridSec = 0.000;
 Conf.postTrialBlank2Sec = 0.000;
 % Legacy mask settings kept for easy restore:
@@ -235,6 +367,10 @@ Conf.eyeTrackerAllowBetweenBlockCalibration = logical(local_schedule_get_or_defa
 Conf.eyeTrackerSendTriggerMessages = logical(local_schedule_get_or_default(scheduleCfg, 'eyeTrackerSendTriggerMessages', true));
 Conf.eyeTrackerImageTransferEnabled = logical(local_schedule_get_or_default(scheduleCfg, 'eyeTrackerImageTransferEnabled', true));
 Conf.eyeTrackerWaitSec = double(local_schedule_get_or_default(scheduleCfg, 'eyeTrackerWaitSec', 0.01));
+% Debounce window after exiting tracker setup/calibration (ESC on host)
+% to avoid interpreting setup-exit ESC as a runtime abort key.
+Conf.eyeTrackerPostCalibrationKeyReleaseSec = double(local_schedule_get_or_default( ...
+    scheduleCfg, 'eyeTrackerPostCalibrationKeyReleaseSec', 0.35));
 Conf.eyeTrackerEdfPolicy = lower(strtrim(char(local_schedule_get_or_default( ...
     scheduleCfg, 'eyeTrackerEdfPolicy', 'per_block'))));
 Conf.eyeTrackerReceiveFileAfterBlock = logical(local_schedule_get_or_default( ...
@@ -293,7 +429,11 @@ Conf.useEyelink = Conf.trackeye && ~Conf.ignoreEyeTracker && ~Conf.useFakeEyeTra
 Conf.useEyelinkCalibrationWithFake = Conf.trackeye && ~Conf.ignoreEyeTracker && ...
     Conf.useFakeEyeTracker && Conf.eyeTrackerDoCalibration;
 Conf.useEyelinkSession = Conf.useEyelink || Conf.useEyelinkCalibrationWithFake;
-Conf.useGazeMonitoring = Conf.enableFixationAbort && (Conf.useEyelink || Conf.useFakeEyeTracker);
+% Keep fixation-abort master flag and derived runtime gate in sync.
+Conf = local_set_fixation_abort_enabled(Conf, Conf.enableFixationAbort);
+% Runtime emergency hotkeys (resolved to keycodes after KbName setup).
+Conf.fixAbortDisableKeyNames = {'i'};
+Conf.fixAbortEnableKeyNames = {'o'};
 if ~isfinite(Conf.fakeGazeBreakRate) || Conf.fakeGazeBreakRate < 0 || Conf.fakeGazeBreakRate > 1
     error('fakeGazeBreakRate must be in [0, 1].');
 end
@@ -308,6 +448,10 @@ if ~isfinite(Conf.fixationWarningDurationSec) || Conf.fixationWarningDurationSec
 end
 if ~isfinite(Conf.replayLimit) || Conf.replayLimit < 0
     error('replayLimit must be >= 0.');
+end
+if ~isfinite(Conf.eyeTrackerPostCalibrationKeyReleaseSec) || ...
+        Conf.eyeTrackerPostCalibrationKeyReleaseSec < 0
+    error('eyeTrackerPostCalibrationKeyReleaseSec must be finite and >= 0.');
 end
 if ~ismember(Conf.eyeTrackerEdfPolicy, {'per_block'})
     error('Unsupported eyeTrackerEdfPolicy: %s', Conf.eyeTrackerEdfPolicy);
@@ -418,16 +562,33 @@ Conf.catchFeedbackDurationSec = 0.500;
 Conf.catchFeedbackCorrectColor = [0 220 0];
 Conf.catchFeedbackIncorrectColor = [220 0 0];
 Conf.catchTimeoutText = 'Too slow';
-Conf.catchQuestionTopYFrac = 0.12;
-Conf.catchQuestionBottomYFrac = 0.88;
-Conf.catchBottomLeftXFrac = 0.18;
-Conf.catchBottomRightXFrac = 0.82;
+Conf.catchQuestionTopYFrac = 0.42;
+Conf.catchQuestionBottomYFrac = 0.58;
+Conf.catchBottomLeftXFrac = 0.38;
+Conf.catchBottomRightXFrac = 0.62;
+if ~isempty(catchQuestionTopYFrac)
+    Conf.catchQuestionTopYFrac = double(catchQuestionTopYFrac);
+end
+if ~isempty(catchQuestionBottomYFrac)
+    Conf.catchQuestionBottomYFrac = double(catchQuestionBottomYFrac);
+end
+if ~isempty(catchBottomLeftXFrac)
+    Conf.catchBottomLeftXFrac = double(catchBottomLeftXFrac);
+end
+if ~isempty(catchBottomRightXFrac)
+    Conf.catchBottomRightXFrac = double(catchBottomRightXFrac);
+end
+catchLayoutVals = [Conf.catchQuestionTopYFrac, Conf.catchQuestionBottomYFrac, ...
+    Conf.catchBottomLeftXFrac, Conf.catchBottomRightXFrac];
+if any(~isfinite(catchLayoutVals)) || any(catchLayoutVals <= 0) || any(catchLayoutVals >= 1)
+    error('Catch question layout fractions must be finite values in (0,1).');
+end
 Conf.megButtonMask = uint32(2^0 + 2^1 + 2^2 + 2^3);
 Conf.megButtonYesValue = uint32(8); % blue
 Conf.megButtonNoValue = uint32(1); % red
 Conf.enableKeyboardDebugResponse = true;
 
-% Start gate and run-transition messages (v18 rescueTraject).
+% Start gate and run-transition messages (v20 rescueTraject).
 % Data flow: schedule config constants -> runtime text, toggle, and timing controls.
 Conf.startMessageEnabled = logical(scheduleCfg.startMessageEnabled);
 Conf.startMessageText = char(scheduleCfg.startMessageText);
@@ -459,12 +620,35 @@ Conf.calibrationChoiceSkipMegValues = uint32(1);
 Conf.calibrationChoiceRunMegValues = uint32(8);
 Conf.calibrationChoiceSkipKeyNames = {'1!', '1', 'KP_1', 'num_1'};
 Conf.calibrationChoiceRunKeyNames = {'8*', '8', 'KP_8', 'num_8'};
-Conf.finalMessageEnabled = logical(scheduleCfg.finalMessageEnabled);
+% Keep runtime robust when finalMessageEnabled is intentionally removed
+% from schedule config (final screen no longer part of active flow).
+Conf.finalMessageEnabled = logical(local_schedule_get_or_default( ...
+    scheduleCfg, 'finalMessageEnabled', false));
 Conf.finalMessageText = char(scheduleCfg.finalMessageText);
 Conf.finalMessageDurationSec = double(scheduleCfg.finalMessageDurationSec);
 Conf.postMessageFixationEnabled = logical(scheduleCfg.postMessageFixationEnabled);
 Conf.postMessageFixationDurationSec = double(scheduleCfg.postMessageFixationDurationSec);
 Conf.messageResponseLockoutSec = double(scheduleCfg.messageResponseLockoutSec);
+Conf.blinkBreakEnabled = false;
+if ~isempty(miniBlinkBreakEnabled)
+    Conf.blinkBreakEnabled = logical(miniBlinkBreakEnabled);
+end
+Conf.blinkBreakEveryNTrials = 10;
+if ~isempty(miniBlinkBreakEveryNTrials)
+    Conf.blinkBreakEveryNTrials = round(double(miniBlinkBreakEveryNTrials));
+end
+Conf.blinkBreakDurationSec = 5.0;
+if ~isempty(miniBlinkBreakDurationSec)
+    Conf.blinkBreakDurationSec = double(miniBlinkBreakDurationSec);
+end
+Conf.blinkBreakTitleText = 'Blink break';
+Conf.blinkBreakCountdownPrefix = 'Restart in:';
+if ~isfinite(Conf.blinkBreakEveryNTrials) || Conf.blinkBreakEveryNTrials < 1
+    error('miniBlinkBreakEveryNTrials must be an integer >= 1.');
+end
+if ~isfinite(Conf.blinkBreakDurationSec) || Conf.blinkBreakDurationSec < 0
+    error('miniBlinkBreakDurationSec must be >= 0.');
+end
 Conf.practiceRunPercentageTrials = double(scheduleCfg.practiceRunPercentageTrials);
 if exist('practiceRunPercentageTrials', 'var') && ~isempty(practiceRunPercentageTrials)
     Conf.practiceRunPercentageTrials = double(practiceRunPercentageTrials);
@@ -500,9 +684,9 @@ else
 end
 
 % Trigger map for this occlusion paradigm.
-Conf.trigger.conditionAlwaysVisible = 31;
-Conf.trigger.conditionOccludedNondeviant = 41;
-Conf.trigger.conditionOccludedDeviant = 51;
+Conf.trigger.conditionAlwaysVisible = 71;
+Conf.trigger.conditionOccludedNondeviant = 81;
+Conf.trigger.conditionOccludedDeviant = 91;
 Conf.trigger.occlusionStart = 111;
 Conf.trigger.occlusionComplete = 112;
 Conf.trigger.occlusionEndStart = 114;
@@ -525,11 +709,41 @@ end
 
 %% Collect user input and resolve files
 % Data flow: dialog -> subject/block/display geometry -> input/output file names.
-if ~(exist('iSub', 'var') && exist('iBlock', 'var') && exist('viewingDistanceMm', 'var') && exist('practice_mode', 'var'))
+missingISub = ~exist('iSub', 'var') || isempty(iSub);
+missingIBlock = ~exist('iBlock', 'var') || isempty(iBlock);
+missingViewingDistance = ~exist('viewingDistanceMm', 'var') || isempty(viewingDistanceMm);
+if ~exist('practice_mode', 'var') || isempty(practice_mode)
+    practice_mode = 0;
+end
+
+if missingISub || missingIBlock || missingViewingDistance
+    if ~allowInteractivePrompts
+        error(['Missing required runtime values for non-interactive run.\n' ...
+            'Set iSub, iBlock, and viewingDistanceMm before running,\n' ...
+            'or set allowInteractivePrompts=true to enable dialogs.']);
+    end
+
+    defaultSub = '70';
+    if exist('iSub', 'var') && ~isempty(iSub) && isfinite(double(iSub))
+        defaultSub = sprintf('%d', round(double(iSub)));
+    end
+    defaultBlock = '1';
+    if exist('iBlock', 'var') && ~isempty(iBlock) && isfinite(double(iBlock))
+        defaultBlock = sprintf('%d', round(double(iBlock)));
+    end
+    defaultDistanceMm = '1000';
+    if exist('viewingDistanceMm', 'var') && ~isempty(viewingDistanceMm) && isfinite(double(viewingDistanceMm))
+        defaultDistanceMm = sprintf('%.0f', double(viewingDistanceMm));
+    end
+    defaultPractice = '0';
+    if exist('practice_mode', 'var') && ~isempty(practice_mode) && isfinite(double(practice_mode))
+        defaultPractice = sprintf('%d', round(double(practice_mode)));
+    end
+
     prompt = {'Subject Number:', 'Block Number:', 'Viewing Distance (mm):', 'Practice mode (0/1):'};
-    dlgtitle = 'Occlusion v18 rescueTraject (practice by run) input';
+    dlgtitle = 'Occlusion v20 rescueTraject (practice by run) input';
     dims = [1 50];
-    definput = {'70', '1', '1000', '0'};
+    definput = {defaultSub, defaultBlock, defaultDistanceMm, defaultPractice};
     userInput = inputdlg(prompt, dlgtitle, dims, definput);
     if isempty(userInput)
         disp('Canceled by user.');
@@ -540,10 +754,6 @@ if ~(exist('iSub', 'var') && exist('iBlock', 'var') && exist('viewingDistanceMm'
     iBlock = str2double(userInput{2});
     viewingDistanceMm = str2double(userInput{3});
     practice_mode = str2double(userInput{4});
-end
-
-if ~exist('practice_mode', 'var') || isempty(practice_mode)
-    practice_mode = 0;
 end
 
 if any(isnan([iSub, iBlock, viewingDistanceMm, practice_mode])) || viewingDistanceMm <= 0
@@ -580,7 +790,7 @@ if ~isfile(inputFile)
 end
 if ~isfile(trialStructFile)
     error(['Required schedule file not found: %s\n' ...
-        'Generate it with CreateInputFiles_v21_rescueTraject.m first.'], trialStructFile);
+        'Generate it with CreateInputFiles_v23_rescueTraject.m first.'], trialStructFile);
 end
 
 outputBase = sprintf('%s_SUB%02d_BLOCK%02d', Conf.experimentName, iSub, iBlock);
@@ -653,14 +863,14 @@ idxOccNondev = idxOccNondev(1:nPerCond);
 idxOccDev = idxOccDev(1:nPerCond);
 
 % Required scheduling path:
-%   Load TrialOrder/CatchPlan from v20 schedule file and resolve selected blocks/runs.
+%   Load TrialOrder/CatchPlan from v23 schedule file and resolve selected blocks/runs.
 tsData = load(trialStructFile, 'TrialOrder', 'CatchPlan', 'Schedule');
 if ~isfield(tsData, 'TrialOrder')
     error('TrialOrder missing in required schedule file: %s', trialStructFile);
 end
 
 if ndims(tsData.TrialOrder) ~= 3
-    error('TrialOrder in %s must be 3D [block x trial x run] for v18 rescueTraject mode.', ...
+    error('TrialOrder in %s must be 3D [block x trial x run] for v20 rescueTraject mode.', ...
         trialStructFile);
 end
 
@@ -707,10 +917,10 @@ end
 blocksToExecute = iBlock:nBlocksAvailable;
 
 if isempty(debug_runNumber)
-    fprintf('Using v21 TrialOrder from %s (start block %d, runs 1..%d).\n', ...
+    fprintf('Using v23 TrialOrder from %s (start block %d, runs 1..%d).\n', ...
         trialStructFile, iBlock, runsPerBlockAvailable);
 else
-    fprintf('Using v21 TrialOrder from %s (start block %d, debug run %d only).\n', ...
+    fprintf('Using v23 TrialOrder from %s (start block %d, debug run %d only).\n', ...
         trialStructFile, iBlock, debug_runNumber);
 end
 
@@ -836,7 +1046,7 @@ if logical(dryRunValidateScheduleOnly)
                 break;
             end
         else
-            fprintf('Dry-run final message: You reached the end of the experiment! Thank you for participating.\n');
+            fprintf('Dry-run completed: final block uses the same end-of-block message flow as earlier blocks.\n');
         end
     end
     return;
@@ -876,6 +1086,8 @@ try
     Conf.startMessageAcceptKeyCodes = local_keynames_to_codes(Conf.startMessageAcceptKeyNames);
     Conf.calibrationChoiceSkipKeyCodes = local_keynames_to_codes(Conf.calibrationChoiceSkipKeyNames);
     Conf.calibrationChoiceRunKeyCodes = local_keynames_to_codes(Conf.calibrationChoiceRunKeyNames);
+    Conf.fixAbortDisableKeyCodes = local_keynames_to_codes(Conf.fixAbortDisableKeyNames);
+    Conf.fixAbortEnableKeyCodes = local_keynames_to_codes(Conf.fixAbortEnableKeyNames);
 
     ifi = Screen('GetFlipInterval', window);
     actualFrameRate = 1 / ifi;
@@ -906,10 +1118,19 @@ try
     [xCenter, yCenter] = RectCenter(windowRect);
     rectCoords = [xCenter - rectSizePx(1)/2, yCenter - rectSizePx(2)/2, ...
         xCenter + rectSizePx(1)/2, yCenter + rectSizePx(2)/2];
+    % Cache arena rectangle in Conf so helper screens (messages/catch/ITI)
+    % can draw a consistent full-screen + arena layout without carrying
+    % rectCoords through every helper signature.
+    Conf.arenaRect = rectCoords;
 
     dotRadiusPx = max(2, floor((double(Dat.Cfg.dot_w) * ppd) / 2));
     dotSizePx = dotRadiusPx * 2;
     fixSizePx = max(4, floor(Conf.fixSizeDeg * ppd));
+    % Cache fixation geometry so helper screens can draw a consistent
+    % baseline fixation cross without additional caller arguments.
+    Conf.fixXCenterPx = xCenter;
+    Conf.fixYCenterPx = yCenter;
+    Conf.fixSizePx = fixSizePx;
 
     % Initialize EyeLink session (optional) after the PTB window is ready.
     % Data flow:
@@ -971,6 +1192,13 @@ try
         if exist(outputMat, 'file') == 2
             error(['Output already exists; refusing to overwrite: %s\n' ...
                 'if you intended to run from a specific block, set iBlock variable'], outputMat);
+        end
+        % Ensure one EDF is opened for this block before any run starts.
+        % Data flow:
+        %   real EyeLink mode + block index -> unique block EDF on host that
+        %   is received locally before end-of-block continuation prompts.
+        if Conf.useEyelink
+            Conf = local_eyelink_open_block_file(Conf, iSub, currentBlock, outputDir);
         end
 
         runTrialOrders = cell(1, numel(runsToExecute));
@@ -1067,6 +1295,9 @@ try
 
         blockAborted = false;
         blockAbortReason = '';
+        blockCompletedTrialCount = 0;
+        blockCatchScored = 0;
+        blockCatchCorrect = 0;
 
         for iRunIdx = 1:numel(runsToExecute)
             % Show the transition message only when entering runs after run 1.
@@ -1324,7 +1555,7 @@ try
                 output(iTrial).catch_reappear_frame = catchReappearFrame;
                 output(iTrial).catch_alt_source_index = catchAltSourceIdx;
 
-                % No pre-trial pause in v18 rescueTraject mode:
+                % No pre-trial pause in v20 rescueTraject mode:
                 % timing between trials is handled by an explicit post-trial interval.
 
                 % Start EyeLink recording for this trial (real hardware mode).
@@ -1365,8 +1596,11 @@ try
                 gazeBreakTime = NaN;
                 [fakeBreakThisTrial, fakeBreakStartFrame, fakeBreakEndFrame] = ...
                     local_plan_fake_gaze_break(Conf, framesPerTrial);
-                [vbl, trialStimulusOnsetTime, trialFlipTimestamp, trialMissed] = Screen('Flip', window);
-                output(iTrial).trial_start_time = trialStimulusOnsetTime;
+                % Keep fixation continuity at trial onset:
+                % do not issue a pre-loop blank flip; timestamp onset from
+                % the first rendered trial frame instead.
+                vbl = NaN;
+                trialStimulusOnsetTime = NaN;
                 trialFrameTimer = tic;
 
                 for iFrame = 1:framesPerTrial
@@ -1375,6 +1609,15 @@ try
                     xDot = trialStim(iFrame, 1);
                     yDot = trialStim(iFrame, 2);
                     dotVisibleThisFrame = dotVisibleMask(iFrame) && isfinite(xDot) && isfinite(yDot);
+
+                    % Runtime emergency hotkeys:
+                    %   ESC aborts session, i disables fixation-abort/replays,
+                    %   o re-enables fixation-abort/replays.
+                    [Conf, abortRequested, abortReason] = ...
+                        local_handle_runtime_hotkeys(Conf, abortRequested, abortReason);
+                    if abortRequested
+                        break;
+                    end
 
                     % Fixation-break monitoring (real EyeLink samples or fake schedule).
                     % If fixation is lost for enough consecutive frames, trigger 150,
@@ -1404,7 +1647,11 @@ try
                                 gazeBreakTime = GetSecs;
                                 output(iTrial).fixation_break = true;
                                 output(iTrial).fixation_break_frame = gazeBreakFrame;
-                                output(iTrial).fixation_break_time = gazeBreakTime - trialStimulusOnsetTime;
+                                if isfinite(trialStimulusOnsetTime)
+                                    output(iTrial).fixation_break_time = gazeBreakTime - trialStimulusOnsetTime;
+                                else
+                                    output(iTrial).fixation_break_time = NaN;
+                                end
                                 if Conf.useEyelink
                                     local_eyelink_safe_message(sprintf('GAZE_BREAK frame %d', gazeBreakFrame));
                                 end
@@ -1521,6 +1768,8 @@ try
 
                     if iFrame == 1
                         [flipVbl, flipStimulusOnset, flipTimestamp, flipMissed] = Screen('Flip', window);
+                        trialStimulusOnsetTime = flipStimulusOnset;
+                        output(iTrial).trial_start_time = flipStimulusOnset;
                     else
                         requestedWhen = vbl + (1 - 0.5) * ifi;
                         [flipVbl, flipStimulusOnset, flipTimestamp, flipMissed] = ...
@@ -1552,13 +1801,6 @@ try
                         end
                     end
 
-                    [keyDown, ~, keyCode] = KbCheck;
-                    if keyDown && keyCode(Conf.escapeKeyCode)
-                        abortRequested = true;
-                        abortReason = 'escape_key';
-                        KbReleaseWait;
-                        break;
-                    end
                 end
 
                 if Conf.useEyelink
@@ -1617,8 +1859,25 @@ try
                     completedCatches = completedCatches + 1;
                 end
 
+                % Decide if the ITI visual-separation cue should be suppressed
+                % for this trial to avoid double transitions before non-dot
+                % events (catch/blink/messages). In those cases, keep ITI as
+                % black baseline only; the 500 ms cushion then marks the
+                % event boundary from moving-dot activity.
+                didShowCatchScreen = output(iTrial).catch_question_presented;
+                isLastTrialInRun = (iTrial == numel(trialSchedule));
+                blockTrialCountAfterThisTrial = blockCompletedTrialCount + 1;
+                willShowBlinkBreak = local_should_show_blink_break( ...
+                    Conf, blockTrialCountAfterThisTrial, isLastTrialInRun, currentRun, iRunIdx, numel(runsToExecute));
+                willShowRunOrBlockMessage = isLastTrialInRun;
+                suppressItiVisualCue = didShowCatchScreen || willShowBlinkBreak || willShowRunOrBlockMessage;
+
                 completedTrials = iTrial;
-                local_present_post_trial_interval(window, Conf, xCenter, yCenter, fixSizePx, itiDurationSec);
+                local_present_post_trial_interval(window, Conf, xCenter, yCenter, fixSizePx, itiDurationSec, suppressItiVisualCue);
+                blockCompletedTrialCount = blockCompletedTrialCount + 1;
+                if willShowBlinkBreak
+                    local_present_blink_break(window, Conf);
+                end
                 iTrial = iTrial + 1;
             end
 
@@ -1661,13 +1920,15 @@ try
             runCatchScored(currentRun) = runCatchScored(currentRun) + scoredCount;
             runCatchAnswered(currentRun) = runCatchAnswered(currentRun) + answeredCount;
             runCatchCorrect(currentRun) = runCatchCorrect(currentRun) + correctCount;
+            blockCatchScored = blockCatchScored + scoredCount;
+            blockCatchCorrect = blockCatchCorrect + correctCount;
 
             % Report measured frame pacing to help diagnose display-dependent lag.
             local_report_run_frame_timing(output, currentBlock, currentRun, actualFrameRate);
 
             if Conf.debug || ~isempty(debugTriggerLog)
                 debugTriggerFile = fullfile(outputDir, sprintf( ...
-                    'debug_actual_triggers_occlusion_v18_rescueTraject_sub%02d_block%02d_run%02d.csv', ...
+                    'debug_actual_triggers_occlusion_v20_rescueTraject_sub%02d_block%02d_run%02d.csv', ...
                     iSub, currentBlock, currentRun));
                 debugTriggerItiSec = nan(size(debugTriggerTrial(:)));
                 if ~isempty(output)
@@ -1711,58 +1972,47 @@ try
         end
 
         isLastBlock = (currentBlock == nBlocksAvailable);
-        if ~isLastBlock
-            remainingBlocks = nBlocksAvailable - currentBlock;
-            breakAction = local_wait_end_of_block_action(window, Conf, currentBlock, remainingBlocks);
-            if strcmp(breakAction, 'abort')
+        breakAction = local_wait_end_of_block_action( ...
+            window, Conf, iBlockIdx, blockCatchCorrect, blockCatchScored);
+        if strcmp(breakAction, 'abort')
+            stopExperimentAfterBlock = true;
+            stopReason = 'escape_after_block_message';
+            local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_after_block');
+            fprintf('esc pressed at the end of block %d\n', currentBlock);
+            break;
+        end
+
+        if ~isLastBlock && logical(Conf.betweenBlockCalibrationChoiceEnabled)
+            calibrationAction = local_wait_between_block_calibration_action(window, Conf);
+            if strcmp(calibrationAction, 'abort')
                 stopExperimentAfterBlock = true;
                 stopReason = 'escape_after_block_message';
                 local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_after_block');
                 fprintf('esc pressed at the end of block %d\n', currentBlock);
                 break;
+            elseif strcmp(calibrationAction, 'calibrate')
+                Conf = local_eyelink_run_calibration(Conf);
             end
+        end
 
-            if logical(Conf.betweenBlockCalibrationChoiceEnabled)
-                calibrationAction = local_wait_between_block_calibration_action(window, Conf);
-                if strcmp(calibrationAction, 'abort')
-                    stopExperimentAfterBlock = true;
-                    stopReason = 'escape_after_block_message';
-                    local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_after_block');
-                    fprintf('esc pressed at the end of block %d\n', currentBlock);
-                    break;
-                elseif strcmp(calibrationAction, 'calibrate')
-                    Conf = local_eyelink_run_calibration(Conf);
-                end
-            end
-
-            if logical(Conf.endOfBlockMessageEnabled)
-                abortedDuringFixation = local_show_post_message_fixation(window, Conf, xCenter, yCenter, fixSizePx);
-                if abortedDuringFixation
-                    stopExperimentAfterBlock = true;
-                    stopReason = 'escape_during_post_message_fixation';
-                    local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_after_block');
-                    fprintf('esc pressed at the end of block %d\n', currentBlock);
-                    break;
-                end
-            end
-        else
-            finalAction = local_show_final_message(window, Conf);
-            if strcmp(finalAction, 'abort')
+        if logical(Conf.endOfBlockMessageEnabled)
+            abortedDuringFixation = local_show_post_message_fixation(window, Conf, xCenter, yCenter, fixSizePx);
+            if abortedDuringFixation
                 stopExperimentAfterBlock = true;
-                stopReason = 'escape_on_final_message';
-                local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_termination');
-                break;
-            end
-
-            if logical(Conf.finalMessageEnabled)
-                abortedDuringFixation = local_show_post_message_fixation(window, Conf, xCenter, yCenter, fixSizePx);
-                if abortedDuringFixation
-                    stopExperimentAfterBlock = true;
+                if isLastBlock
                     stopReason = 'escape_during_post_message_fixation';
                     local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_termination');
+                else
+                    stopReason = 'escape_during_post_message_fixation';
+                    local_emit_escape_termination_trigger(Conf, currentBlock, 'escape_after_block');
                 end
+                fprintf('esc pressed at the end of block %d\n', currentBlock);
                 break;
             end
+        end
+
+        if isLastBlock
+            break;
         end
     end
 
@@ -1881,7 +2131,7 @@ if Eyelink('IsConnected') ~= 1
     error('EyeLink disconnected during setup.');
 end
 if Conf.eyeTrackerDoCalibration
-    EyelinkDoTrackerSetup(Conf.eyeTrackerEyelinkDefaults);
+    Conf = local_eyelink_run_calibration(Conf);
 end
 if Conf.eyeTrackerImageTransferEnabled
     imgFile = Conf.eyeTrackerFixBmpPath;
@@ -1903,11 +2153,13 @@ end
 
 function Conf = local_eyelink_open_block_file(Conf, iSub, currentBlock, outputDir)
 % LOCAL_EYELINK_OPEN_BLOCK_FILE Open one EDF file for the current block.
-if ~Conf.useEyelink || ~Conf.eyeTrackerInitialized || ...
-        ~isfield(Conf, 'eyeTrackerBlockFileOpen') || ~Conf.eyeTrackerBlockFileOpen
+if ~Conf.useEyelink || ~Conf.eyeTrackerInitialized
     return;
 end
-if isfield(Conf, 'eyeTrackerBlockFileOpen') && Conf.eyeTrackerBlockFileOpen
+if ~isfield(Conf, 'eyeTrackerBlockFileOpen')
+    Conf.eyeTrackerBlockFileOpen = false;
+end
+if Conf.eyeTrackerBlockFileOpen
     Conf = local_eyelink_finalize_block_file(Conf);
 end
 
@@ -1930,7 +2182,7 @@ Conf.eyeTrackerEdfFile = [selectedBase '.edf'];
 Conf.eyeTrackerLocalEdfPath = selectedLocalPath;
 Eyelink('Openfile', Conf.eyeTrackerEdfFile);
 Eyelink('command', sprintf(['add_file_preamble_text ' ...
-    '''MoveDot occlusion v18 rescueTraject: subject %d ; block %d ; practice %d ; time %s'''], ...
+    '''MoveDot occlusion v20 rescueTraject: subject %d ; block %d ; practice %d ; time %s'''], ...
     iSub, currentBlock, double(Conf.practiceModeEnabled), datestr(now, 'YYYYmmddHHMMSS')));
 Conf.eyeTrackerBlockFileOpen = true;
 end
@@ -1953,8 +2205,8 @@ try
     Eyelink('Command', 'set_idle_mode');
 catch
 end
-if isfield(Conf, 'eyeTrackerReceiveFileAfterBlock') && Conf.eyeTrackerReceiveFileAfterBlock && ...
-        isfield(Conf, 'practiceModeEnabled') && ~Conf.practiceModeEnabled
+% Always receive EDF when real EyeLink acquisition is active for the block.
+if isfield(Conf, 'eyeTrackerReceiveFileAfterBlock') && Conf.eyeTrackerReceiveFileAfterBlock
     try
         if isfield(Conf, 'eyeTrackerEdfFile') && ~isempty(Conf.eyeTrackerEdfFile)
             fprintf('Receiving EyeLink EDF: %s\n', Conf.eyeTrackerEdfFile);
@@ -2101,11 +2353,11 @@ function local_present_fixation_break_warning(window, Conf)
 if Conf.fixationWarningDurationSec <= 0
     return;
 end
-Screen('FillRect', window, Conf.background);
-DrawFormattedText(window, 'Please keep your fixation on the cross.', ...
-    'center', 'center', Conf.fixColor);
+local_present_message_cushion(window, Conf);
+local_draw_text_message_screen(window, Conf, 'Please keep your fixation on the cross.');
 Screen('Flip', window);
 WaitSecs(max(0, double(Conf.fixationWarningDurationSec)));
+local_present_message_cushion(window, Conf);
 end
 
 function dotColor = local_dot_color_for_run(Conf, subjectNum, runNum)
@@ -2159,7 +2411,7 @@ function local_validate_sequence_trigger_range(sequenceRange, triggerMap)
 % LOCAL_VALIDATE_SEQUENCE_TRIGGER_RANGE Ensure dynamic sequence range has no conflicts.
 %
 % Motivation:
-%   Sequence-identity triggers occupy low values (typically 1..20). This
+%   Sequence-identity triggers occupy low values (typically 1..40). This
 %   guard prevents overlap with fixed condition/event/catch trigger codes.
 fixedValues = unique(cell2mat(struct2cell(triggerMap)));
 fixedValues = fixedValues(isfinite(fixedValues));
@@ -2248,35 +2500,94 @@ fprintf(['%s ITI precompute: sub=%02d block=%d run=%d seed=%d ' ...
 fprintf('%s ITI vector (sec): %s\n', prefixLabel, mat2str(itiPrecomputedSec, 4));
 end
 
-function local_draw_arena(window, rectCoords, Conf)
-% LOCAL_DRAW_ARENA Draw the arena border and interior rectangle.
+function local_draw_arena_with_colors(window, rectCoords, backgroundColor, rectColor, rectBorderColor)
+% LOCAL_DRAW_ARENA_WITH_COLORS Draw full-screen background and arena colors.
+%
+% Data flow:
+%   phase-specific color triplets -> full-screen repaint -> arena repaint.
+Screen('FillRect', window, double(backgroundColor(:)'));
 marginRect = rectCoords + [-2 -2 2 2];
-Screen('FillRect', window, Conf.rectBorderColor, marginRect);
-Screen('FillRect', window, Conf.rectColor, rectCoords);
+Screen('FillRect', window, double(rectBorderColor(:)'), marginRect);
+Screen('FillRect', window, double(rectColor(:)'), rectCoords);
+end
+
+function local_draw_arena(window, rectCoords, Conf)
+% LOCAL_DRAW_ARENA Draw the active-trial arena (black background + black arena).
+local_draw_arena_with_colors(window, rectCoords, Conf.background, Conf.rectColor, Conf.rectBorderColor);
+end
+
+function local_draw_nontrial_arena(window, Conf)
+% LOCAL_DRAW_NONTRIAL_ARENA Draw message/catch arena using current non-trial palette.
+if isfield(Conf, 'arenaRect') && ~isempty(Conf.arenaRect)
+    local_draw_arena_with_colors(window, Conf.arenaRect, ...
+        Conf.nonTrialBackgroundColor, Conf.nonTrialRectColor, Conf.nonTrialRectBorderColor);
+else
+    Screen('FillRect', window, double(Conf.nonTrialBackgroundColor(:)'));
+end
 end
 
 function local_draw_fixation(window, xCenter, yCenter, fixSizePx, fixColor)
-% LOCAL_DRAW_FIXATION Draw a simple cross fixation marker.
-lineWidth = max(1, floor(fixSizePx / 3));
+% LOCAL_DRAW_FIXATION Draw an ABC fixation target (bullseye + crosshair).
+%
+% Geometry:
+%   Matches the paper's Appendix A construction:
+%     1) draw outer circle (d1),
+%     2) draw horizontal + vertical bars with width d2,
+%     3) redraw inner circle (d2).
+%
+% Size mapping:
+%   Keep the runtime anchor (fixSizeDeg=0.2) but render a smaller ABC target
+%   by halving d2, resulting in d2=0.1 deg and d1=0.3 deg.
+innerDiameterPx = max(2, round(0.5 * fixSizePx));
+outerDiameterPx = max(innerDiameterPx + 2, round(3 * innerDiameterPx));
+outerRadiusPx = outerDiameterPx / 2;
+innerRadiusPx = innerDiameterPx / 2;
+% PTB line-width support can be backend-limited (e.g., max 16 px on some
+% GPUs). Clamp to keep the fixation renderer robust across lab/dev hosts.
+lineWidth = min(innerDiameterPx, 16);
 xCenter = double(xCenter);
 yCenter = double(yCenter);
-fixSizePx = double(fixSizePx);
-fixColor = double(fixColor(:)');
-Screen('DrawLine', window, fixColor, xCenter - fixSizePx, yCenter, ...
-    xCenter + fixSizePx, yCenter, lineWidth);
-Screen('DrawLine', window, fixColor, xCenter, yCenter - fixSizePx, ...
-    xCenter, yCenter + fixSizePx, lineWidth);
+fixColor = double(fixColor(:)'); %#ok<NASGU>  % kept for signature stability.
+
+% Build the three ABC components in draw order:
+%   1) outer filled circle,
+%   2) crosshair,
+%   3) inner filled circle (center point region).
+outerRect = [xCenter - outerRadiusPx, yCenter - outerRadiusPx, ...
+    xCenter + outerRadiusPx, yCenter + outerRadiusPx];
+innerRect = [xCenter - innerRadiusPx, yCenter - innerRadiusPx, ...
+    xCenter + innerRadiusPx, yCenter + innerRadiusPx];
+
+% Color policy:
+%   Preserve runtime color transitions (ITI gray, catch red/green feedback)
+%   by applying the caller-provided fixation color to both circles.
+ovalColor = max(0, min(255, fixColor));
+crossColor = [255, 255, 255];
+
+Screen('FillOval', window, ovalColor, outerRect, outerDiameterPx);
+Screen('DrawLine', window, crossColor, xCenter - outerRadiusPx, yCenter, ...
+    xCenter + outerRadiusPx, yCenter, lineWidth);
+Screen('DrawLine', window, crossColor, xCenter, yCenter - outerRadiusPx, ...
+    xCenter, yCenter + outerRadiusPx, lineWidth);
+Screen('FillOval', window, ovalColor, innerRect, innerDiameterPx);
 end
 
-function local_present_post_trial_interval(window, Conf, xCenter, yCenter, fixSizePx, itiDurationSec)
+function local_present_post_trial_interval(window, Conf, xCenter, yCenter, fixSizePx, itiDurationSec, suppressVisualCue)
 % LOCAL_PRESENT_POST_TRIAL_INTERVAL Present one precomputed post-trial ITI.
 %
 % Sequence (current):
-%   1) Blank (background only) with fixation for itiDurationSec.
+%   - screen_gray/fixation_gray:
+%       1) Baseline fixation (black/black) until visual-separation window start.
+%       2) Optional visual-separation window (screen gray or fixation gray).
+%       3) Baseline fixation (black/black) for the remaining ITI tail.
+%   - fixation_short:
+%       1) Baseline fixation (black/black) for itiFixationShortDelaySec.
+%       2) Fixation-only color change for itiFixationShortDurationSec.
+%       3) Baseline fixation (black/black) for the remaining ITI.
 %
 % Data flow:
 %   precomputed run-level ITI vector -> trial source-index mapping ->
-%   trial-specific itiDurationSec -> immediate blank flip (dot removed) -> hold.
+%   trial-specific itiDurationSec -> segmented phase durations -> phase flips.
 %
 % Legacy sequence (disabled, kept for quick restore):
 %   1) Blank (background only) for Conf.postTrialBlank1Sec
@@ -2285,9 +2596,80 @@ function local_present_post_trial_interval(window, Conf, xCenter, yCenter, fixSi
 if ~(isfinite(itiDurationSec) && itiDurationSec >= 0)
     itiDurationSec = double(Conf.postTrialBlank1Sec);
 end
-local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx);
-Screen('Flip', window);
-WaitSecs(max(0, double(itiDurationSec)));
+if nargin < 7
+    suppressVisualCue = false;
+end
+if ~islogical(suppressVisualCue)
+    suppressVisualCue = logical(suppressVisualCue);
+end
+itiDurationSec = max(0, double(itiDurationSec));
+
+if itiDurationSec <= 0
+    return;
+end
+
+if strcmpi(Conf.itiVisualMode, 'fixation_short')
+    cueStartSec = min(itiDurationSec, max(0, double(Conf.itiFixationShortDelaySec)));
+    cueEndSec = min(itiDurationSec, cueStartSec + max(0, double(Conf.itiFixationShortDurationSec)));
+    preCueSec = cueStartSec;
+    cueSec = max(0, cueEndSec - cueStartSec);
+    postCueSec = max(0, itiDurationSec - cueEndSec);
+
+    if preCueSec > 0
+        local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
+        Screen('Flip', window);
+        WaitSecs(preCueSec);
+    end
+    if cueSec > 0
+        local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false, Conf.itiGreyColor);
+        Screen('Flip', window);
+        WaitSecs(cueSec);
+    end
+    if postCueSec > 0
+        local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
+        Screen('Flip', window);
+        WaitSecs(postCueSec);
+    end
+    return;
+end
+
+if suppressVisualCue || strcmpi(Conf.itiVisualMode, 'off')
+    local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
+    Screen('Flip', window);
+    WaitSecs(itiDurationSec);
+    return;
+end
+
+sepStartSec = max(0, double(Conf.itiVisualSeparationDur(1)));
+sepEndSec = max(sepStartSec, double(Conf.itiVisualSeparationDur(2)));
+if sepStartSec > itiDurationSec
+    sepStartSec = itiDurationSec;
+end
+if sepEndSec > itiDurationSec
+    sepEndSec = itiDurationSec;
+end
+
+preSepSec = sepStartSec;
+sepWindowSec = max(0, sepEndSec - sepStartSec);
+postSepSec = max(0, itiDurationSec - sepEndSec);
+
+if preSepSec > 0
+    local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
+    Screen('Flip', window);
+    WaitSecs(preSepSec);
+end
+
+if sepWindowSec > 0
+    local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, true);
+    Screen('Flip', window);
+    WaitSecs(sepWindowSec);
+end
+
+if postSepSec > 0
+    local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
+    Screen('Flip', window);
+    WaitSecs(postSepSec);
+end
 % local_draw_low_luminance_grid_mask(window, Conf, xCenter, yCenter, fixSizePx);
 % Screen('Flip', window);
 % WaitSecs(max(0, double(Conf.postTrialGridSec)));
@@ -2296,10 +2678,68 @@ WaitSecs(max(0, double(itiDurationSec)));
 % WaitSecs(max(0, double(Conf.postTrialBlank2Sec)));
 end
 
-function local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx)
-% LOCAL_DRAW_POST_TRIAL_BLANK Draw an empty post-trial screen.
-Screen('FillRect', window, Conf.background);
-local_draw_fixation(window, xCenter, yCenter, fixSizePx, Conf.fixColor);
+function local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, useSeparationState, fixationOverrideColor)
+% LOCAL_DRAW_POST_TRIAL_BLANK Draw one ITI phase screen.
+if nargin < 6
+    useSeparationState = true;
+end
+if nargin < 7
+    fixationOverrideColor = [];
+end
+bgColor = Conf.background;
+rectColor = Conf.rectColor;
+rectBorderColor = Conf.rectBorderColor;
+fixColor = Conf.fixColor;
+if useSeparationState && isfield(Conf, 'itiVisualMode')
+    if strcmpi(Conf.itiVisualMode, 'screen_gray')
+        bgColor = Conf.itiGreyColor;
+        rectColor = Conf.itiGreyColor;
+        rectBorderColor = Conf.itiGreyColor;
+    elseif strcmpi(Conf.itiVisualMode, 'fixation_gray')
+        fixColor = Conf.itiGreyColor;
+    end
+end
+if ~isempty(fixationOverrideColor)
+    fixColor = double(fixationOverrideColor(:)');
+end
+if isfield(Conf, 'arenaRect') && ~isempty(Conf.arenaRect)
+    local_draw_arena_with_colors(window, Conf.arenaRect, bgColor, rectColor, rectBorderColor);
+else
+    Screen('FillRect', window, bgColor);
+end
+local_draw_fixation(window, xCenter, yCenter, fixSizePx, fixColor);
+end
+
+function local_draw_trial_fixation_baseline(window, Conf)
+% LOCAL_DRAW_TRIAL_FIXATION_BASELINE Draw baseline fixation screen (black/black).
+if isfield(Conf, 'arenaRect') && ~isempty(Conf.arenaRect)
+    local_draw_arena_with_colors(window, Conf.arenaRect, ...
+        Conf.background, Conf.rectColor, Conf.rectBorderColor);
+else
+    Screen('FillRect', window, double(Conf.background(:)'));
+end
+
+if isfield(Conf, 'fixXCenterPx') && isfield(Conf, 'fixYCenterPx') && isfield(Conf, 'fixSizePx')
+    local_draw_fixation(window, Conf.fixXCenterPx, Conf.fixYCenterPx, Conf.fixSizePx, Conf.fixColor);
+else
+    windowRect = Screen('Rect', window);
+    [xCenter, yCenter] = RectCenter(windowRect);
+    local_draw_fixation(window, xCenter, yCenter, 6, Conf.fixColor);
+end
+end
+
+function local_present_message_cushion(window, Conf)
+% LOCAL_PRESENT_MESSAGE_CUSHION Draw a short baseline fixation cushion.
+if ~isfield(Conf, 'messageScreenCushionSec')
+    return;
+end
+durationSec = max(0, double(Conf.messageScreenCushionSec));
+if durationSec <= 0
+    return;
+end
+local_draw_trial_fixation_baseline(window, Conf);
+Screen('Flip', window);
+WaitSecs(durationSec);
 end
 
 function local_draw_low_luminance_grid_mask(window, Conf, xCenter, yCenter, fixSizePx) %#ok<DEFNU>
@@ -2349,7 +2789,7 @@ end
 end
 
 function trialOrder = local_resolve_block_run_order(rawTrialOrder, iBlock, iRun, nTrialsAvailable)
-% LOCAL_RESOLVE_BLOCK_RUN_ORDER Return one block/run trial order from v21 TrialOrder.
+% LOCAL_RESOLVE_BLOCK_RUN_ORDER Return one block/run trial order from v23 TrialOrder.
 %
 % Inputs:
 %   rawTrialOrder    : numeric TrialOrder array from MAT file.
@@ -2832,6 +3272,10 @@ function [trialOut, debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debug
 abortFromQuestion = false;
 trialOut.catch_question_presented = true;
 
+% Enforce a short baseline fixation cushion between the stimulus trial and
+% the catch-question screen.
+local_present_message_cushion(window, Conf);
+
 questionStart = GetSecs;
 trialOut.catch_question_start_time = questionStart;
 trialOut.catch_response_code = 0;
@@ -2900,6 +3344,8 @@ if ~abortFromQuestion
     % Present explicit feedback immediately after the question phase.
     local_present_catch_feedback(window, Conf, xCenter, yCenter, fixSizePx, ...
         trialOut.catch_timed_out, trialOut.catch_response_correct);
+    % Enforce the same baseline cushion before returning to ITI/trial flow.
+    local_present_message_cushion(window, Conf);
 end
 end
 
@@ -2976,6 +3422,50 @@ if ~Conf.MEG
 end
 Datapixx('StopDinLog');
 Datapixx('RegWrRd');
+end
+
+function Conf = local_set_fixation_abort_enabled(Conf, isEnabled)
+% LOCAL_SET_FIXATION_ABORT_ENABLED Update fixation-abort state and derived gates.
+Conf.enableFixationAbort = logical(isEnabled);
+Conf.useGazeMonitoring = Conf.enableFixationAbort && (Conf.useEyelink || Conf.useFakeEyeTracker);
+end
+
+function [Conf, abortRequested, abortReason] = ...
+        local_handle_runtime_hotkeys(Conf, abortRequested, abortReason)
+% LOCAL_HANDLE_RUNTIME_HOTKEYS Poll emergency runtime hotkeys during trials.
+% Data flow:
+%   keyboard state -> runtime control flags:
+%     ESC aborts; i disables fixation-abort/replay queueing; o re-enables.
+[keyDown, ~, keyCode] = KbCheck;
+if ~keyDown
+    return;
+end
+
+if keyCode(Conf.escapeKeyCode)
+    abortRequested = true;
+    abortReason = 'escape_key';
+    KbReleaseWait;
+    return;
+end
+
+if any(keyCode(Conf.fixAbortDisableKeyCodes))
+    if Conf.enableFixationAbort
+        Conf = local_set_fixation_abort_enabled(Conf, false);
+        fprintf('Runtime hotkey: fixation abort DISABLED (replay queueing OFF).\n');
+        local_eyelink_safe_message('FIX_ABORT_DISABLED_HOTKEY');
+    end
+    KbReleaseWait;
+    return;
+end
+
+if any(keyCode(Conf.fixAbortEnableKeyCodes))
+    if ~Conf.enableFixationAbort
+        Conf = local_set_fixation_abort_enabled(Conf, true);
+        fprintf('Runtime hotkey: fixation abort ENABLED (replay queueing ON).\n');
+        local_eyelink_safe_message('FIX_ABORT_ENABLED_HOTKEY');
+    end
+    KbReleaseWait;
+end
 end
 
 function keyCodes = local_keynames_to_codes(keyNames)
@@ -3694,7 +4184,7 @@ function drawOpts = local_make_pathband_draw_options( ...
 %
 % Data flow:
 %   validated runtime Conf + trial geometry metadata -> drawing flags.
-%   Geometry shifts are generated in stimuli_generation_V28_rescueTraject
+%   Geometry shifts are generated in stimuli_generation_V30_rescueTraject
 %   and serialized into pathband_*_xy. Runtime still applies small terminal
 %   compensations in straight mode to preserve frame-locked occlusion
 %   timing and avoid entrance leakage artifacts.
@@ -3903,9 +4393,9 @@ function local_draw_catch_question_screen(window, Conf, xCenter, yCenter, fixSiz
 %
 % Layout:
 %   - fixation at center
-%   - configurable question text near top
-%   - NO (left) and YES (right) near bottom
-Screen('FillRect', window, Conf.background);
+%   - configurable question text around screen center
+%   - NO (left) and YES (right) around screen center
+local_draw_nontrial_arena(window, Conf);
 local_draw_fixation(window, xCenter, yCenter, fixSizePx, Conf.fixColor);
 
 windowRect = Screen('Rect', window);
@@ -3917,18 +4407,18 @@ bottomY = windowRect(2) + round(double(Conf.catchQuestionBottomYFrac) * screenH)
 noX = windowRect(1) + round(double(Conf.catchBottomLeftXFrac) * screenW);
 yesX = windowRect(1) + round(double(Conf.catchBottomRightXFrac) * screenW);
 
-DrawFormattedText(window, Conf.catchPromptText, 'center', questionY, Conf.fixColor);
-DrawFormattedText(window, Conf.catchNoLabel, noX, bottomY, Conf.fixColor);
-DrawFormattedText(window, Conf.catchYesLabel, yesX, bottomY, Conf.fixColor);
+DrawFormattedText(window, Conf.catchPromptText, 'center', questionY, local_ui_text_color(Conf));
+DrawFormattedText(window, Conf.catchNoLabel, noX, bottomY, local_ui_text_color(Conf));
+DrawFormattedText(window, Conf.catchYesLabel, yesX, bottomY, local_ui_text_color(Conf));
 end
 
 function local_present_catch_feedback(window, Conf, xCenter, yCenter, fixSizePx, timedOut, responseCorrect)
 % LOCAL_PRESENT_CATCH_FEEDBACK Show post-question feedback for catch trials.
-Screen('FillRect', window, Conf.background);
+local_draw_nontrial_arena(window, Conf);
 
 if timedOut
     % Timeout feedback is text-only (no fixation).
-    DrawFormattedText(window, Conf.catchTimeoutText, 'center', 'center', Conf.fixColor);
+    DrawFormattedText(window, Conf.catchTimeoutText, 'center', 'center', local_ui_text_color(Conf));
 else
     if isfinite(responseCorrect)
         if responseCorrect
@@ -4006,6 +4496,7 @@ action = 'continue';
 if ~isfield(Conf, 'startMessageEnabled') || ~logical(Conf.startMessageEnabled)
     return;
 end
+local_present_message_cushion(window, Conf);
 
 waitDurationSec = double(Conf.startMessageDurationSec);
 if isfinite(waitDurationSec) && waitDurationSec > 0
@@ -4029,9 +4520,11 @@ while true
         return;
     end
     if accepted
+        local_present_message_cushion(window, Conf);
         return;
     end
     if GetSecs >= deadline
+        local_present_message_cushion(window, Conf);
         return;
     end
 end
@@ -4090,6 +4583,7 @@ showDurationSec = max(0, double(durationSec));
 if showDurationSec == 0
     return;
 end
+local_present_message_cushion(window, Conf);
 
 deadline = GetSecs + showDurationSec;
 while GetSecs < deadline
@@ -4108,6 +4602,9 @@ while GetSecs < deadline
         return;
     end
 end
+if ~abortRequested
+    local_present_message_cushion(window, Conf);
+end
 end
 
 function abortRequested = local_show_post_message_fixation(window, Conf, xCenter, yCenter, fixSizePx)
@@ -4124,7 +4621,11 @@ end
 
 deadline = GetSecs + showDurationSec;
 while GetSecs < deadline
-    Screen('FillRect', window, Conf.background);
+    if isfield(Conf, 'arenaRect') && ~isempty(Conf.arenaRect)
+        local_draw_arena_with_colors(window, Conf.arenaRect, Conf.background, Conf.rectColor, Conf.rectBorderColor);
+    else
+        Screen('FillRect', window, double(Conf.background(:)'));
+    end
     local_draw_fixation(window, xCenter, yCenter, fixSizePx, Conf.fixColor);
     Screen('Flip', window);
 
@@ -4139,33 +4640,115 @@ end
 
 function local_draw_text_message_screen(window, Conf, messageText)
 % LOCAL_DRAW_TEXT_MESSAGE_SCREEN Draw a centered full-screen instruction message.
-Screen('FillRect', window, Conf.background);
-DrawFormattedText(window, char(messageText), 'center', 'center', Conf.fixColor);
+local_draw_nontrial_arena(window, Conf);
+DrawFormattedText(window, char(messageText), 'center', 'center', local_ui_text_color(Conf));
 end
 
-function action = local_wait_end_of_block_action(window, Conf, currentBlock, remainingBlocks)
+function textColor = local_ui_text_color(Conf)
+% LOCAL_UI_TEXT_COLOR Resolve message/catch text color independently of fixation color.
+%
+% Data flow:
+%   Conf.uiTextColor (preferred) -> validated RGB triplet -> DrawFormattedText.
+%   Fallback to Conf.fixColor for backward compatibility with older configs.
+textColor = double(Conf.fixColor(:)');
+if isfield(Conf, 'uiTextColor') && ~isempty(Conf.uiTextColor)
+    candidate = double(Conf.uiTextColor(:)');
+    if numel(candidate) == 3 && all(isfinite(candidate)) && ...
+            all(candidate >= 0) && all(candidate <= 255)
+        textColor = candidate;
+    end
+end
+end
+
+function shouldShow = local_should_show_blink_break(Conf, blockTrialCount, isLastTrialInRun, currentRun, runIdx, totalRuns)
+% LOCAL_SHOULD_SHOW_BLINK_BREAK Decide whether to show an automatic blink break.
+shouldShow = false;
+if ~isfield(Conf, 'blinkBreakEnabled') || ~logical(Conf.blinkBreakEnabled)
+    return;
+end
+if ~isfinite(blockTrialCount) || blockTrialCount < 1
+    return;
+end
+if mod(blockTrialCount, Conf.blinkBreakEveryNTrials) ~= 0
+    return;
+end
+
+% Avoid stacking pause screens when a scheduled transition screen already
+% interrupts flow (run1->run2 or end-of-block).
+if isLastTrialInRun
+    if runIdx == totalRuns
+        return;
+    end
+    if currentRun == 1 && isfield(Conf, 'run1TransitionMessageEnabled') && ...
+            logical(Conf.run1TransitionMessageEnabled)
+        return;
+    end
+end
+shouldShow = true;
+end
+
+function local_present_blink_break(window, Conf)
+% LOCAL_PRESENT_BLINK_BREAK Show a fixed-duration blink-rest countdown screen.
+durationSec = max(0, double(Conf.blinkBreakDurationSec));
+if durationSec <= 0
+    return;
+end
+local_present_message_cushion(window, Conf);
+
+deadline = GetSecs + durationSec;
+lastShownSec = inf;
+while true
+    remainingSec = max(0, ceil(deadline - GetSecs));
+    if remainingSec ~= lastShownSec
+        msg = sprintf('%s\n\n%s %d', ...
+            char(Conf.blinkBreakTitleText), char(Conf.blinkBreakCountdownPrefix), remainingSec);
+        local_draw_text_message_screen(window, Conf, msg);
+        Screen('Flip', window);
+        lastShownSec = remainingSec;
+    end
+    if remainingSec <= 0
+        break;
+    end
+    WaitSecs(0.010);
+end
+local_present_message_cushion(window, Conf);
+end
+
+function accuracyText = local_format_block_accuracy_percent(blockCatchCorrect, blockCatchScored)
+% LOCAL_FORMAT_BLOCK_ACCURACY_PERCENT Format block catch accuracy as integer percent.
+if isfinite(blockCatchScored) && blockCatchScored > 0
+    accuracyPct = round(100 * (blockCatchCorrect / blockCatchScored));
+    accuracyText = sprintf('%d%%', accuracyPct);
+else
+    accuracyText = 'N/A';
+end
+end
+
+function action = local_wait_end_of_block_action(window, Conf, completedBlocksSoFar, blockCatchCorrect, blockCatchScored)
 % LOCAL_WAIT_END_OF_BLOCK_ACTION Show block-end message and wait for 1/8.
 action = 'continue';
 if ~isfield(Conf, 'endOfBlockMessageEnabled') || ~logical(Conf.endOfBlockMessageEnabled)
     return;
 end
+local_present_message_cushion(window, Conf);
 
 % Resolve block-end text from config format string with a safety fallback.
 msgTemplate = char(Conf.endOfBlockMessageTextTemplate);
-fallbackTemplate = ['Block %d ended.\n' ...
-    'Remaining blocks: %d.\n\n' ...
+fallbackTemplate = ['Completed blocks so far: %d.\n\n' ...
     'Press Red or Blue to start the next block.'];
 try
     if isempty(strfind(msgTemplate, '%')) %#ok<STREMP>
         % Template was likely pre-formatted incorrectly; restore full message.
-        msg = sprintf(fallbackTemplate, currentBlock, remainingBlocks);
+        msg = sprintf(fallbackTemplate, completedBlocksSoFar);
     else
-        msg = sprintf(msgTemplate, currentBlock, remainingBlocks);
+        msg = sprintf(msgTemplate, completedBlocksSoFar);
     end
 catch
     % Keep runtime resilient to malformed custom templates.
-    msg = sprintf(fallbackTemplate, currentBlock, remainingBlocks);
+    msg = sprintf(fallbackTemplate, completedBlocksSoFar);
 end
+msg = sprintf('%s\n\nCurrent block catch accuracy: %s', ...
+    msg, local_format_block_accuracy_percent(blockCatchCorrect, blockCatchScored));
 
 waitDurationSec = double(Conf.endOfBlockMessageDurationSec);
 if isfinite(waitDurationSec) && waitDurationSec > 0
@@ -4188,9 +4771,11 @@ while true
         return;
     end
     if accepted
+        local_present_message_cushion(window, Conf);
         return;
     end
     if GetSecs >= deadline
+        local_present_message_cushion(window, Conf);
         return;
     end
 end
@@ -4213,6 +4798,7 @@ if ~isfield(Conf, 'eyeTrackerAllowBetweenBlockCalibration') || ...
         ~isfield(Conf, 'useEyelinkSession') || ~logical(Conf.useEyelinkSession)
     return;
 end
+local_present_message_cushion(window, Conf);
 
 waitDurationSec = double(Conf.betweenBlockCalibrationChoiceDurationSec);
 if isfinite(waitDurationSec) && waitDurationSec > 0
@@ -4241,11 +4827,13 @@ while true
             if canAccept && any(keyCode(Conf.calibrationChoiceSkipKeyCodes))
                 action = 'skip';
                 KbReleaseWait;
+                local_present_message_cushion(window, Conf);
                 return;
             end
             if canAccept && any(keyCode(Conf.calibrationChoiceRunKeyCodes))
                 action = 'calibrate';
                 KbReleaseWait;
+                local_present_message_cushion(window, Conf);
                 return;
             end
         end
@@ -4260,10 +4848,12 @@ while true
                 rawValue = bitand(uint32(data(end)), Conf.megButtonMask);
                 if canAccept && any(rawValue == Conf.calibrationChoiceSkipMegValues)
                     action = 'skip';
+                    local_present_message_cushion(window, Conf);
                     return;
                 end
                 if canAccept && any(rawValue == Conf.calibrationChoiceRunMegValues)
                     action = 'calibrate';
+                    local_present_message_cushion(window, Conf);
                     return;
                 end
             end
@@ -4272,26 +4862,69 @@ while true
 
     if GetSecs >= deadline
         action = 'skip';
+        local_present_message_cushion(window, Conf);
         return;
     end
 end
 end
 
 function Conf = local_eyelink_run_calibration(Conf)
-% LOCAL_EYELINK_RUN_CALIBRATION Run EyeLink calibration on participant request.
-if ~isfield(Conf, 'useEyelinkSession') || ~Conf.useEyelinkSession || ...
-        ~isfield(Conf, 'eyeTrackerInitialized') || ~Conf.eyeTrackerInitialized
+% LOCAL_EYELINK_RUN_CALIBRATION Run EyeLink tracker setup/calibration safely.
+%
+% Behavior:
+%   - Works for both startup and between-block recalibration.
+%   - Leaves tracker in idle/offline mode after returning from setup.
+%   - Debounces ESC used to exit setup so it is not misread as experiment abort.
+if ~isfield(Conf, 'useEyelinkSession') || ~Conf.useEyelinkSession
     return;
 end
 if ~isfield(Conf, 'eyeTrackerEyelinkDefaults') || isempty(Conf.eyeTrackerEyelinkDefaults)
     return;
 end
 try
+    Eyelink('Command', 'set_idle_mode');
+    Eyelink('WaitForModeReady', 500);
+catch
+    % Keep runtime resilient if mode transition commands are unavailable.
+end
+try
     EyelinkDoTrackerSetup(Conf.eyeTrackerEyelinkDefaults);
 catch
     % Keep runtime robust if calibration is unavailable on current host.
 end
+local_release_keyboard_state_after_eyelink_setup(Conf);
+try
+    Eyelink('Command', 'set_idle_mode');
+    Eyelink('WaitForModeReady', 500);
+catch
+    % Keep runtime resilient if mode transition commands are unavailable.
+end
 WaitSecs(max(0, double(Conf.eyeTrackerWaitSec)));
+end
+
+function local_release_keyboard_state_after_eyelink_setup(Conf)
+% LOCAL_RELEASE_KEYBOARD_STATE_AFTER_EYELINK_SETUP Clear sticky setup-exit keys.
+%
+% Rationale:
+%   EyeLink setup/calibration commonly returns when ESC exits the tracker
+%   setup menu. Without a short release debounce, this ESC can be detected
+%   by subsequent runtime key polling as an experiment-abort request.
+if ~isfield(Conf, 'enableKeyboardDebugResponse') || ~Conf.enableKeyboardDebugResponse
+    return;
+end
+
+releaseDeadline = GetSecs + max(0, double(Conf.eyeTrackerPostCalibrationKeyReleaseSec));
+try
+    while GetSecs < releaseDeadline
+        [keyDown, ~, ~] = KbCheck;
+        if ~keyDown
+            break;
+        end
+        WaitSecs(0.005);
+    end
+catch
+    % Best effort only; keep experiment flow alive on hosts without keyboard access.
+end
 end
 
 function action = local_show_final_message(window, Conf)

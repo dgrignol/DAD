@@ -1,21 +1,21 @@
-classdef Config_stimuli_generation_V28_rescueTraject
+classdef Config_stimuli_generation_V30_rescueTraject
     properties(Constant)
 
-        % CONFIG_STIMULI_GENERATION_V28_RESCUETRAJECT_PATHBANDOCCLUDER
+        % CONFIG_STIMULI_GENERATION_V30_RESCUETRAJECT_PATHBANDOCCLUDER
         %
         % Purpose:
         %   Centralize one-dot trajectory generation controls used by:
-        %     - experiment/stimuli_generation_V28_rescueTraject.m
+        %     - experiment/stimuli_generation_V30_rescueTraject.m
         %
         % Usage example (interactive):
         %   cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment');
         %   addpath('lib/');
-        %   stimuli_generation_V28_rescueTraject;
+        %   stimuli_generation_V30_rescueTraject;
         %
         % Usage example (non-interactive):
         %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
         %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
-        %    addpath('lib/'); run('stimuli_generation_V28_rescueTraject.m');"
+        %    addpath('lib/'); run('stimuli_generation_V30_rescueTraject.m');"
         %
         % Key assumptions:
         %   - One-dot generation only.
@@ -25,8 +25,8 @@ classdef Config_stimuli_generation_V28_rescueTraject
         %     the dot is fully covered at the deviance frame.
 
         % Number of unique sequence IDs generated per condition.
-        % Example: 20 -> sequence labels 1..20 in each condition family.
-        trialsPerCondition = 20;
+        % Example: 40 -> sequence labels 1..40 in each condition family.
+        trialsPerCondition = 40;
         % Trial duration in seconds used to derive frame count.
         % Example: 2.67 s at 120 Hz -> 320 frames/trial.
         trialDuration = 2.67; % seconds
@@ -50,8 +50,8 @@ classdef Config_stimuli_generation_V28_rescueTraject
         dotSpeedDegPerSec = 3.73;
         % Derived framewise displacement (deg/frame).
         % Example: consumed directly by path integrator each frame.
-        dotSpeedDegPerFrame = Config_stimuli_generation_V28_rescueTraject.dotSpeedDegPerSec / ...
-            Config_stimuli_generation_V28_rescueTraject.frameFrequency;
+        dotSpeedDegPerFrame = Config_stimuli_generation_V30_rescueTraject.dotSpeedDegPerSec / ...
+            Config_stimuli_generation_V30_rescueTraject.frameFrequency;
 
         % Path-band occluder thickness controls.
         % Width multiplier applied to dot diameter.
@@ -63,10 +63,10 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Final occluder width used by path-band geometry (deg).
         % Example: max(dotWidth*multiplier, dotWidth+margin).
         pathBandWidthDeg = max( ...
-            Config_stimuli_generation_V28_rescueTraject.dotWidth * ...
-            Config_stimuli_generation_V28_rescueTraject.pathBandWidthMultiplier, ...
-            Config_stimuli_generation_V28_rescueTraject.dotWidth + ...
-            Config_stimuli_generation_V28_rescueTraject.pathBandMinMarginDeg);
+            Config_stimuli_generation_V30_rescueTraject.dotWidth * ...
+            Config_stimuli_generation_V30_rescueTraject.pathBandWidthMultiplier, ...
+            Config_stimuli_generation_V30_rescueTraject.dotWidth + ...
+            Config_stimuli_generation_V30_rescueTraject.pathBandMinMarginDeg);
 
         % Path-band terminal style used by geometry-based visibility metadata.
         % Supported values:
@@ -93,9 +93,9 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Collision handling mode around central fixation zone.
         % Example: 'move' (default here), alternatives: 'retry', 'off'.
         fixationCollisionMode = 'move';
-        % Approximate fixation cross full span in visual degrees.
-        % Example: if runtime has Conf.fixSizeDeg = 0.2, set this to ~0.4.
-        fixationCrossSizeDegApprox = 0.4;
+        % Approximate fixation target full span in visual degrees.
+        % Example: smaller ABC (bullseye + crosshair) outer diameter 0.3 deg.
+        fixationCrossSizeDegApprox = 0.3;
         % Extra conservative clearance around fixation, beyond
         % cross half-span + dot radius, to prevent near-miss trajectories.
         % Example: 0.10 keeps the dot visibly farther from the cross center.
@@ -103,9 +103,9 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Exclusion radius for the dot center around fixation.
         % Example: cross half-span + dot radius + safety margin.
         fixationExclusionRadiusDeg = ...
-            (Config_stimuli_generation_V28_rescueTraject.fixationCrossSizeDegApprox / 2) + ...
-            (Config_stimuli_generation_V28_rescueTraject.dotWidth / 2) + ...
-            Config_stimuli_generation_V28_rescueTraject.fixationSafetyMarginDeg;
+            (Config_stimuli_generation_V30_rescueTraject.fixationCrossSizeDegApprox / 2) + ...
+            (Config_stimuli_generation_V30_rescueTraject.dotWidth / 2) + ...
+            Config_stimuli_generation_V30_rescueTraject.fixationSafetyMarginDeg;
         % Extra safety padding added to the move-mode target radius.
         % Example: 0.01 deg ensures a small clearance margin.
         fixationMovePaddingDeg = 0.01;
@@ -130,10 +130,11 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Example: match baseline windows to keep magnitude regimes balanced.
         deviantCurvatureWindows = [-0.8, -0.3755; 0.3755, 0.8];
         % Allowed signed deviant-turn windows in degrees at onset.
-        % Example: [-81,-10;10,81] excludes exactly-zero signed turn.
-        deviantSignedTurnWindows = [-81, -15; 15, 81];
+        % Example: [-81,0;0,81] includes zero-turn samples; generator-side
+        % guard rejects degenerate "deviant" trials if no effective change.
+        deviantSignedTurnWindows = [-81, 0; 0, 81];
 
-        % Fixed-frame occlusion timing controls for the V28 rescueTraject paradigm.
+        % Fixed-frame occlusion timing controls for the V30 rescueTraject paradigm.
         % Fixed frame index where deviance and full occlusion begin.
         % Example: 130 at 120 Hz is ~1.08 s after trial start.
         fixedDevianceFrame = 130;
@@ -145,20 +146,20 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Likelihood-mode condition definition consumed by generator.
         % Example: directionVariance [0,45] -> nondeviant + deviant condition.
         likelihood = struct( ...
-            'pathDuration', Config_stimuli_generation_V28_rescueTraject.trialDuration, ...
+            'pathDuration', Config_stimuli_generation_V30_rescueTraject.trialDuration, ...
             'directionVariance', [0, 45], ...
             'directionChange', 30, ...
             'deviantSignedTurnWindows', ...
-            Config_stimuli_generation_V28_rescueTraject.deviantSignedTurnWindows);
+            Config_stimuli_generation_V30_rescueTraject.deviantSignedTurnWindows);
 
         % Output folder (relative to experiment/ unless absolute path is used).
         % Example: 'input_files/' writes MovDot_SubXX*.mat there.
         inputDirectory = 'input_files/';
 
         % Versioned output filenames for the path-band occluder branch.
-        % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject.mat
-        observedFilePattern = 'MovDot_Sub%02d_V28_rescueTraject.mat';
-        % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject_predicted.mat
-        predictedFilePattern = 'MovDot_Sub%02d_V28_rescueTraject_predicted.mat';
+        % Example: subject 66 -> MovDot_Sub66_V30_rescueTraject.mat
+        observedFilePattern = 'MovDot_Sub%02d_V30_rescueTraject.mat';
+        % Example: subject 66 -> MovDot_Sub66_V30_rescueTraject_predicted.mat
+        predictedFilePattern = 'MovDot_Sub%02d_V30_rescueTraject_predicted.mat';
     end
 end

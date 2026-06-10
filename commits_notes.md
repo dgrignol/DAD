@@ -1,3 +1,62 @@
+# 10 Jun 2026 14:57
+
+## Upgrade the canonical experiment stack to V30/v23/v20
+
+### `experiment/CreateInputFiles_v21_rescueTraject.m` -> `experiment/CreateInputFiles_v23_rescueTraject.m`
+- Advance the schedule builder to the V30/v23/v20 file contract and preserve deterministic three-run, block-aware scheduling.
+- Generate percentage-based type-1 and type-2 catch plans, padded `TrialOrder`/`CatchPlan` arrays, compatibility `TrialStruct` data, and explicit schedule metadata.
+- Add non-interactive subject/seed aliases, overwrite protection, validation of balanced condition pools, and detailed input/output documentation.
+
+### `experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m` -> `experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m`
+- Upgrade the runtime to consume V30 trajectories and v23 schedule/catch-plan artifacts.
+- Add configurable jittered ITIs, fixation-only separation cues, centered catch prompts, timed blink breaks, message-screen cushions, and block-level catch-accuracy reporting.
+- Restore configurable EyeLink acquisition, per-block EDF receipt, fixation-break replay handling, calibration debounce, and runtime `i`/`o` fixation-abort controls.
+- Add strict MEG sync-test policy, full Psychtoolbox flip diagnostics, missed-flip guardrails, and precomputed straight-terminal path-band geometry.
+- Update trigger behavior to the v10 map: condition onsets `71/81/91`, mutually exclusive catch results `201/202/113`, gaze/replay `150/151`, and ESC termination `152`.
+
+### `experiment/fixation.bmp`
+- Replace the EyeLink/runtime fixation bitmap with the intended updated 1024x768 acquisition asset shared by the canonical and standalone experiment bundles.
+- Binary warning: bitmap changes are normally reviewed carefully because they cannot be line-diffed. The user explicitly confirmed this asset change is intentional, so it remains staged. To reverse that decision before commit: `git reset HEAD -- experiment/fixation.bmp`.
+- No `.gitignore` rule is appropriate because this bitmap is a required runtime input rather than generated output.
+
+### `experiment/lib/Config_runtime_v18_rescueTraject.m` -> `experiment/lib/Config_runtime_v20_rescueTraject.m`
+- Expand the runtime preset for V20 with documented MEG, EyeLink, ITI, catch-layout, blink-break, path-band, sync-test, and flip-guard controls.
+- Default the operational preset to 1000-1500 ms ITIs with a 100 ms delayed, 300 ms fixation-only cue while allowing schedule defaults through empty overrides.
+
+### `experiment/lib/Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.m` -> `experiment/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m`
+- Update file naming and dependencies to the V30/v23/v20 stack.
+- Set 40 base trials per condition, 15% catch rates, three-run block structure, message/calibration flow, straight path-band terminal controls, timing guardrails, and per-block EyeLink EDF policy.
+
+### `experiment/lib/Config_stimuli_generation_V28_rescueTraject.m` -> `experiment/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Raise generation to 40 unique sequence identities per condition and centralize V30 motion, fixation exclusion, curvature, deviance, and path-band geometry parameters.
+- Keep fixed full-occlusion timing anchored at frame 130 through frame 190 under the 120 Hz MEG profile.
+
+### `experiment/lib/plot_paths.m`
+- Add a reusable path visualization helper with caller-provided axes, shared limits, time-based coloring, configurable save behavior, and input validation.
+
+### `experiment/runExpReadable.m`
+- Add a readable, checkpoint-backed launcher that keeps subject, block, overwrite, and fixation settings stable across child scripts that call `clearvars`.
+- Run generation, schedule creation, input verification, and real MEG/EyeLink runtime in explicit order with skip-if-existing behavior.
+
+### `experiment/runExperiment.m`
+- Replace the legacy single-runtime call with a documented end-to-end acquisition launcher for V30 generation, v23 schedule creation, and v20 execution.
+- Preserve runtime state through a temporary MAT checkpoint and force the intended real DataPixx/MEG and EyeLink acquisition profile.
+
+### `experiment/runTestExperiment.m`
+- Add a laptop-safe end-to-end launcher using fake gaze, configurable dry-run validation, local sync-test bypass, one-block scheduling, and cleanup of test outputs/state.
+- Exercise the current ITI cue, blink-break, catch-layout, and message flow without requiring EyeLink hardware.
+
+### `experiment/stimuli_generation_V28_rescueTraject.m` -> `experiment/stimuli_generation_V30_rescueTraject.m`
+- Replace source-subject transforms with config-driven generation of paired nondeviant, deviant, and predicted trajectories.
+- Enforce shared pre-deviance paths, effective-deviance checks, fixation-zone collision handling, fixed-frame path-band occlusion metadata, and deterministic subject seeding.
+- Save observed/predicted MAT artifacts plus an optional three-condition path visualization generated through `plot_paths`.
+
+### `experiment/trigger_codes_occlusion_v9_rescueTraject.md` -> `experiment/trigger_codes_occlusion_v10_rescueTraject.md`
+- Document the V20 trigger map, 40-value sequence range, mutually exclusive catch-question outcomes, per-block EDF policy, and standardized ESC logging.
+
+Suggested commit message:
+`Upgrade experiment stack to V30 v23 and v20`
+
 # 10 Jun 2026 14:56
 
 ## Ignore generated MEG, experiment, and Python artifacts
