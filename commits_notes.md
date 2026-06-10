@@ -1,3 +1,64 @@
+# 10 Jun 2026 15:01
+
+## Add a standalone laptop-safe experiment bundle
+
+### `experiment/run_outside_lab/CreateInputFiles_v22_rescueTraject.m`
+- Include the compatibility v22 scheduler for V29/v19 datasets and previously generated outside-lab subjects.
+
+### `experiment/run_outside_lab/CreateInputFiles_v23_rescueTraject.m`
+- Include the current v23 three-run schedule and 15% catch-plan builder for V30/v20 runs.
+
+### `experiment/run_outside_lab/MoveDot1_experiment_occlusion_v19_rescueTraject.m`
+- Preserve the prior v19 laptop runtime for compatibility with V29/v22 inputs and historical outside-lab sessions.
+
+### `experiment/run_outside_lab/MoveDot1_experiment_occlusion_v20_rescueTraject.m`
+- Add the current laptop-adapted V20 runtime with keyboard arrow mappings, centered catch labels, non-MEG operation, and no dependency on EyeLink hardware.
+
+### `experiment/run_outside_lab/RUNME.m`
+- Add the primary one-command laptop launcher with startup dialog, automatic unused subject selection, display refresh-rate detection, local directory creation, and non-MEG runtime defaults.
+- Scale V30 timing metadata to the detected display refresh rate and keep generation, scheduling, and runtime self-contained in the copied folder.
+
+### `experiment/run_outside_lab/fixation.bmp`
+- Include the confirmed fixation bitmap used by the copied runtime.
+- Binary warning: this required bitmap cannot be line-reviewed. The user explicitly confirmed the asset is intentional; to unstage it before commit: `git reset HEAD -- experiment/run_outside_lab/fixation.bmp`.
+
+### `experiment/run_outside_lab/lib/Config_runtime_v19_rescueTraject.m`
+- Include the compatibility v19 runtime preset for prior outside-lab datasets.
+
+### `experiment/run_outside_lab/lib/Config_runtime_v20_rescueTraject.m`
+- Include the current V20 preset surface for ITI cues, catch layout, blink breaks, path-band geometry, and optional fake gaze.
+
+### `experiment/run_outside_lab/lib/Config_schedule_CreateInputV22_MoveDotV19_rescueTraject.m`
+- Include schedule/catch/message constants and V29/v22/v19 filename contracts.
+
+### `experiment/run_outside_lab/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m`
+- Adapt v23 message gates and calibration-choice prompts to LEFT/RIGHT keyboard controls while retaining the current catch and block design.
+
+### `experiment/run_outside_lab/lib/Config_stimuli_generation_V29_rescueTraject.m`
+- Include V29 generation parameters for compatibility with existing outside-lab subject files.
+
+### `experiment/run_outside_lab/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Include the current 40-path V30 generation parameters.
+
+### `experiment/run_outside_lab/lib/Utils.m`
+- Package the local utility class required by both generation lineages.
+
+### `experiment/run_outside_lab/lib/createNewPoint.m`
+- Package the local boundary and bounce helper required by trajectory synthesis.
+
+### `experiment/run_outside_lab/lib/plot_paths.m`
+- Include trajectory preview rendering without requiring parent-repository helpers.
+
+### `experiment/run_outside_lab/stimuli_generation_V29_rescueTraject.m`
+- Preserve V29 config-driven generation for compatibility runs.
+
+### `experiment/run_outside_lab/stimuli_generation_V30_rescueTraject.m`
+- Extend V30 generation with optional target-display refresh-rate scaling for frame count, per-frame speed, and fixed event indices.
+- Resolve plotting helpers locally when the full repository simulation tree is unavailable.
+
+Suggested commit message:
+`Add standalone laptop experiment bundle`
+
 # 10 Jun 2026 15:00
 
 ## Add a standalone V30/v23/v20 MEG-lab experiment bundle
