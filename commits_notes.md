@@ -1,3 +1,62 @@
+# 10 Jun 2026 15:00
+
+## Add a standalone V30/v23/v20 MEG-lab experiment bundle
+
+### `experiment/run_MEG_lab/CreateInputFiles_v23_rescueTraject.m`
+- Package the canonical v23 schedule/catch-plan builder inside the self-contained lab directory.
+
+### `experiment/run_MEG_lab/MEG_lab_procedure.md`
+- Include the acquisition-room setup, participant preparation, EyeLink, head-position, response mapping, shutdown, and troubleshooting procedure with lab-copy-specific wording.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v20_rescueTraject.m`
+- Package the complete V20 runtime with MEG/DataPixx triggers, EyeLink replay handling, timing diagnostics, ITI cues, blink breaks, catch scoring, and block-level saves.
+
+### `experiment/run_MEG_lab/README_RUN_MEG_LAB.md`
+- Document interactive and Intel-architecture MATLAB launch commands, active V30/v23/v20 defaults, block-resume editing, and skip-if-existing behavior.
+
+### `experiment/run_MEG_lab/fixation.bmp`
+- Include the confirmed runtime fixation bitmap required for EyeLink image transfer in the standalone copy.
+- Binary warning: this required bitmap cannot be line-reviewed. The user explicitly confirmed the asset is intentional; to unstage it before commit: `git reset HEAD -- experiment/run_MEG_lab/fixation.bmp`.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v20_rescueTraject.m`
+- Specialize the runtime preset for real lab acquisition: EyeLink enabled, fake gaze disabled, 3-degree fixation threshold, bounded replay, and calibration enabled.
+
+### `experiment/run_MEG_lab/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m`
+- Include the matching v23 schedule, catch, message, path-band, timing, and EyeLink policy constants.
+
+### `experiment/run_MEG_lab/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Include the matching 40-path V30 stimulus-generation constants and fixed occlusion geometry.
+
+### `experiment/run_MEG_lab/lib/Utils.m`
+- Package the legacy motion-generation utility class required by the local configs and generator.
+
+### `experiment/run_MEG_lab/lib/createNewPoint.m`
+- Package the local boundary-intersection and bounce helper used by trajectory generation.
+
+### `experiment/run_MEG_lab/lib/plot_paths.m`
+- Include the reusable trajectory visualization helper so path previews do not depend on files outside the lab bundle.
+
+### `experiment/run_MEG_lab/participant_instruction_script.md`
+- Include the participant-facing fixation, catch-response, blink-break, and comfort instructions alongside the executable bundle.
+
+### `experiment/run_MEG_lab/runExpReadable.m`
+- Add the primary lab launcher with subject/block controls, non-overwriting generation defaults, and a 3-degree runtime fixation default from the lab config.
+
+### `experiment/run_MEG_lab/runExperiment.m`
+- Include the full configurable acquisition launcher as an alternative entry point.
+
+### `experiment/run_MEG_lab/runTestExperiment.m`
+- Include the fake-eye-tracker test launcher for pre-session logic and display checks.
+
+### `experiment/run_MEG_lab/stimuli_generation_V30_rescueTraject.m`
+- Package config-driven observed/predicted trajectory generation and condition path plotting.
+
+### `experiment/run_MEG_lab/trigger_codes_occlusion_v10_rescueTraject.md`
+- Include the V20 condition, sequence, occlusion, catch, gaze/replay, and ESC trigger reference.
+
+Suggested commit message:
+`Add standalone MEG lab experiment bundle`
+
 # 10 Jun 2026 14:59
 
 ## Refresh experiment procedures, participant guidance, and work tracking
