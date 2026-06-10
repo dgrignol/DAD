@@ -1,30 +1,58 @@
 TODO
 Current set of experiment script and config:
-experiment/lib/Config_stimuli_generation_V28_rescueTraject.m
-experiment/stimuli_generation_V28_rescueTraject.m
-experiment/lib/Config_schedule_CreateInputV21_MoveDotV18_rescueTraject.m
-experiment/CreateInputFiles_v21_rescueTraject.m
-experiment/lib/Config_runtime_v18_rescueTraject.m
-experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
-
-
-
+experiment/lib/Config_stimuli_generation_V30_rescueTraject.m
+experiment/stimuli_generation_V30_rescueTraject.m
+experiment/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
+experiment/CreateInputFiles_v23_rescueTraject.m
+experiment/lib/Config_runtime_v20_rescueTraject.m
+experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
 
 **Experiment Flow**
-- [ ] accuracy printed at the end of every block
-- [ ] Debug the current startup EyeLink calibration, which does not seem to work reliably.
-  - [ ] at every re-calibration at the end of a block, it stops the experiment because it requires to press esc at the end of the calibration, this does not happen at the end of the very first calibration when you start the exp.
+- [ ] if blink happens in between trials should be fine
 
-**From participant feedback**
-- [ ] consider insertion of higher number of catch trials
+- [ ] Test the button that if pressed turn enableFixationAbort = false during runtime
+
+
+**From experiment session**
+- [ ] Improve experiment instructions
+- [ ] instruction "don't try to anticipate"
+- [ ] not question in the first trial after blink break
+
+
 
 **DONE**
+
+
+**From participant feedback**
+- [x] catch trials to 15%
+
+**Aspect**
+- [x] put catch question in the center of the screen
+
+**From participant feedback**
+- [x] catch trials to 15%
+
 **Procedure**
 - [x] make PRACTICE! a non meg script that launches equal for everyone, only catch trials, tunable number of trials per run1 and 2/3, clear separation between run 1 and 2/3 with instructions of one and the other; Repeatable with a button press; it just ask the particpant number at the start to save a single file with the accuracy and RTs; No MEG part, but there is the eyelink part with calibration and replays but can be switched off with parameter at the start.
 
+
+**Parameters**
+- [x] use also curvtures similar to the pre-deviance. But avoid non-deviant deviant though, meaning the deviant cannot choose the exact pre-deviance curvature and 0 direction change).
+
 **Experiment Flow**
+- [x] **IMPORTANT** !!!40 unique paths and 5 repetitions!!!
+- [X] add a button that if pressed turn enableFixationAbort = false during runtime. e.g. pressing "i" and gives a message on console to give a feedback on the current status of the variable.
+- [x] ITI will change. During the ITI, precisely after 100ms from the trial end, the fixation cross will change colour for 300ms. That's it. no other stuff happening during the ITI.
+- [x] learning effect
+- [x] create experiment instructions sheet and also add the blink break mention
+- [x] same threshold for everyone 3° for the fixation
+- [x] ITI grey screen to separate the trials visually (or cross color change)
+- [x] accuracy printed at the end of every block
+- [x] Debug the current startup EyeLink calibration, which does not seem to work reliably.
+  - [x] at every re-calibration at the end of a block, it stops the experiment because it requires to press esc at the end of the calibration, this does not happen at the end of the very first calibration when you start the exp.
+- [x] ITI from [500,1000] to [1000,1500]? Ingmar suggestion. Plus, every 10 trials a mini break of 5 seconds to blink with a written text made for blinking?
 - [x] Add an option to call EyeLink calibration again between blocks.
-- [x] Confirm that replayed trials should stay within the same run. The current behavior is run-local: replays are appended to the end of the current run (`run 1 = always_visible`, `runs 2/3 = occluded`). -> They do replay per run. Replay scheduling is run-local: when a fixation break (trigger 150) occurs, that trial’s source index is appended to the end of the current run’s schedule, and replay state resets at each run (no cross-run/block carry-over). With v19-generated TrialOrder, run 1 sources are always_visible and runs 2/3 sources are occluded, so replayed trials inherit the current run’s condition family; this condition split depends on the input schedule.
+- [x] Confirm that replayed trials should stay within the same run. The current behavior is run-local: replays are appended to the end of the current run (`run 1 = always_visible`, `runs 2/3 = occluded`). -> They do replay per run. Replay scheduling is run-local: when a fixation break (trigger 150) occurs, that trial’s source index is appended to the end of the current run’s schedule, and replay state resets at each run (no cross-run/block carry-over). With v23-generated TrialOrder, run 1 sources are always_visible and runs 2/3 sources are occluded, so replayed trials inherit the current run’s condition family; this condition split depends on the input schedule.
 - [x] Decide the EyeLink calibration policy. The current v16 runtime calls calibration once at experiment start, before the block loop.
 - [x] Add a visible countdown to the run-1 to run-2 transition screen (`End of first task. You can rest your eyes. Second task will start soon.`).
 - [x] Add a trigger for experiment termination via `Esc`.
@@ -38,6 +66,11 @@ experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
 - [x] Keep the current block-level `.mat` save, which already happens before the end-of-block screen.
 - [x] Make the EyeLink output block-independent as well, so all files needed for analysis exist by the time the end-of-block message appears.
 - [x] Decide whether EyeLink should use one EDF per block. The current code opens one EDF before the block loop and receives/moves it only once during final cleanup.
+- [x]
+**SAVE OF EDF EYE-TRACKER FILES**
+- [x] create new set of experiment scripts and config to save EDF EYE-TRACKER FILES
+  - [x] Should save at end of every block
+- [x] add the saving also to old versions V18 so we are covered if for some reason we go back
 
 **Visual Display**
 - [x] Set `background`, `rectColor`, and `rectBorderColor` to the same black color: `[0 0 0]`. The current mismatch is mainly the dark-gray arena fill against a black background.
@@ -50,25 +83,19 @@ experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m
 
 
 
-
-
-
-
-
-
 OLD STUFF TO BE IGNORED FOR NOW:
 - [x] check changes to constrains worked: new constrain that checks the non-deviant paths in deviant trials would not have touched the boudaries
 - [x] scale the jitter with the distance from the center? (Bence suggestion)
-- [ ] Catch trials behavioural testing
+- [x] Catch trials behavioural testing
 - [x] try to find if eye-tracer detects blinks automatically or not and adjust code so that it is less demanding on the participant
 - [ ] non avere anticorrelation della posizione dei dots.
 
 - [ ] SAVING ISSUE:
-    - [ ] extend mid-run save "firstBlock" to the end too and call it "backupSave"
-    - [ ] at the end see if you can save first and then send the message to finish the experiment
+    - [x] extend mid-run save "firstBlock" to the end too and call it "backupSave"
+    - [x] at the end see if you can save first and then send the message to finish the experiment
     - [ ] Check this issue carefully, especially the : CatchOutput construction can crash right before saving. CatchOutput is built before the final save(...) (experiment/MoveDot1_experiment_vX.m (lines 2413-2434)). It assumes that for each trial iCatch = 1:numcatch, arrays like correct_response and RT have at least numcatch elements (experiment/MoveDot1_experiment_vX.m (lines 2427-2428)). If a trial ends early (e.g., fixation break / replay logic) and you don’t end up logging responses for all planned catch trials, this can throw an indexing error at the very end → no full-run file. 
     - [ ] check also this potential issue: Teardown happens before saving. The full-run save is after EyeLink shutdown and DataPixx close (experiment/MoveDot1_experiment_vX.m (lines 2355-2383)). Those calls aren’t fully protected by try/catch (only ReceiveFile is), so any error there would skip the final save.
-    - [ ] If esc pressed, should the experiment save a partialData file before exiting?
+    - [x] If esc pressed, should the experiment save a partialData file before exiting?
 - [ ] update the scripts to the new folder structure with something like "I've changed the folder structure in data and I would like to update the scripts inspect_fif_report.py accordingly
 If I ask for --subject 4 --run 1 the scripts should take
 data/sub04/MEG/sub04_run01.fif"

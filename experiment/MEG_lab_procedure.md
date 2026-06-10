@@ -1,9 +1,7 @@
 # MEG protocol CIMeC Ingmar de Vries
 
-## Potential issues
-- If triggers or responses do not work in MEG lab:
-  - Turn off everything and then turn on in correct order: pc, blue box, projector, flip projector with desktop icon and type `pm r`, then turn on eye tracker.
-  - Note that the second screen will only turn on if the main blue box is on.
+-> a double ^^ preceeding text indicate a part in which the text needs updating.
+-> Photodiode references are still present but not applicable at the moment as there is no photodiode
 
 ## Before subject
 
@@ -14,10 +12,10 @@
 - Acquisition PC:
   - Pword: m3g.
   - Click `acquisition` icon on desktop if software not already open.
-  - Under `Settings` and next to `Project` click `Change` and select `ActionPrediction`. For `Subject` select our ethical code `2019-022`. Then:
-    - File > Load settings, select `std` and click `Apply`.
-    - 1000Hz, 336 channels (check photodiode in misc), `upright` position.
-    - IMPORTANT: Change online high pass filter to off or 0.03 Hz or only DC offset.
+  - Under `Settings` and next to `Project` click `Change` and select `ActionPrediction`. For `Subject` select your ethical code e.g. `2019-022`. Then:
+    - File > Load settings, select ^^`Name of saved settings to insert` and click `Apply`.
+    - 1000Hz, ^^N channels (check photodiode in misc is present, check eyetracker is present as ^^tyepToInsert), `upright` position.
+    - IMPORTANT: Check online high pass filter to only DC offset or off or 0.03 Hz.
   - Press GO! and stop again.
   - Tune (once a day):
     - Tools > Tuner.
@@ -29,17 +27,17 @@
   - Look at channels with empty room, if noisy:
     - Change the scale - typical is 440fT.
     - Select it. Commands > heat sensor (twice) > reset channels.
-  - Turn on camera in MSR.
+  - check camera in mangetic shielded room and turn it on if off.
   - If scanner is acting weird (e.g. dialogue boxes with error messages popping up):
-    - Restart system: `RestartAcqPrograms` icon on desktop. When prompted on the terminal window type confirm with `y`; when asked if reboot or just restart servers, choose servers with `s`. If this fails you have to manually reset the switch for the real-time computers (SCC) in the Electronics cabinet (best to talk to Davide and Gianp before touching the cabinets).
+    - Restart system: `RestartAcqPrograms` icon on desktop. When prompted on the terminal window type confirm with `y`; when asked if reboot or just restart servers, choose servers with `s`. If this fails you have to manually reset the switch for the real-time computers (SCC) in the Electronics cabinet (talk to technician before touching the cabinets).
 
 - Prep room:
   - Start preparation software (follow instructions on desktop. Pword: m3g).
   - Load Project and settings as on acq PC.
   - Check 6 clean electrodes and stickers, and headcoils.
-  - Check consent forms, payment and MRI release forms, and the task instructions.
+  - Check consent forms (MEG, privacy, sensitive data), payment and MRI release forms, and the task instructions.
 
-- MSR:
+- mangetic shielded room:
   - Projector on.
   - Lights off.
   - Reverse screen: VPutil icon on desktop. Type `4` and hit enter, then `pm r` and hit enter.
@@ -49,21 +47,20 @@
   - Attach photodiode to screen.
 
 - Stimulation PC:
-  - Open Matlab 2012b.
+  - Open Matlab.
   - Start experiment and check triggers and photodiode on acquisition PC.
-  - Check and maybe change refresh rate of projector to 60 instead of 120.
+  - Check and if needed change refresh rate of projector (e.g. if you need 60Hz instead of 120Hz).
 
 - Eyetracker:
-  - Turn on power supply (power plug next to MSR).
+  - Turn on power supply (power plug next to mangetic shielded room).
   - Turn on PC and screen.
   - Check if works.
 
 ## Prepare subject
-- Put on white apron before subject arrives.
 - Explain preparation, scanning and experiment to participant.
-- They sign the consent form and MRI release form.
+- They sign the consent forms and MRI release form.
 - Double check:
-  - Normal vision (or have contacts / know their prescription for the MEG glasses).
+  - Normal vision (or have contact lenses / know their prescription for the MEG glasses).
   - No metal in body e.g. dental wires, surgical pins/plates.
   - Did not go in MRI scanner today.
 - Shoes and pyjamas and plastic socks in shoes and gloves and mask without metal.
@@ -73,9 +70,9 @@
 - Participant number: DOB in YYYYMMDD, first and third letter of mother's first name, and first and third letter of mother's maiden name. e.g. 19900905LNDR.
 - Head coils with the white tape in positions and colour coding indicated on the polystyrene head.
   - Flat side on the skin.
-- EOG + ECG.
+- EOG + ECG (if you use them).
   - EOG: above and below the left eye, centre of electrode roughly in line with their pupil when looking forward. One electrode each side outside eyes near the temples.
-- Make sure project `OscillatingWM`, protocol (2009-036) and settings (std) loaded on Subject preparation software.
+- Make sure project ^^`projectName`, protocol ^^(yourProtocol) and settings (yourSetting) loaded on Subject preparation software.
 - Put the glasses on the subject and take care not to move them while you digitize points.
 - Click `Change` next to HPI, then `Coordinate frame alignment`.
 - Digitize anatomical landmarks: the nasion and the two pre-auricular points.
@@ -92,20 +89,20 @@
 - Plug in EOG, ECG and head coils.
 - Last explain to participant:
   - Relax in chair, not sit up too straight, find comfy position.
-  - Show them button boxes: red = match, blue = no match.
+  - Show them button boxes: red = trajectory did NOT change, blue = trajectory changed.
   - Move chair up so they are touching the top of the helmet.
   - Ask them to take a big slow deep breath in and then out, they will slouch a little and then you put them up a tiny bit more in the chair so they are really up in the helmet.
   - Eye-tracker calibration.
   - Intercom.
   - Door opening in case of emergency.
-  - Last short explanation important aspects task, including: relax, no eye movements during memory encoding, blink in between trials.
+  - Last short explanation important aspects task, including: relax, no eye movements, blink during blink breaks, fixate center.
 - Check if eye-tracker sees eyes properly (start experiment, in eyetracker screen press ENTER and left or right arrow to see both eyes).
-- On the acquisition PC, press Go! and check how the signal is. Type in 11 on intercom and ask them to blink a few times - check EOG and ECG channels. Ask them to take a big breath - should barely show up in the signal. Press Stop to end the recording.
-- On stim PC, press C to calibrate eyetracker, then V to validate. Then `Accept` on eyetracker PC. Tell participant we are nearly ready to begin then hold down `T` on intercom (now you hear them but they do not hear you. Press `T` twice for them to hear you again).
+- On the acquisition PC, press Go! and check how the signal is. Type in 11 on intercom and ask them to blink a few times - check EOG and ECG channels if you have them, otherwise, look at eyetracker channel in MEG and frontal sensors (e.g. 923-922-921) in MEG. Ask them to take a big breath - should barely show up in the signal. Press Stop to end the recording.
+- On stim PC, press C to calibrate eyetracker, then V to validate. Then `Accept` on eyetracker PC. Tell participant we are nearly ready to begin. Put intercom in only listening (^^how is it done in the new intercom?)
 - On acquisition PC, click Go!
 - Click yes to HPI measurement, if suggested to accept click ok.
-  - Third number of head origin should be 40-50mm. Greater than 60mm is bad.
-  - If having problems with coils go in the MSR and make sure they are attached properly, and that they are in the helmet, that you loaded the correct preparation.
+  - Third number of head origin should be 40-50mm. Greater than 60mm is bad. **Note down the number**, the aim is for it to remain constant accross runs. At every run, that window will pop-up again and you can check the number did not change much.
+  - If having problems with coils go in the mangetic shielded room and make sure they are attached properly, and that they are in the helmet, that you loaded the correct preparation.
 - Tick `Record raw` before starting calibration.
 - During recording, keep an eye on:
   - MEG signal, especially in your sensors of interest.
@@ -118,7 +115,7 @@
   - Blue changes; orange stays same.
   - Copy = CTRL + INS.
   - Paste = up arrow + INS.
-- At the end of the block when you save, there is a pop-up window about the **head position** (to see if the head position changed), good values for the difference is anything <40/60mm 
+- At the end of the block when you save, there is a pop-up window about the **head position** (to see if the head position changed), good values for the difference is anything <40/60mm (^^should be the same as before and difference smaller than mabe 20?)
 
 ## After recording
 - Lower chair, unplug coils/electrodes. Take them to prep room and take off coils/electrodes. Let them change. Get them to fill out payment forms.
@@ -137,6 +134,14 @@
   - eyetracker PC.
   - photodiode box, remove battery and put in charger in prep room.
   - projector (first on remote then switch).
-- Close MSR door.
+- Close mangetic shielded room door.
 - Turn off Polhemus.
 - Leave lab tidy.
+
+
+
+
+## Troubleshooting
+- If triggers or responses do not work in MEG lab:
+  - Turn off everything and then turn on in correct order: pc, blue box, projector, flip projector with desktop icon and type `pm r`, then turn on eye tracker.
+  - Note that the second screen will only turn on if the main blue box is on.

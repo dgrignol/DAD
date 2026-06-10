@@ -1,3 +1,23 @@
+# 10 Jun 2026 14:59
+
+## Refresh experiment procedures, participant guidance, and work tracking
+
+### `experiment/MEG_lab_procedure.md`
+- Update acquisition, preparation, consent, camera, projector, EyeLink, head-position, and participant-response instructions for the current lab workflow.
+- Clarify the red/blue response mapping, fixation and blink-break guidance, optional EOG/ECG checks, and alternative frontal-sensor checks.
+- Move trigger/response recovery steps into a troubleshooting section and mark unresolved lab-specific values with explicit `^^` update placeholders.
+
+### `experiment/TODO.md`
+- Change the active experiment inventory to the V30 generation, v23 scheduling, and v20 runtime stack.
+- Record completed work for 40 unique paths, 15% catch rates, centered questions, fixation cues, blink breaks, block accuracy, EyeLink calibration/EDF handling, replay policy, and save/abort behavior.
+- Keep current participant-session follow-ups visible and correct the replay description to reference v23-generated `TrialOrder`.
+
+### `experiment/participant_instruction_script.md`
+- Add a concise experimenter-facing participant script covering fixation, catch questions, response mapping, blink timing, block structure, head stability, and discomfort reporting.
+
+Suggested commit message:
+`Refresh experiment procedures and participant guidance`
+
 # 10 Jun 2026 14:57
 
 ## Upgrade the canonical experiment stack to V30/v23/v20
