@@ -30,12 +30,14 @@ Usage examples
      --subject-config .../sub-04.yaml --source-manifest .../source_manifest.json \
      --analyses alt --sensor-groups occipital --smoothing-plots --resume
 
-4) Run observed and expected/predicted occluded-deviant stimulus models:
+4) Run observed, expected/predicted, and prediction-error occluded-deviant
+   alt stimulus models:
 
    python .../07_run_matlab_drsa.py --config .../pipeline_default.yaml \
      --subject-config .../sub-04.yaml --source-manifest .../source_manifest.json \
-     --analyses alt simulations --conditions occluded_deviant \
-     --sensor-groups occipital --model-sources observed predicted --overwrite
+     --analyses alt --conditions occluded_deviant \
+     --sensor-groups occipital \
+     --model-sources observed predicted prediction_error --overwrite
 
 5) Build a numeric group-average figure report after subject dRSA has run:
 
@@ -56,7 +58,8 @@ Inputs
 - Completed source_manifest.json containing export_drsa lineage.
 - One subject-specific observed trajectory MAT discovered from the resolved
   subject input_files directory. Its matching ``occluded_nondeviant`` trials
-  provide the expected continuation for ``occluded_deviant``.
+  provide the expected continuation for ``occluded_deviant`` and the baseline
+  for ``prediction_error`` model-source runs.
 - MATLAB scripts in meg/code/analysis plus dRSA helper functions in
   simulations/functions.
 
@@ -119,6 +122,7 @@ from preprocessing_stage_utils import (
 
 CONDITIONS = ("always_visible", "occluded_nondeviant", "occluded_deviant")
 SUPPORTED_ANALYSES = ("real", "alt", "simulations")
+MODEL_SOURCES = ("observed", "predicted", "prediction_error")
 DRSA_MATRIX_VARIABLES = (
     "dRSA_neural_position",
     "dRSA_neural_correlation",
@@ -178,19 +182,20 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--model-source",
-        choices=("observed", "predicted"),
+        choices=MODEL_SOURCES,
         default=None,
         help="Override matlab_drsa.model_source.",
     )
     parser.add_argument(
         "--model-sources",
         nargs="+",
-        choices=("observed", "predicted"),
+        choices=MODEL_SOURCES,
         default=None,
         help=(
-            "Run multiple stimulus model sources. Predicted is valid only for "
-            "occluded_deviant and is skipped for other conditions to avoid "
-            "misleading duplicated outputs."
+            "Run multiple stimulus model sources. Predicted and "
+            "prediction_error are valid only for occluded_deviant. "
+            "prediction_error is implemented for alt outputs; simulations "
+            "continue to use observed/predicted sources."
         ),
     )
     parser.add_argument(
@@ -390,8 +395,13 @@ def _normalize_model_sources(values: Iterable[str]) -> list[str]:
     normalized: list[str] = []
     for value in values:
         source = str(value).strip().lower()
-        if source not in {"observed", "predicted"}:
-            raise ValueError(f"model source must be observed or predicted, got {value!r}.")
+        if source == "pe":
+            source = "prediction_error"
+        if source not in MODEL_SOURCES:
+            raise ValueError(
+                "model source must be observed, predicted, or prediction_error, "
+                f"got {value!r}."
+            )
         if source not in normalized:
             normalized.append(source)
     if not normalized:
@@ -404,7 +414,7 @@ def _model_sources_from_config_or_args(
     matlab_cfg: Mapping[str, Any],
 ) -> list[str]:
     """
-    Resolve requested observed/predicted stimulus model sources.
+    Resolve requested observed/predicted/prediction-error stimulus sources.
 
     Data flow:
     --model-sources or DAD_DRSA_MODEL_SOURCES -> legacy --model-source ->
@@ -434,13 +444,31 @@ def _conditions_for_model_source(
     """
     Return the scientifically valid conditions for one model source.
 
-    The expected model is defined for the occluded-deviant question by using
-    matching occluded-nondeviant trials. Running it for other conditions would
-    create misleading duplicated outputs, so we exclude those here.
+    The expected and prediction-error models are defined for the
+    occluded-deviant question by using matching occluded-nondeviant trials.
+    Running them for other conditions would create misleading duplicated
+    outputs, so we exclude those here.
     """
     selected = [str(condition) for condition in conditions]
-    if model_source == "predicted":
+    if model_source in {"predicted", "prediction_error"}:
         return [condition for condition in selected if condition == "occluded_deviant"]
+    return selected
+
+
+def _model_sources_for_analysis(
+    analysis: str,
+    model_sources: Iterable[str],
+) -> list[str]:
+    """
+    Return model sources supported by one MATLAB analysis family.
+
+    A_dRSA_alt can construct the single-model prediction-error position tensor.
+    dRSA_simulations still delegates model selection to drsa_stage_utils, which
+    only returns observed or expected/predicted trajectory trials.
+    """
+    selected = list(model_sources)
+    if analysis == "simulations":
+        return [source for source in selected if source != "prediction_error"]
     return selected
 
 
@@ -752,7 +780,7 @@ def expected_outputs_for_analysis(
                         / f"dRSA_{condition}_{drsa_type.lower()}_matrices_smoothed.png"
                     )
         elif analysis == "alt":
-            for source in model_sources:
+            for source in _model_sources_for_analysis(analysis, model_sources):
                 for condition in _conditions_for_model_source(conditions, source):
                     for sensor_group in sensor_groups:
                         source_parts = (
@@ -778,7 +806,8 @@ def expected_outputs_for_analysis(
                         if smoothing_plots:
                             outputs.append(root / "matrices" / f"{tag}_smoothed.png")
         elif analysis == "simulations":
-            for source in model_sources:
+            simulation_sources = _model_sources_for_analysis(analysis, model_sources)
+            for source in simulation_sources:
                 for condition in _conditions_for_model_source(conditions, source):
                     source_parts = (
                         [condition, source, drsa_type.lower()]
@@ -811,27 +840,28 @@ def expected_outputs_for_analysis(
                                 / f"{model_tag}_position_with_direction_smoothed.png",
                             ]
                         )
-            for condition in conditions:
-                neural_root = (
-                    drsa_dir
-                    / "simulations"
-                    / "neural_vs_neural"
-                    / condition
-                    / "corr"
-                )
-                for sensor_group in sensor_groups:
-                    tag = (
-                        f"dRSA_simulations_{condition}_corr_neural_with_neural_"
-                        f"{sensor_group.lower()}"
+            if simulation_sources:
+                for condition in conditions:
+                    neural_root = (
+                        drsa_dir
+                        / "simulations"
+                        / "neural_vs_neural"
+                        / condition
+                        / "corr"
                     )
-                    outputs.extend(
-                        [
-                            neural_root / "matrices" / f"{tag}.png",
-                            neural_root / "results" / f"{tag}.mat",
-                        ]
-                    )
-                    if smoothing_plots:
-                        outputs.append(neural_root / "matrices" / f"{tag}_smoothed.png")
+                    for sensor_group in sensor_groups:
+                        tag = (
+                            f"dRSA_simulations_{condition}_corr_neural_with_neural_"
+                            f"{sensor_group.lower()}"
+                        )
+                        outputs.extend(
+                            [
+                                neural_root / "matrices" / f"{tag}.png",
+                                neural_root / "results" / f"{tag}.mat",
+                            ]
+                        )
+                        if smoothing_plots:
+                            outputs.append(neural_root / "matrices" / f"{tag}_smoothed.png")
     return outputs
 
 
@@ -890,7 +920,7 @@ def _build_matlab_batches(
         )
     if "alt" in analyses:
         script = _matlab_quote(paths["alt_script"])
-        for source in model_sources:
+        for source in _model_sources_for_analysis("alt", model_sources):
             source_conditions = _conditions_for_model_source(condition_list, source)
             if not source_conditions:
                 continue
@@ -910,7 +940,7 @@ def _build_matlab_batches(
             )
     if "simulations" in analyses:
         script = _matlab_quote(paths["simulations_script"])
-        for source in model_sources:
+        for source in _model_sources_for_analysis("simulations", model_sources):
             source_conditions = _conditions_for_model_source(condition_list, source)
             if not source_conditions:
                 continue
@@ -2128,9 +2158,11 @@ def run_stage(
         )
         if not batches:
             raise RuntimeError(
-                "No MATLAB dRSA batches were generated. Predicted model paths are "
-                "only valid for occluded_deviant; include observed or add "
-                "occluded_deviant to --conditions."
+                "No MATLAB dRSA batches were generated. Predicted and "
+                "prediction-error model paths are only valid for "
+                "occluded_deviant, and prediction-error is available for "
+                "alt outputs only; include observed or add occluded_deviant "
+                "to --conditions."
             )
         matlab_records = run_matlab_batches(
             batches,

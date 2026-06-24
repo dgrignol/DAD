@@ -439,6 +439,14 @@ qsub -v DAD_DRSA_SMOOTHING_PLOTS=1 \
   -t 1-7 meg/cluster/submit_drsa_analysis.sh
 ```
 
+To run the optional sensor-group alt dRSA for the occluded-deviant
+prediction-error position model:
+
+```bash
+qsub -v DAD_DRSA_ANALYSES=alt,DAD_DRSA_CONDITIONS=occluded_deviant,DAD_DRSA_SENSOR_GROUPS=wholeBrain,DAD_DRSA_MODEL_SOURCES=prediction_error \
+  -t 1-7 meg/cluster/submit_drsa_analysis.sh
+```
+
 Build the numeric group-average report once after all subject jobs finish:
 
 ```bash

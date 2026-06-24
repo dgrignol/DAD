@@ -22,7 +22,7 @@
 # Optional analysis selection can be exported before qsub when needed:
 #   export DAD_DRSA_ANALYSES=real
 #   export DAD_DRSA_SENSOR_GROUPS=wholeBrain
-#   export DAD_DRSA_MODEL_SOURCES=observed,predicted
+#   export DAD_DRSA_MODEL_SOURCES=observed,predicted,prediction_error
 #   qsub -v DAD_MATLAB_BIN,DAD_DRSA_ANALYSES,DAD_DRSA_SENSOR_GROUPS,DAD_DRSA_MODEL_SOURCES \
 #     -t 1-7 meg/cluster/submit_drsa_analysis.sh
 #

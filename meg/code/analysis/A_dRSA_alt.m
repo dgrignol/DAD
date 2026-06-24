@@ -11,7 +11,14 @@
 %   drsa_handoff_json = '/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives/reports/sub-04/ses-01/07_matlab_drsa_handoff.json';
 %   conditions_to_run = {'always_visible', 'occluded_nondeviant'};
 %   sensor_groups_to_run = {'wholeBrain', 'occipital'};
-%   path_type = 'observed'; % predicted is valid for occluded_deviant only
+%   path_type = 'observed'; % observed, predicted, or prediction_error
+%   dRSAtypeToRun = 'corr';
+%   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/analysis/A_dRSA_alt.m');
+%
+%   % Prediction-error alt dRSA for the occluded-deviant question:
+%   conditions_to_run = {'occluded_deviant'};
+%   sensor_groups_to_run = {'wholeBrain'};
+%   path_type = 'prediction_error';
 %   dRSAtypeToRun = 'corr';
 %   run('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/analysis/A_dRSA_alt.m');
 %
@@ -25,15 +32,19 @@
 %   <drsa_dir>/matlab_real_neural/A_dRSA_alt/<condition>/<drsa_type>/...
 %     for always_visible and occluded_nondeviant observed-model outputs.
 %   <drsa_dir>/matlab_real_neural/A_dRSA_alt/occluded_deviant/<source>/<drsa_type>/...
-%     for observed actual-deviant and expected/predicted occluded-deviant outputs.
+%     for observed actual-deviant, expected/predicted, and prediction-error
+%     occluded-deviant outputs.
 %   Each PNG title and y-axis state the stimulus model label, for example
-%   "actual deviant position" or "expected/predicted position".
+%   "actual deviant position", "expected/predicted position", or
+%   "prediction error position".
 %   Occluded-condition matrix PNGs include dashed horizontal lines marking
 %   first complete occlusion and first reappearance from the handoff timing.
 %
 % Data flow:
 %   handoff JSON -> one condition neural tensor -> NaN-channel cleanup ->
 %   sensor-group selection -> one trajectory position model -> dRSA PNG/MAT.
+%   Prediction-error runs build the model as observed occluded-deviant position
+%   minus expected/predicted occluded-nondeviant position before dRSA.
 
 %% Reset workspace while preserving explicit runtime overrides
 clearvars -except drsa_handoff_json conditions_to_run sensor_groups_to_run path_type dRSAtypeToRun plotSampleRateHz pcrStrategy doSmoothNeural smoothWindowSamples doSmoothingPlots plotSmoothingWindow output_root_override
@@ -55,6 +66,14 @@ if ischar(sensor_groups_to_run) || isstring(sensor_groups_to_run)
     sensor_groups_to_run = cellstr(sensor_groups_to_run);
 end
 if ~exist('path_type', 'var') || isempty(path_type), path_type = 'observed'; end
+path_type = lower(strtrim(char(path_type)));
+if strcmp(path_type, 'pe')
+    path_type = 'prediction_error';
+end
+valid_path_types = {'observed', 'predicted', 'prediction_error'};
+if ~ismember(path_type, valid_path_types)
+    error('path_type must be observed, predicted, prediction_error, or pe.');
+end
 if ~exist('dRSAtypeToRun', 'var') || isempty(dRSAtypeToRun), dRSAtypeToRun = 'corr'; end
 if ~exist('pcrStrategy', 'var') || isempty(pcrStrategy), pcrStrategy = 'baseline_pcr_border'; end
 if ~exist('doSmoothNeural', 'var') || isempty(doSmoothNeural), doSmoothNeural = true; end
@@ -88,11 +107,40 @@ for i_cond = 1:numel(conditions_to_run)
     end
 
     n_time = size(neural, 3);
-    [trials, model_source, center_shift, model_source_condition] = ...
-        drsa_stage_utils.model_trials_for_condition(condition_str, path_type, Obs);
-    sorted_trials = drsa_stage_utils.sort_and_validate_sequences(trials, identity_values);
-    [model_position, ~] = drsa_stage_utils.build_position_direction( ...
-        sorted_trials, identity_values, n_time, center_shift);
+    %% Build the single stimulus model requested for this alt dRSA run
+    if strcmp(path_type, 'prediction_error')
+        if ~strcmp(condition_str, 'occluded_deviant')
+            error(['prediction_error path_type is valid only for ' ...
+                'occluded_deviant; got %s.'], condition_str);
+        end
+
+        [observed_trials, ~, observed_center_shift, ~] = ...
+            drsa_stage_utils.model_trials_for_condition(condition_str, 'observed', Obs);
+        observed_sorted = drsa_stage_utils.sort_and_validate_sequences( ...
+            observed_trials, identity_values);
+        [observed_position, ~] = drsa_stage_utils.build_position_direction( ...
+            observed_sorted, identity_values, n_time, observed_center_shift);
+
+        [predicted_trials, ~, predicted_center_shift, predicted_source_condition] = ...
+            drsa_stage_utils.model_trials_for_condition(condition_str, 'predicted', Obs);
+        predicted_sorted = drsa_stage_utils.sort_and_validate_sequences( ...
+            predicted_trials, identity_values);
+        [predicted_position, ~] = drsa_stage_utils.build_position_direction( ...
+            predicted_sorted, identity_values, n_time, predicted_center_shift);
+
+        % The PE model captures the actual deviant displacement from the
+        % expected nondeviant continuation at each model timepoint.
+        model_position = observed_position - predicted_position;
+        model_source = 'prediction_error';
+        model_source_condition = sprintf('%s-minus-%s', ...
+            condition_str, predicted_source_condition);
+    else
+        [trials, model_source, center_shift, model_source_condition] = ...
+            drsa_stage_utils.model_trials_for_condition(condition_str, path_type, Obs);
+        sorted_trials = drsa_stage_utils.sort_and_validate_sequences(trials, identity_values);
+        [model_position, ~] = drsa_stage_utils.build_position_direction( ...
+            sorted_trials, identity_values, n_time, center_shift);
+    end
     stimulus_model_label = drsa_stage_utils.stimulus_model_label( ...
         condition_str, model_source, 'position');
     model_axis_label = drsa_stage_utils.model_time_axis_label( ...

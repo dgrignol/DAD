@@ -516,8 +516,10 @@ def drsa_type_from_path(path: Path) -> str:
 
 
 def model_source_from_path(path: Path) -> str:
-    """Infer observed/predicted/model source metadata from the result path."""
+    """Infer observed/predicted/prediction-error source metadata from a path."""
     parts = [part.lower() for part in path.parts]
+    if "prediction_error" in parts:
+        return "prediction_error"
     if "predicted" in parts:
         return "predicted"
     if "observed" in parts:
