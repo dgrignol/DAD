@@ -6,6 +6,12 @@ Purpose
 Provide an automatic ICA-cleaning alternative to `03_C_ICA.py` using MEGNet
 (`mne-icalabel`) as the primary component-labeling method for MEG.
 
+DEPRECATED EXPERIMENTAL STATUS
+This branch is retained as research code for possible future MEGNet advances,
+but it is not approved for production DAD preprocessing. Normal execution
+stops before loading MEGNet dependencies. It is not registered in
+``run_pipeline.py`` and must not be used for participant processing.
+
 This script follows the local `preprocessing_basic` flow and keeps the key data
 flow of the FLUX ICA stage, while replacing manual component rejection with a
 transparent rule-based automatic policy.
@@ -22,6 +28,8 @@ High-level flow
 8) save cleaned outputs, ICA caches, labeling CSV, figures, and HTML report.
 
 Usage example
+Normal execution prints the deprecation status and exits:
+
 python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_C_ICA_auto.py
 
 Inputs
@@ -61,11 +69,44 @@ Decision on prior subject-01 blink workaround
 # -------------------------------------------------------------------------
 # Imports
 # -------------------------------------------------------------------------
+import argparse
 import csv
 import html
 import os
 import os.path as op
+import sys
 from collections import Counter
+
+# -------------------------------------------------------------------------
+# Production deprecation gate
+# -------------------------------------------------------------------------
+# Keep the experimental implementation below for future development, but stop
+# normal execution before importing optional MEGNet runtime dependencies.
+if __name__ == "__main__":
+    deprecation_parser = argparse.ArgumentParser(
+        description=(
+            "Deprecated experimental MEGNet ICA branch. "
+            "Use 03_C_ICA.py for production."
+        )
+    )
+    deprecation_parser.add_argument(
+        "--allow-deprecated-experimental",
+        action="store_true",
+        help=(
+            "Developer-only escape hatch. This does not make the branch "
+            "production-approved and is never used by run_pipeline.py."
+        ),
+    )
+    deprecation_args, _deprecation_unknown = (
+        deprecation_parser.parse_known_args()
+    )
+    if not deprecation_args.allow_deprecated_experimental:
+        print(
+            "03_C_ICA_auto.py is deprecated experimental code and is disabled "
+            "for production. Use 03_C_ICA.py.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
 import matplotlib.pyplot as plt
 import mne

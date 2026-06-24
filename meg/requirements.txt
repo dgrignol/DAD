@@ -8,6 +8,8 @@ PyYAML>=6.0,<7.0
 # Core numerical and MEG processing stack used by inventory and preprocessing.
 numpy>=1.24,<3.0
 mne>=1.6,<2.0
+scipy>=1.11,<2.0
+h5py>=3.10,<4.0
 
 # Needed at runtime because step 02 runs deep trigger confrontation plotting by default.
 matplotlib>=3.8,<4.0
@@ -23,6 +25,6 @@ pandas>=2.2,<4.0
 # Needed at runtime because FLUX ICA step uses method='fastica' (scikit-learn backend).
 scikit-learn>=1.4,<2.0
 
-# Needed at runtime for MEGNet-based automatic ICA labeling in 03_C_ICA_auto.py.
-mne-icalabel>=0.8,<1.0
-onnxruntime>=1.18,<2.0
+# The deprecated experimental MEGNet branch is intentionally excluded from
+# production dependencies. Its optional packages are documented separately in
+# requirements-ica-auto-experimental.txt.

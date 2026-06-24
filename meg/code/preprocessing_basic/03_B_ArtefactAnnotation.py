@@ -3,521 +3,909 @@
 03_B_ArtefactAnnotation.py
 
 Purpose
-Adapt the FLUX MNE-Python ArtefactAnnotation workflow to the local DAD MEG
-dataset with minimal changes. This script:
-1) loads Maxwell-filtered FIF files for sub-01/ses-01,
-2) detects eye-blink artefacts from EOG001 in a consistent sample frame
-   (except subject 01: blink annotation is intentionally skipped here),
-3) detects muscle artefacts from magnetometers (110-140 Hz z-score),
-4) combines blink/muscle annotations with existing annotations,
-5) saves annotated FIF + CSV files while preserving input bad-channel metadata,
-6) saves static QC figures, and
-7) writes an HTML MNE report with figures and key print logs.
+Detect and annotate physiological MEG artifacts for each lineage-matched
+Maxwell-filtered acquisition run. Muscle detection follows the FLUX workflow.
+EOG processing is selected from the subject's actual FIF modality and never
+assumes that EDF files correspond one-to-one with MEG runs.
 
-Usage example
-python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py
+Usage examples
+1) Noninteractive review using the FLUX muscle threshold of 10:
+
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py \
+     --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --processing-pass review --print-summary
+
+2) Interactive threshold review:
+
+   python .../03_B_ArtefactAnnotation.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --processing-pass review \
+     --interactive --decisions-out .../03_tuning_choices.yaml
+
+   For every acquisition run, the muscle z-score trace and threshold line are
+   saved and optionally displayed. The operator may change the threshold,
+   redraw the plot, and repeat until accepting it.
+
+3) Apply reviewed thresholds:
+
+   python .../03_B_ArtefactAnnotation.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --tuning-config .../03_tuning_choices.yaml \
+     --processing-pass apply --overwrite
+
+4) Resume an interrupted pass without replacing validated completed runs:
+
+   python .../03_B_ArtefactAnnotation.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --tuning-config .../03_tuning_choices.yaml \
+     --processing-pass review --resume
 
 Inputs
-- Maxwell-filtered FIF files:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/sss/*_raw_sss.fif
+- Layered configuration; ``--site-config`` overrides machine paths without
+  changing scientific settings.
+- ``<exact-source-stem>_raw_sss.fif`` from 03_A for each configured raw run.
 
 Outputs
-- Annotated FIF files next to SSS files:
-  .../sss/*_ann.fif
-  (`raw.info['bads']` preserved from corresponding `*_raw_sss.fif` input)
-- Annotation CSV files:
-  .../sss/*_ann.csv
-- QC figures:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/figures/
-- HTML report:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/reports/sub-01/ses-01/03_B_ArtefactAnnotation_report.html
+- ``<exact-source-stem>_ann.fif`` and ``<exact-source-stem>_ann.csv``.
+- Pass-specific muscle/EOG QC PNGs and JSON/HTML reports.
+- Optional accepted tuning YAML and source-manifest derivative lineage.
+
+Data flow
+raw source lineage -> expected SSS derivative -> muscle score/annotations ->
+optional EOG diagnostics or annotations -> original annotations + physiological
+annotations -> lineage-preserving annotated FIF and CSV.
+
+Ocular policy
+- ``auto`` becomes ``diagnostics_only`` when configured EOG channels are
+  present, and ``disabled`` otherwise.
+- Sub01 therefore receives EOG diagnostics but no default EOG-derived rejection
+  annotations because its EOG quality is known to be limited.
+- Subjects 02-07 have no EOG channels and never call EOG-only MNE functions.
+- MISC001-MISC006 are preserved unchanged as acquisition-timed eye-tracker
+  analog signals. They are not treated as EOG.
+- Trigger 150 trial rejection is a later event/epoching decision and is not
+  performed by this physiological-artifact stage.
+
+Safety
+All outputs pass the shared raw-tree guard. Existing derivatives require
+explicit overwrite permission. Resume validates source/stage lineage, the
+accepted muscle threshold, channel identity, bad channels, and annotation CSV
+consistency before an existing run is skipped.
 """
 
-# %%
-# -------------------------------------------------------------------------
-# Imports
-# -------------------------------------------------------------------------
-import html
-import os
-import os.path as op
+from __future__ import annotations
+
+import argparse
+import csv
+import sys
+from pathlib import Path
+from typing import Any, Mapping
 
 import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from mne.preprocessing import annotate_muscle_zscore
 
-# %%
-# -------------------------------------------------------------------------
-# Subject/session selection and output layout
-# -------------------------------------------------------------------------
-subj_str = "01"
-ses_str = "01"
-# Subject-specific exception: for sub-01 we do not trust EOG blink labels.
-# Blink annotations are intentionally deferred to ICA component-0 logic in 03_C.
-skip_eog_blink_for_subject = subj_str == "01"
-
-sss_input_dir = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"preprocessing/sub-{subj_str}/ses-{ses_str}/sss"
-)
-figure_output_dir = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"preprocessing/sub-{subj_str}/ses-{ses_str}/figures"
-)
-out_report = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"reports/sub-{subj_str}/ses-{ses_str}/03_B_ArtefactAnnotation_report.html"
+from pipeline_config import load_and_resolve_config
+from preprocessing_stage_utils import (
+    AcquisitionRunRecord,
+    derivative_path_for_run,
+    discover_raw_run_records,
+    ensure_output_directory,
+    guarded_path,
+    lineage_record,
+    prepare_output_path,
+    stage_output_dirs,
+    update_source_manifest_stage,
+    update_tuning_file,
+    utc_now,
+    write_json,
+    write_simple_html_report,
 )
 
-os.makedirs(figure_output_dir, exist_ok=True)
-os.makedirs(op.dirname(out_report), exist_ok=True)
+
+STAGE_NAME = "artifact_annotation"
+INPUT_SUFFIX = "_raw_sss.fif"
+OUTPUT_FIF_SUFFIX = "_ann.fif"
+OUTPUT_CSV_SUFFIX = "_ann.csv"
 
 
-# -------------------------------------------------------------------------
-# Shared helpers for figure saving and sectioned print logging to report
-# -------------------------------------------------------------------------
-def savefig_logged(fig, filename, **kwargs):
-    """
-    Save a matplotlib figure into the shared figure folder and print the path.
-    """
-    out_path = op.join(figure_output_dir, filename)
-    fig.savefig(out_path, **kwargs)
-    print(f"Saved figure to: {out_path}")
+# -----------------------------------------------------------------------------
+# Configuration and modality helpers
+# -----------------------------------------------------------------------------
 
 
-report = mne.Report(title=f"sub-{subj_str} | 03_B ArtefactAnnotation") # initialize html report with title
-
-
-def log_to_console_and_report(text, *, title, section, tags=("log", "qc")):
-    """
-    Print text to console and store the same text in an MNE report section.
-    """
-    print(text)
-    report.add_html(
-        f"<pre>{html.escape(text)}</pre>",
-        title=title,
-        section=section,
-        tags=tags,
+def threshold_for_run(
+    artifact_cfg: Mapping[str, Any],
+    acquisition_run: int,
+) -> float:
+    """Resolve a run-specific muscle threshold with a global fallback."""
+    by_run = artifact_cfg.get("muscle_threshold_by_run", {})
+    candidate_keys = (
+        acquisition_run,
+        str(acquisition_run),
+        f"{acquisition_run:02d}",
+        f"run{acquisition_run:02d}",
     )
+    if isinstance(by_run, Mapping):
+        for key in candidate_keys:
+            if key in by_run:
+                return float(by_run[key])
+    return float(artifact_cfg["muscle_threshold"])
 
 
-def build_blink_annotations(raw, *, ch_name="EOG001"):
+def resolve_eog_mode(
+    configured_mode: str,
+    configured_channels: list[str],
+    raw: mne.io.BaseRaw,
+) -> tuple[str, list[str], list[str]]:
     """
-    Detect blink events on one raw object and return aligned annotations.
-
-    Data-flow note
-    `find_eog_events` returns event sample indices in the same sample frame as
-    `raw.first_samp`. To keep blink annotations aligned after `raw.set_annotations`
-    (with `orig_time=raw.info['meas_date']`), we keep this absolute-sample
-    frame and do *not* subtract `raw._first_time`.
-
-    Parameters
-    ----------
-    raw : mne.io.BaseRaw
-        Raw object containing EOG channels.
-    ch_name : str
-        EOG channel used for blink detection.
+    Resolve EOG behavior from configuration and channels actually present.
 
     Returns
     -------
-    annotations_blink : mne.Annotations
-        Blink annotations centered around each detected event.
-    n_blinks : int
-        Number of detected blink events.
-    n_out_of_range : int
-        Number of blink onset samples outside [first_samp, last_samp].
+    resolved_mode, available_channels, missing_channels
+        ``auto`` resolves to ``diagnostics_only`` only when at least one
+        configured EOG channel is present; otherwise it resolves to disabled.
     """
-    eog_events = mne.preprocessing.find_eog_events(raw, ch_name=ch_name)
-    n_blinks = len(eog_events)
-    onset = eog_events[:, 0] / raw.info["sfreq"] - 0.25
-    duration = np.repeat(0.5, n_blinks)
-    description = ["blink"] * n_blinks
-    annotations_blink = mne.Annotations(
-        onset,
-        duration,
-        description,
-        raw.info["meas_date"],
-    )
-    # Validate in sample space (absolute frame), not in raw.times (relative frame).
-    onset_samples = np.round(onset * raw.info["sfreq"]).astype(int)
-    sample_min = raw.first_samp
-    sample_max = raw.first_samp + raw.n_times - 1
-    n_out_of_range = int(np.sum((onset_samples < sample_min) | (onset_samples > sample_max)))
-    return annotations_blink, n_blinks, n_out_of_range
-
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX "Set the path and load the FIF-files" section adapted to local SSS files
-# -------------------------------------------------------------------------
-sss_files = sorted(
-    op.join(sss_input_dir, fname)
-    for fname in os.listdir(sss_input_dir)
-    if fname.endswith("_raw_sss.fif")
-)
-if not sss_files:
-    raise FileNotFoundError(
-        f"No SSS FIF files found under: {sss_input_dir}. Run 03_A_MaxFilt.py first."
-    )
-
-raw1_path = sss_files[0]
-ann1_fif = raw1_path.replace("_raw_sss.fif", "_ann.fif")
-ann1_csv = ann1_fif.replace(".fif", ".csv")
-
-log_to_console_and_report(
-    "Input SSS files discovered:\n"
-    + "\n".join(f"  - {p}" for p in sss_files)
-    + f"\n\nFirst-file outputs:\n  - {ann1_fif}\n  - {ann1_csv}",
-    title="Input/output overview",
-    section="Preparation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX run-01 equivalent: load first SSS file with preload=True
-# -------------------------------------------------------------------------
-raw1 = mne.io.read_raw_fif(raw1_path, preload=True, verbose=True)
-raw1_input_bads = list(dict.fromkeys(str(ch) for ch in raw1.info.get("bads", [])))
-log_to_console_and_report(
-    f"Loaded first file:\n  - {raw1_path}\nRaw summary: {raw1}",
-    title="Loaded first file",
-    section="Preparation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX "Identifying eye blinks": detect blinks from EOG001
-# -------------------------------------------------------------------------
-if skip_eog_blink_for_subject:
-    annotations_blink = mne.Annotations([], [], [], raw1.info["meas_date"])
-    n_blinks = 0
-    n_out_of_range = 0
-else:
-    annotations_blink, n_blinks, n_out_of_range = build_blink_annotations(raw1, ch_name="EOG001")
-
-log_to_console_and_report(
-    (
-        "WARNING: blink annotation skipped in 03_B for sub-01 because "
-        "EOG-based blink labels are unreliable in this subject. "
-        "Blink annotation is deferred to ICA component-0 logic in 03_C.\n"
-        if skip_eog_blink_for_subject
-        else ""
-    )
-    + f"Detected blink events (block01 equivalent): {n_blinks}\n"
-    + f"Blink onset out-of-range count: {n_out_of_range}",
-    title="Blink detection",
-    section="Block01 annotation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# Blink-only QC: frontal MEG + vEOG scrollable view with highlighted blinks
-# -------------------------------------------------------------------------
-if skip_eog_blink_for_subject:
-    log_to_console_and_report(
-        "WARNING: blink-only QC figure is intentionally omitted for sub-01 in 03_B. "
-        "Reason: EOG-based blink annotation is disabled for this subject and replaced "
-        "by ICA component-0 blink annotation in 03_C.",
-        title="Blink-only QC figure",
-        section="Block01 annotation",
-    )
-else:
-    # Build a blink-only view right after blink detection for targeted QC.
-    raw_blink_qc = raw1.copy()
-    raw_blink_qc.set_annotations(annotations_blink)
-
-    # Use user-specified frontal channels (FLUX adaptation override for this dataset).
-    frontal_meg_requested = [
-    #    "MEG0922",
-        "MEG0923",
-    #    "MEG0921",
-    #    "MEG1212",
-        "MEG1213",
-    #    "MEG1211",
-    #    "MEG0512",
-        "MEG0513",
-    #    "MEG0511",
-    #    "MEG0312",
-    #    "MEG0311",
-        "MEG0313",
+    available = [
+        channel for channel in configured_channels if channel in raw.ch_names
     ]
-    frontal_meg = [ch for ch in frontal_meg_requested if ch in raw_blink_qc.ch_names]
-    missing_frontal_meg = [ch for ch in frontal_meg_requested if ch not in raw_blink_qc.ch_names]
-    if missing_frontal_meg:
-        print(f"WARNING: requested frontal channels not found: {missing_frontal_meg}")
-    if not frontal_meg:
-        frontal_meg = [ch for ch in raw_blink_qc.ch_names if ch.startswith("MEG")][:12]
-    picks_blink_qc = frontal_meg + (["EOG001"] if "EOG001" in raw_blink_qc.ch_names else [])
-
-    start_blink_qc = max(0.0, float(annotations_blink.onset[0]) - 1.0) if n_blinks else 0.0
-    fig_blink_qc = raw_blink_qc.plot(
-        picks=picks_blink_qc,
-        n_channels=len(picks_blink_qc),
-        duration=12.0,
-        start=start_blink_qc,
-        proj=False,
-        scalings=dict(eog=500e-6),
-        show=True,
-    )
-
-    # Recolor blink annotation spans to yellow with 0.4 alpha for visual salience.
-    for key in list(fig_blink_qc.mne.annotation_segment_colors):
-        if str(key) == "blink":
-            fig_blink_qc.mne.annotation_segment_colors[key] = (255/255, 184/255, 28/255, 0.4)
-    fig_blink_qc._redraw(annotations=True)
-
-    report.add_figure(
-        fig=fig_blink_qc,
-        title="Blink-only frontal + vEOG view (block01)",
-        caption=f"Blinks={n_blinks}; start={start_blink_qc:.2f}s; picks={picks_blink_qc}",
-        section="Block01 annotation",
-        tags=("blink", "eog", "qc"),
-    )
-    savefig_logged(
-        fig_blink_qc,
-        "03_B_ArtefactAnnotation_block01_blink_frontal_eog.png",
-        dpi=150,
-        bbox_inches="tight",
-    )
-    plt.close(fig_blink_qc)
-    log_to_console_and_report(
-        "Blink-only QC figure generated with frontal MEG + EOG001.\n"
-        f"n_blinks={n_blinks}\n"
-        f"start={start_blink_qc:.2f}s\n"
-        f"picks={picks_blink_qc}",
-        title="Blink-only QC figure",
-        section="Block01 annotation",
-    )
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX "Finding muscle artefacts": annotate high-frequency muscle bursts
-# -------------------------------------------------------------------------
-threshold_muscle = 10
-annotations_muscle, scores_muscle = annotate_muscle_zscore(
-    raw1,
-    ch_type="mag",
-    threshold=threshold_muscle,
-    min_length_good=0.2,
-    filter_freq=[110, 140],
-)
-log_to_console_and_report(
-    "Muscle annotation parameters:\n"
-    f"  - threshold_muscle={threshold_muscle}\n"
-    "  - ch_type=mag\n"
-    "  - min_length_good=0.2\n"
-    "  - filter_freq=[110, 140]\n"
-    f"Detected muscle segments: {len(annotations_muscle)}",
-    title="Muscle detection",
-    section="Block01 annotation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX z-score threshold check figure
-# -------------------------------------------------------------------------
-fig_muscle_scores, ax = plt.subplots(figsize=(10, 4))
-ax.plot(raw1.times, scores_muscle)
-ax.axhline(y=threshold_muscle, color="r")
-ax.set(
-    xlabel="time, (s)",
-    ylabel="zscore",
-    title=f"Muscle activity (threshold = {threshold_muscle})",
-)
-report.add_figure(
-    fig=fig_muscle_scores,
-    title="Muscle z-score over time (block01)",
-    section="Block01 annotation",
-    tags=("muscle", "qc"),
-)
-savefig_logged(
-    fig_muscle_scores,
-    "03_B_ArtefactAnnotation_block01_muscle_zscore.png",
-    dpi=150,
-    bbox_inches="tight",
-)
-plt.close(fig_muscle_scores)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX "Include annotations in dataset and inspect": combine annotations
-# -------------------------------------------------------------------------
-annotations_event = raw1.annotations
-raw1.set_annotations(annotations_event + annotations_blink + annotations_muscle)
-log_to_console_and_report(
-    f"Combined annotations in first file: {len(raw1.annotations)} total segments.",
-    title="Combined annotations",
-    section="Block01 annotation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX inspection plot: raw browser view with annotations
-# -------------------------------------------------------------------------
-# Keep FLUX-like browser defaults here; avoid expensive global auto-scaling pass.
-fig_annotated_raw = raw1.plot(start=50, duration=10, proj=False, show=True)
-report.add_figure(
-    fig=fig_annotated_raw,
-    title="Annotated raw first-look (block01)",
-    section="Block01 annotation",
-    tags=("raw", "qc"),
-)
-savefig_logged(
-    fig_annotated_raw,
-    "03_B_ArtefactAnnotation_block01_annotated_raw.png",
-    dpi=150,
-    bbox_inches="tight",
-)
-plt.close(fig_annotated_raw)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX ocular-focused inspection plot: EOG-only channels
-# -------------------------------------------------------------------------
-# Keep FLUX channel-type assignment step for parity; these channels are usually
-# already typed as EOG in this dataset, so this is idempotent.
-raw1.set_channel_types({"EOG001": "eog"})
-raw1.set_channel_types({"EOG002": "eog"})
-
-eog_picks = mne.pick_types(raw1.info, meg=False, eog=True)
-scl = dict(eog=500e-6)
-fig_eog = raw1.plot(order=eog_picks, scalings=scl, start=50, duration=10, show=True)
-report.add_figure(
-    fig=fig_eog,
-    title="EOG channels with blink annotations (block01)",
-    section="Block01 annotation",
-    tags=("eog", "qc"),
-)
-savefig_logged(
-    fig_eog,
-    "03_B_ArtefactAnnotation_block01_eog_raw.png",
-    dpi=150,
-    bbox_inches="tight",
-)
-plt.close(fig_eog)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX save step for first file
-# -------------------------------------------------------------------------
-# Keep upstream bad-channel metadata intact in the annotated output file.
-raw1.info["bads"] = list(raw1_input_bads)
-raw1.save(ann1_fif, overwrite=True)
-raw1.annotations.save(ann1_csv, overwrite=True)
-log_to_console_and_report(
-    "Saved first annotated files:\n"
-    f"  - {ann1_fif}\n"
-    f"  - {ann1_csv}\n"
-    f"  - propagated_bads={raw1_input_bads}",
-    title="Saved first outputs",
-    section="Save outputs",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX run-02 block generalized to all remaining SSS files for subject 01
-# -------------------------------------------------------------------------
-per_file_summary = []
-for raw_path in sss_files[1:]:
-    print(f"Annotating additional file: {raw_path}")
-    raw_run = mne.io.read_raw_fif(raw_path, preload=True, verbose=True)
-    raw_run_input_bads = list(dict.fromkeys(str(ch) for ch in raw_run.info.get("bads", [])))
-
-    # Blinks: same subject-specific policy as run-01.
-    if skip_eog_blink_for_subject:
-        annotations_blink = mne.Annotations([], [], [], raw_run.info["meas_date"])
-        n_blinks = 0
-        n_out_of_range = 0
-    else:
-        annotations_blink, n_blinks, n_out_of_range = build_blink_annotations(
-            raw_run,
-            ch_name="EOG001",
+    missing = [
+        channel for channel in configured_channels if channel not in raw.ch_names
+    ]
+    if configured_mode == "auto":
+        return (
+            "diagnostics_only" if available else "disabled",
+            available,
+            missing,
         )
+    if configured_mode in ("diagnostics_only", "annotate") and not available:
+        return "disabled", available, missing
+    return configured_mode, available, missing
 
-    # Muscle (same FLUX parameters).
-    annotations_muscle, scores_muscle_run = annotate_muscle_zscore(
-        raw_run,
-        ch_type="mag",
-        threshold=threshold_muscle,
-        min_length_good=0.2,
-        filter_freq=[110, 140],
+
+def build_blink_annotations(
+    raw: mne.io.BaseRaw,
+    *,
+    channel: str,
+    tmin_sec: float,
+    tmax_sec: float,
+) -> tuple[mne.Annotations, np.ndarray]:
+    """
+    Detect EOG events and return annotations in the raw absolute sample frame.
+
+    ``find_eog_events`` returns samples including ``raw.first_samp``. With
+    ``orig_time=meas_date``, annotation onsets therefore retain that absolute
+    frame rather than subtracting the run's first sample.
+    """
+    events = mne.preprocessing.find_eog_events(
+        raw,
+        ch_name=channel,
+        verbose="ERROR",
     )
+    onsets = events[:, 0] / raw.info["sfreq"] + float(tmin_sec)
+    duration = float(tmax_sec) - float(tmin_sec)
+    annotations = mne.Annotations(
+        onset=onsets,
+        duration=np.repeat(duration, len(events)),
+        description=["BAD_blink"] * len(events),
+        orig_time=raw.info["meas_date"],
+    )
+    return annotations, events
 
-    # Per-file muscle z-score QC figure (saved and embedded in report).
-    run_label = op.basename(raw_path).replace("_raw_sss.fif", "")
-    fig_muscle_scores_run, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(raw_run.times, scores_muscle_run)
-    ax.axhline(y=threshold_muscle, color="r")
+
+# -----------------------------------------------------------------------------
+# Plotting and interactive threshold selection
+# -----------------------------------------------------------------------------
+
+
+def save_muscle_score_plot(
+    *,
+    record: AcquisitionRunRecord,
+    raw: mne.io.BaseRaw,
+    scores: np.ndarray,
+    threshold: float,
+    output_path: Path,
+    show: bool,
+) -> Path:
+    """Save/display the FLUX-style muscle z-score decision plot."""
+    fig, ax = plt.subplots(figsize=(12, 4))
+    ax.plot(raw.times, scores, linewidth=0.6)
+    ax.axhline(y=threshold, color="r")
     ax.set(
-        xlabel="time, (s)",
-        ylabel="zscore",
-        title=f"Muscle activity ({run_label}, threshold = {threshold_muscle})",
+        xlabel="time (s)",
+        ylabel="z-score",
+        title=(
+            f"{record.source_filename} | Muscle activity "
+            f"(threshold = {threshold:g})"
+        ),
     )
-    report.add_figure(
-        fig=fig_muscle_scores_run,
-        title=f"Muscle z-score over time ({run_label})",
-        section="Additional files annotation",
-        tags=("muscle", "qc"),
-    )
-    savefig_logged(
-        fig_muscle_scores_run,
-        f"03_B_ArtefactAnnotation_{run_label}_muscle_zscore.png",
-        dpi=150,
-        bbox_inches="tight",
-    )
-    plt.close(fig_muscle_scores_run)
+    ax.grid(alpha=0.2)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show(block=True)
+    plt.close(fig)
+    return output_path
 
-    # Combine and save.
-    raw_run.set_annotations(raw_run.annotations + annotations_blink + annotations_muscle)
-    # Preserve upstream bad-channel metadata exactly as received.
-    raw_run.info["bads"] = list(raw_run_input_bads)
 
-    out_ann_fif = raw_path.replace("_raw_sss.fif", "_ann.fif")
-    out_ann_csv = out_ann_fif.replace(".fif", ".csv")
-    raw_run.save(out_ann_fif, overwrite=True)
-    raw_run.annotations.save(out_ann_csv, overwrite=True)
+def interactive_threshold_review(
+    *,
+    record: AcquisitionRunRecord,
+    raw: mne.io.BaseRaw,
+    scores: np.ndarray,
+    initial_threshold: float,
+    figure_path: Path,
+    show: bool,
+) -> float:
+    """
+    Replot and prompt until one run's muscle threshold is accepted.
 
-    per_file_summary.append(
-        {
-            "file": op.basename(raw_path),
-            "blinks": n_blinks,
-            "blink_out_of_range": n_out_of_range,
-            "muscle_segments": len(annotations_muscle),
-            "total_annotations": len(raw_run.annotations),
-            "propagated_bads": list(raw_run_input_bads),
-            "ann_fif": out_ann_fif,
-            "ann_csv": out_ann_csv,
-        }
-    )
-
-if not per_file_summary:
-    log_to_console_and_report(
-        "No additional SSS files found beyond the first file.",
-        title="Additional files",
-        section="Save outputs",
-    )
-else:
-    summary_lines = ["Additional-file annotation summary:"]
-    for item in per_file_summary:
-        summary_lines.append(
-            "  "
-            f"{item['file']}: blinks={item['blinks']}, "
-            f"blink_out_of_range={item['blink_out_of_range']}, "
-            f"muscle_segments={item['muscle_segments']}, "
-            f"total_annotations={item['total_annotations']}, "
-            f"propagated_bads={item['propagated_bads']}"
+    The z-score trace does not depend on the threshold, so only the decision
+    line needs to be redrawn while the operator iterates.
+    """
+    threshold = float(initial_threshold)
+    while True:
+        save_muscle_score_plot(
+            record=record,
+            raw=raw,
+            scores=scores,
+            threshold=threshold,
+            output_path=figure_path,
+            show=show,
         )
-        summary_lines.append(f"    saved_fif={item['ann_fif']}")
-        summary_lines.append(f"    saved_csv={item['ann_csv']}")
-    log_to_console_and_report(
-        "\n".join(summary_lines),
-        title="Additional-file summary",
-        section="Save outputs",
+        print(
+            f"Muscle threshold plot for {record.source_filename}: {figure_path}"
+        )
+        answer = input(
+            f"Accept muscle threshold {threshold:g}? "
+            "[Y/n or enter a new numeric threshold]: "
+        ).strip()
+        if answer.lower() in ("", "y", "yes"):
+            return threshold
+        if answer.lower() in ("n", "no"):
+            answer = input("New muscle threshold: ").strip()
+        try:
+            threshold = float(answer)
+        except ValueError:
+            print(f"Invalid numeric threshold: {answer!r}")
+
+
+def save_eog_diagnostic_plot(
+    *,
+    record: AcquisitionRunRecord,
+    raw: mne.io.BaseRaw,
+    eog_channels: list[str],
+    events: np.ndarray,
+    output_path: Path,
+    show: bool,
+) -> Path:
+    """Save/display a two-minute EOG trace with detected event markers."""
+    duration = min(120.0, max(0.0, float(raw.times[-1])))
+    preview = raw.copy().pick(eog_channels).crop(0.0, duration).load_data()
+    data = preview.get_data()
+    fig, axes = plt.subplots(
+        len(eog_channels),
+        1,
+        figsize=(12, max(3, 2.5 * len(eog_channels))),
+        sharex=True,
+        squeeze=False,
+    )
+    event_times = (events[:, 0] - raw.first_samp) / raw.info["sfreq"]
+    for index, channel in enumerate(eog_channels):
+        axis = axes[index, 0]
+        axis.plot(preview.times, data[index] * 1e6, linewidth=0.7)
+        for event_time in event_times:
+            if 0.0 <= event_time <= duration:
+                axis.axvline(event_time, color="tab:red", alpha=0.25)
+        axis.set_ylabel(f"{channel} (uV)")
+        axis.grid(alpha=0.2)
+    axes[-1, 0].set_xlabel("time (s)")
+    fig.suptitle(
+        f"{record.source_filename} | EOG diagnostics "
+        f"({len(events)} detected events)"
+    )
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show(block=True)
+    plt.close(fig)
+    return output_path
+
+
+# -----------------------------------------------------------------------------
+# Stage execution
+# -----------------------------------------------------------------------------
+
+
+def _annotate_one_run(
+    *,
+    record: AcquisitionRunRecord,
+    input_path: Path,
+    output_fif: Path,
+    output_csv: Path,
+    artifact_cfg: Mapping[str, Any],
+    initial_threshold: float,
+    interactive: bool,
+    show: bool,
+    muscle_figure_path: Path,
+    eog_figure_path: Path,
+    overwrite: bool,
+) -> tuple[dict[str, Any], float, list[Path]]:
+    """Annotate one run and return its QC summary and accepted threshold."""
+    raw = mne.io.read_raw_fif(
+        input_path,
+        preload=True,
+        verbose="WARNING",
+    )
+    input_bads = list(raw.info.get("bads", []))
+    original_annotations = raw.annotations.copy()
+    misc_before = [
+        channel
+        for channel, kind in zip(
+            raw.ch_names,
+            raw.get_channel_types(),
+            strict=True,
+        )
+        if kind == "misc"
+    ]
+
+    muscle_kwargs = {
+        "ch_type": artifact_cfg["muscle_channel_type"],
+        "min_length_good": float(
+            artifact_cfg["muscle_min_length_good_sec"]
+        ),
+        "filter_freq": tuple(
+            float(value) for value in artifact_cfg["muscle_filter_freq_hz"]
+        ),
+    }
+    muscle_annotations, muscle_scores = annotate_muscle_zscore(
+        raw,
+        threshold=float(initial_threshold),
+        verbose="WARNING",
+        **muscle_kwargs,
+    )
+    accepted_threshold = float(initial_threshold)
+    if interactive:
+        accepted_threshold = interactive_threshold_review(
+            record=record,
+            raw=raw,
+            scores=muscle_scores,
+            initial_threshold=initial_threshold,
+            figure_path=muscle_figure_path,
+            show=show,
+        )
+        if accepted_threshold != float(initial_threshold):
+            muscle_annotations, muscle_scores = annotate_muscle_zscore(
+                raw,
+                threshold=accepted_threshold,
+                verbose="WARNING",
+                **muscle_kwargs,
+            )
+    save_muscle_score_plot(
+        record=record,
+        raw=raw,
+        scores=muscle_scores,
+        threshold=accepted_threshold,
+        output_path=muscle_figure_path,
+        show=False,
     )
 
-# %%
-# -------------------------------------------------------------------------
-# Final report save
-# -------------------------------------------------------------------------
-report.save(out_report, overwrite=True, open_browser=False)
-print(f"Saved HTML report to: {out_report}")
+    configured_eog = list(artifact_cfg["eog_channel_names"])
+    eog_mode, available_eog, missing_eog = resolve_eog_mode(
+        str(artifact_cfg["eog_mode"]),
+        configured_eog,
+        raw,
+    )
+    blink_annotations = mne.Annotations(
+        [],
+        [],
+        [],
+        orig_time=raw.info["meas_date"],
+    )
+    blink_events = np.empty((0, 3), dtype=int)
+    eog_status = "skipped_no_eog_channels"
+    qc_images = [muscle_figure_path]
+    if eog_mode in ("diagnostics_only", "annotate"):
+        requested_blink_channel = artifact_cfg.get("blink_channel")
+        blink_channel = (
+            requested_blink_channel
+            if requested_blink_channel in available_eog
+            else available_eog[0]
+        )
+        blink_annotations, blink_events = build_blink_annotations(
+            raw,
+            channel=blink_channel,
+            tmin_sec=float(artifact_cfg["blink_tmin_sec"]),
+            tmax_sec=float(artifact_cfg["blink_tmax_sec"]),
+        )
+        save_eog_diagnostic_plot(
+            record=record,
+            raw=raw,
+            eog_channels=available_eog,
+            events=blink_events,
+            output_path=eog_figure_path,
+            show=show,
+        )
+        qc_images.append(eog_figure_path)
+        eog_status = (
+            "annotated" if eog_mode == "annotate" else "diagnostics_only"
+        )
+
+    combined = original_annotations + muscle_annotations
+    if eog_mode == "annotate":
+        combined = combined + blink_annotations
+    raw.set_annotations(combined)
+    raw.info["bads"] = list(input_bads)
+    raw.info["description"] = (
+        f"DAD source={record.source_filename}; "
+        f"acquisition_run={record.acquisition_run_label}; "
+        "stage=03_B_ArtefactAnnotation; "
+        f"muscle_threshold={accepted_threshold:g}"
+    )
+    raw.save(output_fif, overwrite=overwrite, verbose="WARNING")
+    raw.annotations.save(output_csv, overwrite=overwrite)
+
+    misc_after = [
+        channel
+        for channel, kind in zip(
+            raw.ch_names,
+            raw.get_channel_types(),
+            strict=True,
+        )
+        if kind == "misc"
+    ]
+    if misc_after != misc_before:
+        raise RuntimeError(
+            "MISC channel identity changed during artifact annotation: "
+            f"before={misc_before}, after={misc_after}"
+        )
+    return (
+        {
+            "source_filename": record.source_filename,
+            "acquisition_run_label": record.acquisition_run_label,
+            "execution_status": "completed",
+            "input_path": str(input_path),
+            "output_fif": str(output_fif),
+            "output_csv": str(output_csv),
+            "input_bad_channels": input_bads,
+            "original_annotation_count": len(original_annotations),
+            "muscle_threshold": accepted_threshold,
+            "muscle_annotation_count": len(muscle_annotations),
+            "eog_mode_configured": artifact_cfg["eog_mode"],
+            "eog_mode_resolved": eog_mode,
+            "eog_status": eog_status,
+            "available_eog_channels": available_eog,
+            "missing_configured_eog_channels": missing_eog,
+            "detected_eog_event_count": len(blink_events),
+            "blink_annotations_applied": eog_mode == "annotate",
+            "misc_channels_preserved": misc_after,
+            "trigger_150_handling": "not_part_of_this_stage",
+            "total_annotation_count": len(raw.annotations),
+        },
+        accepted_threshold,
+        qc_images,
+    )
+
+
+def _validate_resumable_annotation(
+    *,
+    record: AcquisitionRunRecord,
+    input_path: Path,
+    output_fif: Path,
+    output_csv: Path,
+    threshold: float,
+    artifact_cfg: Mapping[str, Any],
+    raw_root: str | Path,
+) -> tuple[dict[str, Any], list[Path]]:
+    """
+    Validate and summarize one existing annotated derivative for resume.
+
+    Both FIF and CSV must describe the same annotation set. Input/output
+    channel identity and bad-channel metadata are compared so preservation of
+    MISC timing channels is checked rather than assumed.
+    """
+    resolved_fif = guarded_path(output_fif, raw_root)
+    resolved_csv = guarded_path(output_csv, raw_root)
+    if not resolved_csv.is_file():
+        raise RuntimeError(
+            "Cannot resume artifact annotation because its annotation CSV is "
+            f"missing: {resolved_csv}"
+        )
+    try:
+        source = mne.io.read_raw_fif(
+            input_path,
+            preload=False,
+            verbose="ERROR",
+        )
+        existing = mne.io.read_raw_fif(
+            resolved_fif,
+            preload=False,
+            verbose="ERROR",
+        )
+        with resolved_csv.open(
+            "r",
+            encoding="utf-8",
+            newline="",
+        ) as csv_handle:
+            csv_annotation_count = sum(1 for _row in csv.DictReader(csv_handle))
+    except Exception as exc:  # pylint: disable=broad-except
+        raise RuntimeError(
+            f"Cannot resume from unreadable artifact derivative {resolved_fif}: "
+            f"{exc}"
+        ) from exc
+
+    description = str(existing.info.get("description") or "")
+    required_tokens = (
+        f"source={record.source_filename}",
+        f"acquisition_run={record.acquisition_run_label}",
+        "stage=03_B_ArtefactAnnotation",
+        f"muscle_threshold={threshold:g}",
+    )
+    missing_tokens = [token for token in required_tokens if token not in description]
+    if missing_tokens:
+        raise RuntimeError(
+            "Cannot resume from artifact derivative with mismatched lineage or "
+            f"threshold: {resolved_fif}; missing={missing_tokens}"
+        )
+    if existing.ch_names != source.ch_names:
+        raise RuntimeError(
+            "Cannot resume because artifact annotation changed channel identity: "
+            f"{resolved_fif}"
+        )
+    if list(existing.info.get("bads", [])) != list(source.info.get("bads", [])):
+        raise RuntimeError(
+            "Cannot resume because artifact annotation changed bad-channel "
+            f"metadata: {resolved_fif}"
+        )
+    if csv_annotation_count != len(existing.annotations):
+        raise RuntimeError(
+            "Cannot resume because FIF and CSV annotation counts differ: "
+            f"{resolved_fif}={len(existing.annotations)}, "
+            f"{resolved_csv}={csv_annotation_count}"
+        )
+
+    channel_types = existing.get_channel_types()
+    misc_channels = [
+        channel
+        for channel, kind in zip(existing.ch_names, channel_types, strict=True)
+        if kind == "misc"
+    ]
+    configured_eog = list(artifact_cfg["eog_channel_names"])
+    eog_mode, available_eog, missing_eog = resolve_eog_mode(
+        str(artifact_cfg["eog_mode"]),
+        configured_eog,
+        existing,
+    )
+    descriptions = [str(value) for value in existing.annotations.description]
+    muscle_count = sum(value == "BAD_muscle" for value in descriptions)
+    eog_annotation_count = sum(
+        value.lower().startswith("bad_blink") for value in descriptions
+    )
+    return (
+        {
+            "source_filename": record.source_filename,
+            "acquisition_run_label": record.acquisition_run_label,
+            "execution_status": "resumed_existing",
+            "input_path": str(input_path),
+            "output_fif": str(resolved_fif),
+            "output_csv": str(resolved_csv),
+            "input_bad_channels": list(source.info.get("bads", [])),
+            "original_annotation_count": None,
+            "muscle_threshold": float(threshold),
+            "muscle_annotation_count": muscle_count,
+            "eog_mode_configured": artifact_cfg["eog_mode"],
+            "eog_mode_resolved": eog_mode,
+            "eog_status": (
+                "resumed_annotated"
+                if eog_mode == "annotate"
+                else (
+                    "resumed_diagnostics_only"
+                    if eog_mode == "diagnostics_only"
+                    else "skipped_no_eog_channels"
+                )
+            ),
+            "available_eog_channels": available_eog,
+            "missing_configured_eog_channels": missing_eog,
+            "detected_eog_event_count": (
+                eog_annotation_count if eog_mode == "annotate" else None
+            ),
+            "blink_annotations_applied": eog_mode == "annotate",
+            "misc_channels_preserved": misc_channels,
+            "trigger_150_handling": "not_part_of_this_stage",
+            "total_annotation_count": len(existing.annotations),
+        },
+        [],
+    )
+
+
+# -----------------------------------------------------------------------------
+# Lineage construction
+# -----------------------------------------------------------------------------
+
+
+def build_annotation_lineage_record(
+    *,
+    record: AcquisitionRunRecord,
+    input_path: Path,
+    run_report: Mapping[str, Any],
+    accepted_threshold: float,
+) -> dict[str, Any]:
+    """
+    Build consistent lineage for either a completed or resumed annotation run.
+
+    Output paths come from ``run_report`` because both execution branches
+    produce that common contract. This avoids referring to local output
+    variables that exist only when a derivative is created during this call.
+    """
+    return lineage_record(
+        source=record,
+        input_path=input_path,
+        output_path=run_report["output_fif"],
+        status=run_report["execution_status"],
+        metadata={
+            "annotation_csv": str(run_report["output_csv"]),
+            "muscle_threshold": accepted_threshold,
+            "muscle_annotation_count": run_report["muscle_annotation_count"],
+            "eog_status": run_report["eog_status"],
+            "misc_channels_preserved": run_report["misc_channels_preserved"],
+            "execution_status": run_report["execution_status"],
+        },
+    )
+
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the artifact-annotation CLI."""
+    parser = argparse.ArgumentParser(
+        description="Annotate DAD MEG muscle and optional EOG artifacts."
+    )
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--site-config", default=None)
+    parser.add_argument("--subject-config", default=None)
+    parser.add_argument("--tuning-config", default=None)
+    parser.add_argument("--source-manifest", default=None)
+    parser.add_argument(
+        "--processing-pass",
+        choices=("review", "apply"),
+        default="review",
+    )
+    parser.add_argument("--interactive", action="store_true")
+    parser.add_argument("--no-display", action="store_true")
+    parser.add_argument("--decisions-out", default=None)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Validate and skip existing lineage-matched FIF/CSV pairs; fail on "
+            "any mismatch. Mutually exclusive with --overwrite."
+        ),
+    )
+    parser.add_argument("--print-summary", action="store_true")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run modality-aware artifact annotation for all acquisition runs."""
+    args = build_arg_parser().parse_args(argv)
+    try:
+        cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
+            args.config,
+            args.subject_config,
+            args.tuning_config,
+            site_config_path=args.site_config,
+            required_sections=("artifact_annotation",),
+        )
+        artifact_cfg = cfg["artifact_annotation"]
+        if not artifact_cfg["enabled"]:
+            raise RuntimeError("Artifact annotation is disabled in configuration.")
+        raw_root = cfg["resolved_paths"]["data_root"]
+        overwrite = bool(args.overwrite or cfg["runtime"]["overwrite_existing"])
+        if args.resume and overwrite:
+            raise ValueError("--resume and --overwrite are mutually exclusive.")
+        output_dirs = stage_output_dirs(cfg)
+        sss_dir = ensure_output_directory(output_dirs["sss"], raw_root)
+        figure_dir = ensure_output_directory(output_dirs["figures"], raw_root)
+        report_dir = ensure_output_directory(output_dirs["reports"], raw_root)
+        decisions_out = (
+            Path(args.decisions_out).expanduser().resolve()
+            if args.decisions_out
+            else report_dir / "03_tuning_choices.yaml"
+        )
+
+        raw_records = discover_raw_run_records(cfg)
+        run_reports: list[dict[str, Any]] = []
+        lineage_records: list[dict[str, Any]] = []
+        qc_images: list[Path] = []
+        accepted_by_run: dict[str, float] = {}
+        for record in raw_records:
+            input_path = derivative_path_for_run(record, sss_dir, INPUT_SUFFIX)
+            if not input_path.is_file():
+                raise FileNotFoundError(
+                    "Expected lineage-matched Maxwell derivative is missing: "
+                    f"{input_path}. Run 03_A_MaxFilt.py first."
+                )
+            requested_fif = derivative_path_for_run(
+                record,
+                sss_dir,
+                OUTPUT_FIF_SUFFIX,
+            )
+            requested_csv = derivative_path_for_run(
+                record,
+                sss_dir,
+                OUTPUT_CSV_SUFFIX,
+            )
+            muscle_figure = prepare_output_path(
+                figure_dir
+                / (
+                    f"03_B_ArtefactAnnotation_{args.processing_pass}_"
+                    f"{record.source_stem}_muscle_zscore.png"
+                ),
+                raw_root=raw_root,
+                overwrite=True,
+            )
+            eog_figure = prepare_output_path(
+                figure_dir
+                / (
+                    f"03_B_ArtefactAnnotation_{args.processing_pass}_"
+                    f"{record.source_stem}_eog_diagnostics.png"
+                ),
+                raw_root=raw_root,
+                overwrite=True,
+            )
+            initial_threshold = threshold_for_run(
+                artifact_cfg,
+                record.acquisition_run_label,
+            )
+            if args.resume and (requested_fif.exists() or requested_csv.exists()):
+                if not requested_fif.is_file():
+                    raise RuntimeError(
+                        "Cannot resume artifact annotation because CSV exists "
+                        f"without its FIF: {requested_csv}"
+                    )
+                run_report, run_images = _validate_resumable_annotation(
+                    record=record,
+                    input_path=input_path,
+                    output_fif=requested_fif,
+                    output_csv=requested_csv,
+                    threshold=initial_threshold,
+                    artifact_cfg=artifact_cfg,
+                    raw_root=raw_root,
+                )
+                accepted_threshold = initial_threshold
+                for candidate in (muscle_figure, eog_figure):
+                    if candidate.is_file():
+                        run_images.append(candidate)
+            else:
+                output_fif = prepare_output_path(
+                    requested_fif,
+                    raw_root=raw_root,
+                    overwrite=overwrite,
+                )
+                output_csv = prepare_output_path(
+                    requested_csv,
+                    raw_root=raw_root,
+                    overwrite=overwrite,
+                )
+                run_report, accepted_threshold, run_images = _annotate_one_run(
+                    record=record,
+                    input_path=input_path,
+                    output_fif=output_fif,
+                    output_csv=output_csv,
+                    artifact_cfg=artifact_cfg,
+                    initial_threshold=initial_threshold,
+                    interactive=bool(args.interactive),
+                    show=bool(args.interactive and not args.no_display),
+                    muscle_figure_path=muscle_figure,
+                    eog_figure_path=eog_figure,
+                    overwrite=overwrite,
+                )
+            run_reports.append(run_report)
+            qc_images.extend(run_images)
+            accepted_by_run[f"run{record.acquisition_run_label:02d}"] = (
+                accepted_threshold
+            )
+            lineage_records.append(
+                build_annotation_lineage_record(
+                    record=record,
+                    input_path=input_path,
+                    run_report=run_report,
+                    accepted_threshold=accepted_threshold,
+                )
+            )
+
+        if args.interactive:
+            update_tuning_file(
+                path=decisions_out,
+                raw_root=raw_root,
+                subject_id=cfg["subject"]["id"],
+                section="artifact_annotation",
+                values={"muscle_threshold_by_run": accepted_by_run},
+            )
+
+        report_payload = {
+            "stage": STAGE_NAME,
+            "generated_utc": utc_now(),
+            "processing_pass": args.processing_pass,
+            "interactive": bool(args.interactive),
+            "resume": bool(args.resume),
+            "subject_bids_id": cfg["layout"]["subject_bids_id"],
+            "status": "completed",
+            "warnings": warnings,
+            "default_muscle_threshold": artifact_cfg["muscle_threshold"],
+            "accepted_muscle_threshold_by_run": accepted_by_run,
+            "eog_policy": (
+                "Use FIF EOG only when present; EDF is not aligned or consumed."
+            ),
+            "trigger_150_policy": (
+                "No trigger-150 rejection occurs in physiological annotation."
+            ),
+            "runs": run_reports,
+        }
+        report_json = write_json(
+            report_dir
+            / f"03_B_ArtefactAnnotation_{args.processing_pass}_report.json",
+            report_payload,
+            raw_root=raw_root,
+        )
+        summary_lines = [
+            "status: completed",
+            f"processing_pass: {args.processing_pass}",
+            f"subject: {cfg['layout']['subject_bids_id']}",
+            f"thresholds: {accepted_by_run}",
+            "trigger 150: not handled by this stage",
+            "",
+            "Per-run results:",
+        ]
+        summary_lines.extend(
+            (
+                f"run{item['acquisition_run_label']:02d} "
+                f"{item['source_filename']}: "
+                f"execution={item['execution_status']}; "
+                f"threshold={item['muscle_threshold']}; "
+                f"muscle_segments={item['muscle_annotation_count']}; "
+                f"eog_status={item['eog_status']}; "
+                f"eog_events={item['detected_eog_event_count']}; "
+                f"MISC={item['misc_channels_preserved']}"
+            )
+            for item in run_reports
+        )
+        report_html = write_simple_html_report(
+            report_dir
+            / f"03_B_ArtefactAnnotation_{args.processing_pass}_report.html",
+            title=(
+                f"{cfg['layout']['subject_bids_id']} | 03_B Artifacts "
+                f"({args.processing_pass})"
+            ),
+            summary_lines=summary_lines,
+            image_paths=qc_images,
+            raw_root=raw_root,
+        )
+        manifest_status = update_source_manifest_stage(
+            manifest_path=args.source_manifest,
+            raw_root=raw_root,
+            stage_name=STAGE_NAME,
+            processing_pass=args.processing_pass,
+            records=lineage_records,
+            status="completed",
+            qc={
+                "report_json": str(report_json),
+                "report_html": str(report_html),
+                "accepted_muscle_threshold_by_run": accepted_by_run,
+            },
+        )
+        if args.print_summary:
+            print(f"Artifact annotation: completed ({len(raw_records)} runs)")
+            print(f"Thresholds: {accepted_by_run}")
+            print(f"JSON report: {report_json}")
+            print(f"HTML report: {report_html}")
+            print(f"Source manifest: {manifest_status}")
+            if args.interactive:
+                print(f"Accepted tuning: {decisions_out}")
+        return 0
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"03_B ArtefactAnnotation error: {exc}", file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

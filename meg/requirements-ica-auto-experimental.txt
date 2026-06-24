@@ -1,0 +1,6 @@
+# Optional dependencies for the deprecated 03_C_ICA_auto.py research branch.
+#
+# This file is not included by requirements.txt or requirements-dev.txt.
+# Installing it does not make automatic ICA production-approved.
+mne-icalabel>=0.8,<1.0
+onnxruntime>=1.18,<2.0

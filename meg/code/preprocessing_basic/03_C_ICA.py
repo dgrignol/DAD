@@ -3,667 +3,1125 @@
 03_C_ICA.py
 
 Purpose
-Adapt the FLUX MNE-Python ICA workflow to the local DAD MEG dataset with
-minimal changes. This script follows the FLUX ICA sequence:
-1) load annotation-ready FIF files (`*_ann.fif`),
-2) resample MEG data to 200 Hz and band-pass filter 1-40 Hz for ICA fitting,
-3) fit FastICA with 30 components (random_state=97),
-4) inspect ICA sources/components and score component-EOG coupling,
-5) exclude artefact components using a manual subject-specific list (or prompt
-   interactively when no subject list is configured),
-6) apply ICA to each annotated file,
-7) preserve input bad-channel metadata in each cleaned output header, and
-8) save ICA-cleaned outputs (`*_ica.fif`), figures, and HTML report.
+Fit, review, and apply the production manual ICA branch for DAD MEG data.
+Component rejection is always an explicit subject-level decision. Batch mode
+never prompts and never invents exclusions from EOG scores or component index.
 
-Usage example
-python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_C_ICA.py
+Usage examples
+1) First-pass review using FLUX-aligned fit defaults:
+
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_C_ICA.py \
+     --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --processing-pass review --print-summary
+
+   This fits or reuses a compatible ICA cache, saves topographies and component
+   property plots, records EOG diagnostics when channels exist, and exits
+   successfully with ``review_required`` when ``ica.manual_exclude`` is null.
+
+2) Interactive component review:
+
+   python .../03_C_ICA.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --processing-pass review \
+     --interactive --decisions-out .../03_tuning_choices.yaml
+
+   Component diagnostics are saved and topography pages are optionally
+   displayed. The operator enters component indices, reviews the proposed list,
+   and repeats until accepting it.
+
+3) Apply reviewed exclusions:
+
+   python .../03_C_ICA.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --tuning-config .../03_tuning_choices.yaml \
+     --processing-pass apply --overwrite
+
+4) Resume an interrupted apply pass. Existing cleaned runs and the
+   post-rejection model are validated before reuse:
+
+   python .../03_C_ICA.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml --tuning-config .../03_tuning_choices.yaml \
+     --processing-pass apply --resume
 
 Inputs
-- Annotated FIF files from step 03_B:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/sss/*_ann.fif
+- Layered configuration; ``--site-config`` overrides machine paths without
+  changing scientific settings.
+- ``<exact-source-stem>_ann.fif`` from 03_B for every acquisition run.
 
 Outputs
-- ICA-cleaned FIF files:
-  .../sss/*_ica.fif
-  (`raw.info['bads']` preserved from corresponding `*_ann.fif` input)
-- Saved ICA model files:
-  .../ica_models/sub-01_ses-01_ica_prefit.fif
-  .../ica_models/sub-01_ses-01_ica_postreject.fif
-- Static figures:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/figures/
-- HTML report:
-  /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/reports/sub-01/ses-01/03_C_ICA_report.html
+- Review: compatible prefit ICA model, metadata fingerprint, component PNGs,
+  and pass-specific JSON/HTML QC reports.
+- Apply: post-rejection ICA model and
+  ``<exact-source-stem>_ica.fif`` cleaned acquisition runs.
+- Optional accepted tuning YAML and source-manifest derivative lineage.
 
-Key FLUX assumptions kept
-- ICA fit is performed on MEG-only data after 200 Hz resampling and 1-40 Hz
-  filtering to improve decomposition efficiency.
-- ICA projection is applied to the original annotated raw files (not the
-  filtered/resampled fit copy).
+Data flow
+annotated acquisition runs -> MEG-only 200 Hz, 1-40 Hz fit copies ->
+concatenated FastICA decomposition -> component/EOG diagnostics -> explicit
+manual exclusion decision -> projection onto each original annotated run.
 
-Local adaptation for debugging/QA
-- The script now computes per-file/per-EOG ICA correlation scores and reports
-  ranked ocular-candidate components. This makes it explicit that ICA index
-  ordering is arbitrary and should not be interpreted as "component 1 = blinks"
-  without channel-based scoring.
-- Subject-specific exception for sub-01: blink annotations are generated from
-  ICA component 0 (ICA000) instead of EOG-based blink labels from step 03_B.
+Scientific assumptions
+- FLUX defaults are retained where applicable: FastICA, 30 components,
+  ``random_state=97``, 200 Hz resampling, and 1-40 Hz fit filtering.
+- Different ``dev_head_t`` values across acquisition runs are accepted with an
+  explicit warning during concatenation, matching the documented local
+  deviation.
+- EOG scores are diagnostics only. Missing EOG channels skip cleanly.
+- No ICA000 blink workaround is used.
+- A null exclusion list means unreviewed. ``[]`` means reviewed and rejecting
+  no components.
 
-Local adaptation note
-- !!!IMPORTANT!!! runs can have different dev_head_t (different head
-        # positions between blocks). Keep FLUX-style concatenated ICA fitting,
-        # but allow this mismatch explicitly so fitting can proceed.
-- The script caches ICA decomposition just after fitting (pre-rejection) and
-  saves a second ICA file after assigning excluded components (post-rejection)
-  so later reruns can skip expensive ICA fitting.
-- If no manual exclusion list is configured for the current subject, the script
-  saves an interim report and exits, so components can be chosen and the script
-  rerun with `reuse_prefit_ica = True`.
+Safety
+Every output passes the shared raw-tree guard. Existing models and cleaned FIFs
+require explicit overwrite permission unless a prefit cache fingerprint proves
+that the existing cache is compatible and can be reused read-only. Resume also
+requires matching source/stage lineage, exclusion list, channel identity, bad
+channels, sample count, and MISC channels.
 """
 
-# %%
-# -------------------------------------------------------------------------
-# Imports
-# -------------------------------------------------------------------------
-import html
-import os
-import os.path as op
+from __future__ import annotations
+
+import argparse
+import hashlib
+import importlib.util
+import json
+import sys
 from collections import defaultdict
+from pathlib import Path
+from typing import Any, Mapping
 
 import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from mne.preprocessing import ICA, read_ica
 
-# %%
-# -------------------------------------------------------------------------
-# Subject/session selection and shared output paths
-# -------------------------------------------------------------------------
-subj_str = "01"
-ses_str = "01"
-
-sss_dir = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"preprocessing/sub-{subj_str}/ses-{ses_str}/sss"
+from pipeline_config import load_and_resolve_config
+from preprocessing_stage_utils import (
+    AcquisitionRunRecord,
+    derivative_path_for_run,
+    discover_raw_run_records,
+    ensure_output_directory,
+    guarded_path,
+    lineage_record,
+    prepare_output_path,
+    stage_output_dirs,
+    update_source_manifest_stage,
+    update_tuning_file,
+    utc_now,
+    write_json,
+    write_simple_html_report,
 )
-figure_output_dir = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"preprocessing/sub-{subj_str}/ses-{ses_str}/figures"
-)
-ica_model_output_dir = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"preprocessing/sub-{subj_str}/ses-{ses_str}/ica_models"
-)
-out_report = (
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/"
-    f"reports/sub-{subj_str}/ses-{ses_str}/03_C_ICA_report.html"
-)
-ica_prefit_file = op.join(
-    ica_model_output_dir,
-    f"sub-{subj_str}_ses-{ses_str}_ica_prefit.fif",
-)
-ica_postreject_file = op.join(
-    ica_model_output_dir,
-    f"sub-{subj_str}_ses-{ses_str}_ica_postreject.fif",
-)
-# If a pre-fit ICA cache exists, load it to skip expensive re-fitting.
-reuse_prefit_ica = False
-# Manual exclusion lists by subject.
-manual_exclude_by_subject = {"01": [0, 5]}  # e.g. {"01": [1, 5]} or {"01": []} to explicitly set no exclusions; if subject not listed, script prompts for manual selection.
-manual_exclude_default = []
-# EOG diagnostic threshold (used only for ranking/visual diagnostics).
-eog_guided_score_threshold = 0.6
-eog_guided_max_components = 2
-# Subject-specific exception: use ICA000-based blink annotation for sub-01.
-use_ica0_blink_for_subject = subj_str == "01"
-
-os.makedirs(figure_output_dir, exist_ok=True)
-os.makedirs(ica_model_output_dir, exist_ok=True)
-os.makedirs(op.dirname(out_report), exist_ok=True)
 
 
-# -------------------------------------------------------------------------
-# Shared helper functions for consistent figure/report logging
-# -------------------------------------------------------------------------
-def savefig_logged(fig, filename, **kwargs):
+STAGE_NAME = "ica_manual"
+INPUT_SUFFIX = "_ann.fif"
+OUTPUT_SUFFIX = "_ica.fif"
+
+
+# -----------------------------------------------------------------------------
+# Cache identity and fit-data preparation
+# -----------------------------------------------------------------------------
+
+
+def build_ica_fingerprint(
+    *,
+    input_paths: list[Path],
+    ica_cfg: Mapping[str, Any],
+) -> dict[str, Any]:
     """
-    Save a matplotlib figure into the shared figure output folder and log path.
+    Build a deterministic cache fingerprint from inputs and fit parameters.
+
+    Stable derivative filenames, file size, and nanosecond modification time
+    detect changed inputs without hashing multi-gigabyte FIF contents. Absolute
+    paths are deliberately excluded so the same shared file remains compatible
+    through the macOS ``/Volumes`` and cluster ``/mnt/storage`` mount points.
     """
-    out_path = op.join(figure_output_dir, filename)
-    fig.savefig(out_path, **kwargs)
-    print(f"Saved figure to: {out_path}")
+    payload = {
+        "schema_version": 2,
+        "inputs": [
+            {
+                "source_filename": path.name,
+                "size_bytes": path.stat().st_size,
+                "mtime_ns": path.stat().st_mtime_ns,
+            }
+            for path in input_paths
+        ],
+        "fit": {
+            "method": ica_cfg["method"],
+            "n_components": ica_cfg["n_components"],
+            "random_state": ica_cfg["random_state"],
+            "max_iter": ica_cfg["max_iter"],
+            "fit_resample_sfreq_hz": ica_cfg["fit_resample_sfreq_hz"],
+            "fit_l_freq_hz": ica_cfg["fit_l_freq_hz"],
+            "fit_h_freq_hz": ica_cfg["fit_h_freq_hz"],
+        },
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    payload["sha256"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return payload
 
 
-report = mne.Report(title=f"sub-{subj_str} | 03_C ICA")
-
-
-def log_to_console_and_report(text, *, title, section, tags=("log", "qc")):
+def _portable_fingerprint_sha256(
+    fingerprint: Mapping[str, Any],
+) -> str | None:
     """
-    Print text to console and store the same text in an MNE report section.
+    Return a mount-independent hash for current or legacy fingerprints.
+
+    Legacy metadata stored absolute paths. Reducing those paths to basenames
+    permits reuse of a model fitted from the same shared derivatives before
+    site-config support was introduced.
     """
-    print(text)
-    report.add_html(
-        f"<pre>{html.escape(text)}</pre>",
-        title=title,
-        section=section,
-        tags=tags,
+    inputs = fingerprint.get("inputs")
+    fit = fingerprint.get("fit")
+    if not isinstance(inputs, list) or not isinstance(fit, Mapping):
+        return None
+    normalized_inputs = []
+    for item in inputs:
+        if not isinstance(item, Mapping):
+            return None
+        filename = item.get("source_filename")
+        if filename is None and item.get("path") is not None:
+            filename = Path(str(item["path"])).name
+        if filename is None:
+            return None
+        normalized_inputs.append(
+            {
+                "source_filename": str(filename),
+                "size_bytes": item.get("size_bytes"),
+                "mtime_ns": item.get("mtime_ns"),
+            }
+        )
+    portable = {
+        "schema_version": 2,
+        "inputs": normalized_inputs,
+        "fit": dict(fit),
+    }
+    canonical = json.dumps(portable, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def cache_is_compatible(
+    metadata_path: Path,
+    expected_fingerprint: Mapping[str, Any],
+) -> bool:
+    """Return whether an ICA cache matches across local/cluster mount paths."""
+    if not metadata_path.is_file():
+        return False
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return _portable_fingerprint_sha256(
+        payload.get("fingerprint", {})
+    ) == _portable_fingerprint_sha256(
+        expected_fingerprint
     )
 
 
-def summarize_eog_component_scores(ica_model, ann_paths, *, top_n=5):
+def prepare_ica_fit_data(
+    input_paths: list[Path],
+    ica_cfg: Mapping[str, Any],
+) -> tuple[mne.io.BaseRaw, list[dict[str, Any]]]:
     """
-    Compute component-vs-EOG score summaries on each annotated run.
+    Build and concatenate the MEG-only ICA fit copies.
 
-    Parameters
-    ----------
-    ica_model : mne.preprocessing.ICA
-        Fitted ICA instance to score.
-    ann_paths : list[str]
-        Paths to `*_ann.fif` files containing MEG + EOG channels.
-    top_n : int
-        Number of top absolute-score components reported per EOG channel.
-
-    Returns
-    -------
-    summary_text : str
-        Human-readable multiline summary for logs/report.
-    ranked_components : list[tuple[int, float, int]]
-        Component ranking as `(component_index, mean_abs_score, n_scores)`.
-    auto_candidates : list[int]
-        Components whose mean absolute score exceeds configured threshold.
+    MISC, EOG, and stimulation channels remain in the original annotated files
+    and are not part of the ICA decomposition.
     """
-    # Collect scores per component across files/channels for robust ranking.
-    component_scores = defaultdict(list)
-    summary_lines = ["EOG diagnostics per file/channel (absolute-score ranking):"]
-    for ann_path in ann_paths:
-        raw_diag = mne.io.read_raw_fif(ann_path, preload=True, verbose=False)
-        eog_names = [
-            ch_name
-            for ch_name, ch_type in zip(raw_diag.ch_names, raw_diag.get_channel_types(), strict=True)
-            if ch_type == "eog"
+    prepared: list[mne.io.BaseRaw] = []
+    summaries: list[dict[str, Any]] = []
+    for input_path in input_paths:
+        raw = mne.io.read_raw_fif(
+            input_path,
+            preload=True,
+            verbose="WARNING",
+        )
+        fit_raw = raw.copy().pick("meg")
+        fit_raw.resample(float(ica_cfg["fit_resample_sfreq_hz"]))
+        fit_raw.filter(
+            float(ica_cfg["fit_l_freq_hz"]),
+            float(ica_cfg["fit_h_freq_hz"]),
+            verbose="WARNING",
+        )
+        summaries.append(
+            {
+                "input_path": str(input_path),
+                "n_channels": fit_raw.info["nchan"],
+                "n_times": fit_raw.n_times,
+                "sfreq_hz": float(fit_raw.info["sfreq"]),
+                "bad_channels": list(fit_raw.info.get("bads", [])),
+            }
+        )
+        prepared.append(fit_raw)
+    concatenated = mne.concatenate_raws(
+        prepared,
+        on_mismatch="warn",
+        verbose="WARNING",
+    )
+    return concatenated, summaries
+
+
+def fit_or_load_ica(
+    *,
+    input_paths: list[Path],
+    ica_cfg: Mapping[str, Any],
+    prefit_path: Path,
+    metadata_path: Path,
+    raw_root: str | Path,
+    overwrite: bool,
+    require_fit_data: bool,
+) -> tuple[ICA, mne.io.BaseRaw | None, list[dict[str, Any]], str, dict[str, Any]]:
+    """
+    Load a compatible cache or fit a new ICA model.
+
+    ``require_fit_data`` is true for review diagnostics. Apply runs can reuse a
+    compatible model without concatenating all fit copies again.
+    """
+    fingerprint = build_ica_fingerprint(
+        input_paths=input_paths,
+        ica_cfg=ica_cfg,
+    )
+    if str(ica_cfg["method"]).lower() == "fastica" and (
+        importlib.util.find_spec("sklearn") is None
+    ):
+        raise RuntimeError(
+            "scikit-learn is required for the production FastICA stage. "
+            "Install meg/requirements.txt before running ICA."
+        )
+    can_reuse = (
+        bool(ica_cfg["reuse_prefit"])
+        and prefit_path.is_file()
+        and cache_is_compatible(metadata_path, fingerprint)
+    )
+    fit_data: mne.io.BaseRaw | None = None
+    fit_summaries: list[dict[str, Any]] = []
+    if can_reuse:
+        model = read_ica(prefit_path, verbose="WARNING")
+        cache_status = "reused_compatible"
+        if require_fit_data:
+            fit_data, fit_summaries = prepare_ica_fit_data(input_paths, ica_cfg)
+        return model, fit_data, fit_summaries, cache_status, fingerprint
+
+    fit_data, fit_summaries = prepare_ica_fit_data(input_paths, ica_cfg)
+    model = ICA(
+        method=str(ica_cfg["method"]),
+        n_components=ica_cfg["n_components"],
+        random_state=int(ica_cfg["random_state"]),
+        max_iter=ica_cfg["max_iter"],
+        verbose="WARNING",
+    )
+    model.fit(fit_data, verbose="WARNING")
+    prepared_prefit = prepare_output_path(
+        prefit_path,
+        raw_root=raw_root,
+        overwrite=overwrite,
+    )
+    model.save(prepared_prefit, overwrite=overwrite, verbose="WARNING")
+    write_json(
+        metadata_path,
+        {
+            "generated_utc": utc_now(),
+            "fingerprint": fingerprint,
+            "model_path": str(prefit_path),
+            "n_components_fitted": int(model.n_components_),
+        },
+        raw_root=raw_root,
+        overwrite=True,
+    )
+    return model, fit_data, fit_summaries, "fitted_new", fingerprint
+
+
+# -----------------------------------------------------------------------------
+# Diagnostics and interactive review
+# -----------------------------------------------------------------------------
+
+
+def summarize_eog_scores(
+    *,
+    model: ICA,
+    input_paths: list[Path],
+    configured_channels: list[str],
+) -> dict[str, Any]:
+    """
+    Compute diagnostic component-EOG rankings only when channels are present.
+
+    Failures are recorded per file/channel and never trigger automatic
+    exclusion or a fallback cleaning method.
+    """
+    if not configured_channels:
+        return {
+            "status": "skipped_no_configured_eog_channels",
+            "per_file": [],
+            "aggregate_ranking": [],
+        }
+    component_scores: dict[int, list[float]] = defaultdict(list)
+    per_file: list[dict[str, Any]] = []
+    for input_path in input_paths:
+        raw = mne.io.read_raw_fif(input_path, preload=True, verbose="ERROR")
+        available = [
+            channel for channel in configured_channels if channel in raw.ch_names
         ]
-        if not eog_names:
-            summary_lines.append(f"  - {op.basename(ann_path)}: no EOG channels found.")
+        file_record: dict[str, Any] = {
+            "input_path": str(input_path),
+            "available_eog_channels": available,
+            "channels": [],
+        }
+        if not available:
+            file_record["status"] = "skipped_no_eog_channels"
+            per_file.append(file_record)
             continue
+        file_record["status"] = "completed"
+        for channel in available:
+            try:
+                suggested, scores = model.find_bads_eog(
+                    raw,
+                    ch_name=channel,
+                    verbose=False,
+                )
+                top_indices = np.argsort(np.abs(scores))[::-1][:10]
+                top = []
+                for index in top_indices:
+                    value = float(scores[index])
+                    component_scores[int(index)].append(abs(value))
+                    top.append(
+                        {
+                            "component": int(index),
+                            "score": value,
+                            "absolute_score": abs(value),
+                        }
+                    )
+                file_record["channels"].append(
+                    {
+                        "channel": channel,
+                        "status": "completed",
+                        "suggested_components": [
+                            int(value) for value in suggested
+                        ],
+                        "top_scores": top,
+                    }
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                file_record["channels"].append(
+                    {
+                        "channel": channel,
+                        "status": "failed",
+                        "error": str(exc),
+                    }
+                )
+        per_file.append(file_record)
 
-        summary_lines.append(f"  - {op.basename(ann_path)}")
-        for eog_name in eog_names:
-            inds, scores = ica_model.find_bads_eog(raw_diag, ch_name=eog_name, verbose=False)
-            top_idx = np.argsort(np.abs(scores))[::-1][:top_n]
-            top_tokens = []
-            for comp_idx in top_idx:
-                abs_score = float(np.abs(scores[comp_idx]))
-                component_scores[int(comp_idx)].append(abs_score)
-                top_tokens.append(f"ICA{int(comp_idx):03d}:{scores[comp_idx]:+.3f}")
-            summary_lines.append(
-                f"    * {eog_name} suggested={list(map(int, inds))[:top_n]} "
-                f"top={', '.join(top_tokens)}"
-            )
-
-    ranked_components = sorted(
+    ranking = sorted(
         (
-            (comp_idx, float(np.mean(abs_vals)), len(abs_vals))
-            for comp_idx, abs_vals in component_scores.items()
+            {
+                "component": component,
+                "mean_absolute_score": float(np.mean(values)),
+                "n_scores": len(values),
+            }
+            for component, values in component_scores.items()
         ),
-        key=lambda row: row[1],
+        key=lambda item: item["mean_absolute_score"],
         reverse=True,
     )
+    completed = any(
+        channel.get("status") == "completed"
+        for item in per_file
+        for channel in item["channels"]
+    )
+    return {
+        "status": "completed" if completed else "skipped_or_failed",
+        "per_file": per_file,
+        "aggregate_ranking": ranking,
+    }
 
-    ranked_tokens = [
-        f"ICA{comp_idx:03d}: mean|score|={mean_abs:.3f} (n={n_vals})"
-        for comp_idx, mean_abs, n_vals in ranked_components[:10]
+
+def _save_figure(
+    fig: Any,
+    path: Path,
+    *,
+    show: bool,
+) -> Path:
+    """Save one MNE/matplotlib figure and optionally display it."""
+    fig.savefig(path, dpi=150, bbox_inches="tight")
+    if show:
+        plt.show(block=True)
+    plt.close(fig)
+    return path
+
+
+def generate_component_diagnostics(
+    *,
+    model: ICA,
+    fit_data: mne.io.BaseRaw,
+    figure_dir: Path,
+    subject_label: str,
+    processing_pass: str,
+    raw_root: str | Path,
+    show: bool,
+    include_properties: bool,
+) -> list[Path]:
+    """
+    Save source, topography, and optional per-component property diagnostics.
+
+    Topography pages may be displayed interactively. Per-component property
+    figures are saved for detailed inspection without forcing 30 sequential GUI
+    windows. MNE's source browser uses a backend separate from matplotlib's
+    normal backend; noninteractive runs force its matplotlib implementation so
+    headless cluster jobs never attempt to connect to Qt/X11.
+    """
+    images: list[Path] = []
+    if show:
+        source_fig = model.plot_sources(
+            fit_data,
+            title=f"{subject_label} ICA sources",
+            show=True,
+        )
+    else:
+        with mne.viz.use_browser_backend("matplotlib"):
+            source_fig = model.plot_sources(
+                fit_data,
+                title=f"{subject_label} ICA sources",
+                show=False,
+            )
+    source_path = prepare_output_path(
+        figure_dir / f"03_C_ICA_{processing_pass}_sources.png",
+        raw_root=raw_root,
+        overwrite=True,
+    )
+    images.append(_save_figure(source_fig, source_path, show=False))
+
+    component_figures = model.plot_components(show=False)
+    if not isinstance(component_figures, list):
+        component_figures = [component_figures]
+    for page, figure in enumerate(component_figures, start=1):
+        path = prepare_output_path(
+            figure_dir
+            / f"03_C_ICA_{processing_pass}_topographies_{page:02d}.png",
+            raw_root=raw_root,
+            overwrite=True,
+        )
+        images.append(_save_figure(figure, path, show=show))
+
+    if include_properties:
+        for component in range(int(model.n_components_)):
+            try:
+                property_figures = model.plot_properties(
+                    fit_data,
+                    picks=component,
+                    psd_args={"fmax": float(fit_data.info["lowpass"])},
+                    show=False,
+                    verbose=False,
+                )
+                if not isinstance(property_figures, list):
+                    property_figures = [property_figures]
+                for page, figure in enumerate(property_figures, start=1):
+                    path = prepare_output_path(
+                        figure_dir
+                        / (
+                            f"03_C_ICA_{processing_pass}_ICA{component:03d}_"
+                            f"properties_{page:02d}.png"
+                        ),
+                        raw_root=raw_root,
+                        overwrite=True,
+                    )
+                    images.append(_save_figure(figure, path, show=False))
+            except Exception as exc:  # pylint: disable=broad-except
+                print(
+                    f"WARNING: ICA{component:03d} property plot failed: {exc}",
+                    file=sys.stderr,
+                )
+    return images
+
+
+def parse_component_indices(text: str) -> list[int]:
+    """Parse comma/space separated non-negative component indices."""
+    if not text.strip():
+        return []
+    values = []
+    for token in text.replace(",", " ").split():
+        value = int(token)
+        if value < 0:
+            raise ValueError("ICA component indices must be non-negative.")
+        values.append(value)
+    return sorted(set(values))
+
+
+def interactive_component_review(
+    *,
+    n_components: int,
+    initial_exclusions: list[int] | None,
+    diagnostic_paths: list[Path],
+    eog_diagnostics: Mapping[str, Any],
+) -> list[int]:
+    """Prompt repeatedly until the operator accepts an exclusion list."""
+    print("\nICA diagnostic files:")
+    for path in diagnostic_paths:
+        print(f"  {path}")
+    ranking = eog_diagnostics.get("aggregate_ranking", [])
+    if ranking:
+        print("\nEOG diagnostic ranking (not auto-applied):")
+        for item in ranking[:10]:
+            print(
+                f"  ICA{item['component']:03d}: "
+                f"mean|score|={item['mean_absolute_score']:.3f} "
+                f"(n={item['n_scores']})"
+            )
+    exclusions = list(initial_exclusions or [])
+    while True:
+        default_text = ",".join(str(value) for value in exclusions)
+        answer = input(
+            "ICA components to reject as comma/space separated indices "
+            f"(blank means none; current [{default_text}]): "
+        ).strip()
+        if answer:
+            try:
+                exclusions = parse_component_indices(answer)
+            except (TypeError, ValueError) as exc:
+                print(f"Invalid component list: {exc}")
+                continue
+        else:
+            exclusions = []
+        invalid = [value for value in exclusions if value >= n_components]
+        if invalid:
+            print(
+                f"Indices outside available range 0-{n_components - 1}: {invalid}"
+            )
+            continue
+        confirmation = input(
+            f"Accept ICA exclusions {exclusions}? [Y/n]: "
+        ).strip().lower()
+        if confirmation in ("", "y", "yes"):
+            return exclusions
+
+
+# -----------------------------------------------------------------------------
+# ICA application
+# -----------------------------------------------------------------------------
+
+
+def _validate_resumable_ica_output(
+    *,
+    record: AcquisitionRunRecord,
+    input_path: Path,
+    output_path: Path,
+    exclusions: list[int],
+    raw_root: str | Path,
+) -> dict[str, Any]:
+    """Validate one existing cleaned acquisition run before resume skips it."""
+    resolved = guarded_path(output_path, raw_root)
+    try:
+        source = mne.io.read_raw_fif(
+            input_path,
+            preload=False,
+            verbose="ERROR",
+        )
+        existing = mne.io.read_raw_fif(
+            resolved,
+            preload=False,
+            verbose="ERROR",
+        )
+    except Exception as exc:  # pylint: disable=broad-except
+        raise RuntimeError(
+            f"Cannot resume from unreadable ICA derivative {resolved}: {exc}"
+        ) from exc
+    description = str(existing.info.get("description") or "")
+    required_tokens = (
+        f"source={record.source_filename}",
+        f"acquisition_run={record.acquisition_run_label}",
+        "stage=03_C_ICA",
+        f"excluded={exclusions}",
+    )
+    missing_tokens = [token for token in required_tokens if token not in description]
+    if missing_tokens:
+        raise RuntimeError(
+            "Cannot resume from ICA derivative with mismatched lineage or "
+            f"exclusions: {resolved}; missing={missing_tokens}"
+        )
+    if existing.ch_names != source.ch_names:
+        raise RuntimeError(
+            f"Cannot resume because ICA changed channel identity: {resolved}"
+        )
+    if list(existing.info.get("bads", [])) != list(source.info.get("bads", [])):
+        raise RuntimeError(
+            f"Cannot resume because ICA changed bad-channel metadata: {resolved}"
+        )
+    if existing.n_times != source.n_times:
+        raise RuntimeError(
+            "Cannot resume because ICA changed the acquisition sample count: "
+            f"{resolved}; input={source.n_times}, output={existing.n_times}"
+        )
+    if float(existing.info["sfreq"]) != float(source.info["sfreq"]):
+        raise RuntimeError(
+            f"Cannot resume because ICA changed sampling frequency: {resolved}"
+        )
+    misc_channels = [
+        channel
+        for channel, kind in zip(
+            existing.ch_names,
+            existing.get_channel_types(),
+            strict=True,
+        )
+        if kind == "misc"
     ]
-    summary_lines.append("Aggregate EOG score ranking (top 10):")
-    if ranked_tokens:
-        summary_lines.extend(f"    * {token}" for token in ranked_tokens)
-    else:
-        summary_lines.append("    * No valid EOG scores available.")
-
-    auto_candidates = [
-        comp_idx
-        for comp_idx, mean_abs, _n_vals in ranked_components
-        if mean_abs >= eog_guided_score_threshold
-    ][:eog_guided_max_components]
-    summary_lines.append(
-        "Auto-candidate components above threshold "
-        f"{eog_guided_score_threshold:.2f}: {auto_candidates}"
-    )
-    return "\n".join(summary_lines), ranked_components, auto_candidates
-
-
-def build_ica0_blink_annotations(ica_model, raw_for_ica):
-    """
-    Detect blink-like events from ICA component 0 on ICA-fit-like data.
-
-    Parameters
-    ----------
-    ica_model : mne.preprocessing.ICA
-        Fitted ICA model.
-    raw_for_ica : mne.io.BaseRaw
-        Raw object already prepared like ICA fit input (MEG, 200 Hz, 1-40 Hz).
-
-    Returns
-    -------
-    annotations_blink : mne.Annotations
-        Blink annotations with description "blink".
-    n_blinks : int
-        Number of detected blink-like events.
-    """
-    ica_sources = ica_model.get_sources(raw_for_ica)
-    component_name = ica_sources.ch_names[0]
-    ica_events = mne.preprocessing.find_eog_events(
-        ica_sources,
-        ch_name=component_name,
-        verbose="ERROR",
-    )
-    n_blinks = len(ica_events)
-    onset = ica_events[:, 0] / raw_for_ica.info["sfreq"] - 0.25
-    duration = np.repeat(0.5, n_blinks)
-    description = ["blink"] * n_blinks
-    annotations_blink = mne.Annotations(
-        onset,
-        duration,
-        description,
-        raw_for_ica.info["meas_date"],
-    )
-    return annotations_blink, n_blinks
-
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX "Set local paths": discover input annotation files and derive output ica files
-# -------------------------------------------------------------------------
-ann_files = sorted(
-    op.join(sss_dir, fname)
-    for fname in os.listdir(sss_dir)
-    if fname.endswith("_ann.fif")
-)
-if not ann_files:
-    raise FileNotFoundError(
-        f"No input *_ann.fif files found under: {sss_dir}. Run 03_B first."
-    )
-
-ica_files = [ann_path.replace("_ann.fif", "_ica.fif") for ann_path in ann_files]
-
-log_to_console_and_report(
-    "Discovered ICA inputs:\n"
-    + "\n".join(f"  - {p}" for p in ann_files)
-    + "\n\nPlanned ICA outputs:\n"
-    + "\n".join(f"  - {p}" for p in ica_files)
-    + "\n\nICA model cache files:\n"
-    + f"  - prefit: {ica_prefit_file}\n"
-    + f"  - postreject: {ica_postreject_file}",
-    title="Input/output overview",
-    section="Preparation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX resampling/filtering block: prepare concatenated MEG data for ICA fitting
-# -------------------------------------------------------------------------
-raw_resmpl_all = None
-fit_input_summaries = []
-
-for ann_path in ann_files:
-    raw = mne.io.read_raw_fif(ann_path, preload=True, verbose=True)
-    raw_resmpl = raw.copy().pick("meg")
-    raw_resmpl.resample(200)  # FLUX: down-sample to 200 Hz before ICA.
-    raw_resmpl.filter(1, 40)  # FLUX: 1-40 Hz band-pass for ICA decomposition.
-
-    if raw_resmpl_all is None:
-        raw_resmpl_all = mne.io.concatenate_raws([raw_resmpl])
-    else:
-        # Local adaptation: runs can have different dev_head_t (different head
-        # positions between blocks). Keep FLUX-style concatenated ICA fitting,
-        # but allow this mismatch explicitly so fitting can proceed.
-        raw_resmpl_all = mne.io.concatenate_raws(
-            [raw_resmpl_all, raw_resmpl],
-            on_mismatch="warn",
+    source_misc = [
+        channel
+        for channel, kind in zip(
+            source.ch_names,
+            source.get_channel_types(),
+            strict=True,
         )
-
-    fit_input_summaries.append(
-        f"{op.basename(ann_path)}: n_times={raw_resmpl.n_times}, sfreq={raw_resmpl.info['sfreq']}"
-    )
-
-del raw_resmpl
-log_to_console_and_report(
-    "ICA fit input summary:\n"
-    + "\n".join(f"  - {line}" for line in fit_input_summaries)
-    + f"\nConcatenated MEG data: n_channels={raw_resmpl_all.info['nchan']}, "
-    f"n_times={raw_resmpl_all.n_times}, sfreq={raw_resmpl_all.info['sfreq']}",
-    title="ICA fit input",
-    section="Preparation",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX ICA fitting block: fastICA on concatenated preprocessed MEG data
-# -------------------------------------------------------------------------
-if reuse_prefit_ica and op.exists(ica_prefit_file):
-    ica = read_ica(ica_prefit_file, verbose=True)
-    log_to_console_and_report(
-        "Loaded cached pre-fit ICA model.\n"
-        f"File: {ica_prefit_file}\n"
-        f"method={ica.method}\n"
-        f"n_components_={ica.n_components_}",
-        title="ICA fit",
-        section="ICA decomposition",
-    )
-else:
-    ica = ICA(
-        method="fastica",
-        random_state=97,
-        n_components=30,
-        verbose=True,
-    )
-    ica.fit(raw_resmpl_all, verbose=True)
-    # Save decomposition before exclusions so future reruns can skip fitting.
-    ica.save(ica_prefit_file, overwrite=True)
-    log_to_console_and_report(
-        f"ICA fitted successfully.\nmethod={ica.method}\n"
-        f"n_components_={ica.n_components_}\nrandom_state=97\n"
-        f"Saved pre-fit ICA model: {ica_prefit_file}",
-        title="ICA fit",
-        section="ICA decomposition",
-    )
-
-# %%
-# -------------------------------------------------------------------------
-# Subject-specific blink-annotation block: inject ICA000 blink labels for sub-01
-# -------------------------------------------------------------------------
-if use_ica0_blink_for_subject:
-    ica0_blink_annotations_all, n_ica0_blinks_all = build_ica0_blink_annotations(ica, raw_resmpl_all)
-    raw_resmpl_all.set_annotations(raw_resmpl_all.annotations + ica0_blink_annotations_all)
-    log_to_console_and_report(
-        "Subject-specific blink policy active (sub-01): using ICA000-based blink "
-        "annotation in 03_C source inspection/apply outputs.\n"
-        f"Detected ICA000 blink-like events on concatenated fit input: {n_ica0_blinks_all}",
-        title="Blink annotation source",
-        section="ICA decomposition",
-    )
-else:
-    log_to_console_and_report(
-        "Blink policy: using existing blink annotations from 03_B (EOG-based).",
-        title="Blink annotation source",
-        section="ICA decomposition",
-    )
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX component-inspection block: source traces and topographies
-# -------------------------------------------------------------------------
-fig_sources = ica.plot_sources(raw_resmpl_all, title="ICA", show=True)
-report.add_figure(
-    fig=fig_sources,
-    title="ICA source traces",
-    caption=(
-        "Component order is arbitrary. Interpret ocular/cardiac components "
-        "using channel-based scores (see EOG-guided diagnostics), not index."
-    ),
-    section="ICA decomposition",
-    tags=("ica", "qc"),
-)
-savefig_logged(fig_sources, "03_C_ICA_sources.png", dpi=150, bbox_inches="tight")
-plt.close(fig_sources)
-
-fig_components = ica.plot_components(show=True)
-if not isinstance(fig_components, list):
-    fig_components = [fig_components]
-for idx, fig_comp in enumerate(fig_components, start=1):
-    report.add_figure(
-        fig=fig_comp,
-        title=f"ICA component topographies ({idx}/{len(fig_components)})",
-        section="ICA decomposition",
-        tags=("ica", "qc"),
-    )
-    savefig_logged(
-        fig_comp,
-        f"03_C_ICA_components_{idx:02d}.png",
-        dpi=150,
-        bbox_inches="tight",
-    )
-    plt.close(fig_comp)
-
-# %%
-# -------------------------------------------------------------------------
-# EOG-guided diagnostics block: score components against EOG channels
-# -------------------------------------------------------------------------
-eog_summary_text, eog_ranked_components, eog_auto_candidates = summarize_eog_component_scores(
-    ica,
-    ann_files,
-)
-log_to_console_and_report(
-    eog_summary_text,
-    title="EOG-guided component diagnostics",
-    section="ICA decomposition",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# Exclusion block: manual subject-specific list
-# -------------------------------------------------------------------------
-has_subject_exclude = subj_str in manual_exclude_by_subject
-manual_exclude_list = list(manual_exclude_by_subject.get(subj_str, manual_exclude_default))
-exclude_list = list(manual_exclude_list)
-
-if not has_subject_exclude:
-    report.save(out_report, overwrite=True, open_browser=False)
-    raise SystemExit(
-        "No manual ICA components are configured for rejection.\n"
-        f"Choose components to reject based on report:\n  {out_report}\n"
-        "Then set manual_exclude_by_subject for this subject, set "
-        "`reuse_prefit_ica = True`, and re-run 03_C_ICA.py."
-    )
-
-valid_exclude = [idx for idx in exclude_list if idx < ica.n_components_]
-dropped_exclude = [idx for idx in exclude_list if idx >= ica.n_components_]
-merged_exclude = valid_exclude
-exclude_strategy = "Manual exclusion list only."
-
-ica.exclude = merged_exclude
-ica.save(ica_postreject_file, overwrite=True)
-
-log_to_console_and_report(
-    f"Exclude strategy: {exclude_strategy}\n"
-    f"Configured/manual exclude list: {exclude_list}\n"
-    f"ICA exclude set (valid indices): {merged_exclude}\n"
-    f"EOG diagnostic candidates (not auto-applied): {eog_auto_candidates}\n"
-    f"Dropped indices not available in this fit: {dropped_exclude}\n"
-    f"Saved post-rejection ICA model: {ica_postreject_file}",
-    title="ICA exclude list",
-    section="ICA decomposition",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX projection/apply block: apply ICA to each annotated file and save
-# -------------------------------------------------------------------------
-processed_pairs = []
-for ann_path, ica_path in zip(ann_files, ica_files):
-    raw_ica = mne.io.read_raw_fif(ann_path, preload=True, verbose=True)
-    input_bads = list(dict.fromkeys(str(ch) for ch in raw_ica.info.get("bads", [])))
-
-    # Sub-01 exception: replace missing/unreliable EOG blink labels with ICA000 labels.
-    ica0_blink_count = 0
-    if use_ica0_blink_for_subject:
-        raw_ica_for_blink = raw_ica.copy().pick("meg")
-        raw_ica_for_blink.resample(200)
-        raw_ica_for_blink.filter(1, 40)
-        ica0_blink_annotations, ica0_blink_count = build_ica0_blink_annotations(
-            ica,
-            raw_ica_for_blink,
+        if kind == "misc"
+    ]
+    if misc_channels != source_misc:
+        raise RuntimeError(
+            "Cannot resume because ICA changed MISC channel identity: "
+            f"{resolved}; input={source_misc}, output={misc_channels}"
         )
-        raw_ica.set_annotations(raw_ica.annotations + ica0_blink_annotations)
-
-    ica.apply(raw_ica)
-    # Preserve upstream bad-channel metadata after ICA projection.
-    raw_ica.info["bads"] = list(input_bads)
-    raw_ica.save(ica_path, overwrite=True)
-    processed_pairs.append((ann_path, ica_path, ica0_blink_count, input_bads))
-
-log_to_console_and_report(
-    "Applied ICA and saved files:\n"
-    + "\n".join(
-        f"  - {src} -> {dst}"
-        + (f" (ICA000 blinks added: {n_blinks})" if use_ica0_blink_for_subject else "")
-        + f" (propagated_bads={bads})"
-        for src, dst, n_blinks, bads in processed_pairs
-    ),
-    title="ICA-applied outputs",
-    section="Apply ICA",
-)
-
-# %%
-# -------------------------------------------------------------------------
-# FLUX before/after comparison block: visualize artefact attenuation
-# -------------------------------------------------------------------------
-# FLUX reference channel set for frontal inspection (MEG mags).
-compare_chs = [];#["MEG0311", "MEG0121", "MEG1211", "MEG1411"]
-compare_ann = ann_files[0]
-compare_ica = ica_files[0]
-
-raw_before = mne.io.read_raw_fif(compare_ann, preload=True, verbose=False)
-raw_after = mne.io.read_raw_fif(compare_ica, preload=True, verbose=False)
-
-available_compare_chs = [ch for ch in compare_chs if ch in raw_before.ch_names]
-missing_compare_chs = [ch for ch in compare_chs if ch not in raw_before.ch_names]
-if not available_compare_chs:
-    available_compare_chs = [ch for ch in raw_before.ch_names if ch.startswith("MEG")][:4]
-    missing_compare_chs = compare_chs
-chan_idxs = [raw_before.ch_names.index(ch) for ch in available_compare_chs]
-
-if missing_compare_chs:
-    print(f"WARNING: missing FLUX comparison channels: {missing_compare_chs}")
-
-fig_before = raw_before.plot(order=chan_idxs, duration=5, show=True)
-report.add_figure(
-    fig=fig_before,
-    title=f"Before ICA ({op.basename(compare_ann)})",
-    caption=f"Channels: {available_compare_chs}",
-    section="Before/after ICA",
-    tags=("raw", "qc"),
-)
-savefig_logged(fig_before, "03_C_ICA_before_projection.png", dpi=150, bbox_inches="tight")
-plt.close(fig_before)
-
-fig_after = raw_after.plot(order=chan_idxs, duration=5, show=True)
-report.add_figure(
-    fig=fig_after,
-    title=f"After ICA ({op.basename(compare_ica)})",
-    caption=f"Channels: {available_compare_chs}",
-    section="Before/after ICA",
-    tags=("raw", "qc"),
-)
-savefig_logged(fig_after, "03_C_ICA_after_projection.png", dpi=150, bbox_inches="tight")
-plt.close(fig_after)
-
-log_to_console_and_report(
-    f"Before/after ICA comparison used file:\n  - before: {compare_ann}\n  - after: {compare_ica}\n"
-    f"Channels: {available_compare_chs}",
-    title="Before/after comparison",
-    section="Before/after ICA",
-)
+    return {
+        "source_filename": record.source_filename,
+        "acquisition_run_label": record.acquisition_run_label,
+        "execution_status": "resumed_existing",
+        "input_path": str(input_path),
+        "output_path": str(resolved),
+        "excluded_components": exclusions,
+        "bad_channels_preserved": list(existing.info.get("bads", [])),
+        "misc_channels_preserved": misc_channels,
+    }
 
 
+def apply_ica_to_runs(
+    *,
+    model: ICA,
+    exclusions: list[int],
+    records: list[AcquisitionRunRecord],
+    input_paths: list[Path],
+    sss_dir: Path,
+    raw_root: str | Path,
+    overwrite: bool,
+    resume: bool = False,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply reviewed exclusions to each original annotated acquisition run."""
+    model.exclude = list(exclusions)
+    run_reports: list[dict[str, Any]] = []
+    lineage_records: list[dict[str, Any]] = []
+    for record, input_path in zip(records, input_paths, strict=True):
+        requested_output = derivative_path_for_run(
+            record,
+            sss_dir,
+            OUTPUT_SUFFIX,
+        )
+        if resume and requested_output.exists():
+            run_report = _validate_resumable_ica_output(
+                record=record,
+                input_path=input_path,
+                output_path=requested_output,
+                exclusions=exclusions,
+                raw_root=raw_root,
+            )
+            run_reports.append(run_report)
+            lineage_records.append(
+                lineage_record(
+                    source=record,
+                    input_path=input_path,
+                    output_path=run_report["output_path"],
+                    status="resumed_existing",
+                    metadata={
+                        "excluded_components": exclusions,
+                        "bad_channels_preserved": run_report[
+                            "bad_channels_preserved"
+                        ],
+                        "misc_channels_preserved": run_report[
+                            "misc_channels_preserved"
+                        ],
+                        "execution_status": "resumed_existing",
+                    },
+                )
+            )
+            continue
+        output_path = prepare_output_path(
+            requested_output,
+            raw_root=raw_root,
+            overwrite=overwrite,
+        )
+        raw = mne.io.read_raw_fif(
+            input_path,
+            preload=True,
+            verbose="WARNING",
+        )
+        input_bads = list(raw.info.get("bads", []))
+        misc_before = [
+            channel
+            for channel, kind in zip(
+                raw.ch_names,
+                raw.get_channel_types(),
+                strict=True,
+            )
+            if kind == "misc"
+        ]
+        model.apply(raw, exclude=exclusions, verbose="WARNING")
+        raw.info["bads"] = input_bads
+        raw.info["description"] = (
+            f"DAD source={record.source_filename}; "
+            f"acquisition_run={record.acquisition_run_label}; "
+            f"stage=03_C_ICA; excluded={exclusions}"
+        )
+        misc_after = [
+            channel
+            for channel, kind in zip(
+                raw.ch_names,
+                raw.get_channel_types(),
+                strict=True,
+            )
+            if kind == "misc"
+        ]
+        if misc_after != misc_before:
+            raise RuntimeError(
+                "MISC channel identity changed during ICA application: "
+                f"before={misc_before}, after={misc_after}"
+            )
+        raw.save(output_path, overwrite=overwrite, verbose="WARNING")
+        run_report = {
+            "source_filename": record.source_filename,
+            "acquisition_run_label": record.acquisition_run_label,
+            "execution_status": "completed",
+            "input_path": str(input_path),
+            "output_path": str(output_path),
+            "excluded_components": exclusions,
+            "bad_channels_preserved": input_bads,
+            "misc_channels_preserved": misc_after,
+        }
+        run_reports.append(run_report)
+        lineage_records.append(
+            lineage_record(
+                source=record,
+                input_path=input_path,
+                output_path=output_path,
+                status="completed",
+                metadata={
+                    "excluded_components": exclusions,
+                    "bad_channels_preserved": input_bads,
+                    "misc_channels_preserved": misc_after,
+                    "execution_status": "completed",
+                },
+            )
+        )
+    return run_reports, lineage_records
 
-# %%
-# -------------------------------------------------------------------------
-# Optional: visualize EOG scores with a bar plot for top-ranked components
-# -------------------------------------------------------------------------
-if eog_ranked_components:
-    top_comps, top_scores, _n_vals = zip(*eog_ranked_components[:10])
-    fig_eog_scores, ax = plt.subplots(figsize=(8, 4))
-    ax.bar(
-        [f"ICA{comp_idx:03d}" for comp_idx in top_comps],
-        top_scores,
-        color="skyblue",
-        edgecolor="black",
+
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Build the production manual ICA CLI."""
+    parser = argparse.ArgumentParser(
+        description="Review or apply manual ICA for DAD MEG."
     )
-    ax.axhline(eog_guided_score_threshold, color="red", linestyle="--", label="Auto-candidate threshold")
-    ax.set_ylabel("Mean absolute EOG score")
-    ax.set_title("Top-ranked ICA components by EOG score")
-    ax.legend()
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-    report.add_figure(
-        fig=fig_eog_scores,
-        title="EOG score ranking of ICA components",
-        caption=(
-            "Bar plot of mean absolute EOG scores for top-ranked components. "
-            f"Red dashed line indicates diagnostic threshold ({eog_guided_score_threshold:.2f})."
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--site-config", default=None)
+    parser.add_argument("--subject-config", default=None)
+    parser.add_argument("--tuning-config", default=None)
+    parser.add_argument("--source-manifest", default=None)
+    parser.add_argument(
+        "--processing-pass",
+        choices=("review", "apply"),
+        default="review",
+    )
+    parser.add_argument("--interactive", action="store_true")
+    parser.add_argument("--no-display", action="store_true")
+    parser.add_argument("--decisions-out", default=None)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Validate and skip existing apply outputs; fail on any mismatch. "
+            "Mutually exclusive with --overwrite."
         ),
-        section="EOG diagnostics",
-        tags=("ica", "qc", "eog"),
     )
-    savefig_logged(fig_eog_scores, "03_C_ICA_eog_scores.png", dpi=150, bbox_inches="tight")
-    plt.close(fig_eog_scores)
-else:
-    log_to_console_and_report(
-        "No valid EOG scores available to plot.",
-        title="EOG score ranking",
-        section="EOG diagnostics",
+    parser.add_argument(
+        "--skip-component-properties",
+        action="store_true",
+        help="Skip expensive per-component property plots during smoke tests.",
     )
+    parser.add_argument("--print-summary", action="store_true")
+    return parser
 
 
-"""
-# %%
-# -------------------------------------------------------------------------
-# Optional: Scrollable plot for seeing why we can't rely on EOG for annotation (hopefully only for subj 01)
-# -------------------------------------------------------------------------
+def main(argv: list[str] | None = None) -> int:
+    """Run ICA review or explicit apply mode."""
+    args = build_arg_parser().parse_args(argv)
+    try:
+        cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
+            args.config,
+            args.subject_config,
+            args.tuning_config,
+            site_config_path=args.site_config,
+            required_sections=("ica",),
+        )
+        ica_cfg = cfg["ica"]
+        if not ica_cfg["enabled"]:
+            raise RuntimeError("Manual ICA is disabled in configuration.")
+        raw_root = cfg["resolved_paths"]["data_root"]
+        overwrite = bool(args.overwrite or cfg["runtime"]["overwrite_existing"])
+        if args.resume and overwrite:
+            raise ValueError("--resume and --overwrite are mutually exclusive.")
+        output_dirs = stage_output_dirs(cfg)
+        sss_dir = ensure_output_directory(output_dirs["sss"], raw_root)
+        figure_dir = ensure_output_directory(output_dirs["figures"], raw_root)
+        model_dir = ensure_output_directory(output_dirs["ica_models"], raw_root)
+        report_dir = ensure_output_directory(output_dirs["reports"], raw_root)
+        subject_label = cfg["layout"]["subject_bids_id"]
+        session_label = cfg["layout"]["session_bids_id"]
+        decisions_out = (
+            Path(args.decisions_out).expanduser().resolve()
+            if args.decisions_out
+            else report_dir / "03_tuning_choices.yaml"
+        )
 
-import mne
-from mne.preprocessing import read_ica
+        records = discover_raw_run_records(cfg)
+        input_paths = [
+            derivative_path_for_run(record, sss_dir, INPUT_SUFFIX)
+            for record in records
+        ]
+        missing_inputs = [path for path in input_paths if not path.is_file()]
+        if missing_inputs:
+            raise FileNotFoundError(
+                "Expected lineage-matched annotated derivatives are missing: "
+                f"{missing_inputs}. Run 03_B_ArtefactAnnotation.py first."
+            )
 
-# Paths
-ica_path = "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/ica_models/sub-01_ses-01_ica_prefit.fif"
-raw_path = "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/preprocessing/sub-01/ses-01/sss/SUB01_block01_ann.fif"
+        prefit_path = (
+            model_dir / f"{subject_label}_{session_label}_ica_prefit.fif"
+        )
+        prefit_metadata_path = (
+            model_dir
+            / f"{subject_label}_{session_label}_ica_prefit_metadata.json"
+        )
+        postreject_path = (
+            model_dir / f"{subject_label}_{session_label}_ica_postreject.fif"
+        )
+        require_fit_data = args.processing_pass == "review"
+        model, fit_data, fit_summaries, cache_status, fingerprint = (
+            fit_or_load_ica(
+                input_paths=input_paths,
+                ica_cfg=ica_cfg,
+                prefit_path=prefit_path,
+                metadata_path=prefit_metadata_path,
+                raw_root=raw_root,
+                overwrite=overwrite,
+                require_fit_data=require_fit_data,
+            )
+        )
 
-# Window to inspect
-start_sec = 97.0
-duration_sec = 5.0
+        eog_diagnostics = (
+            summarize_eog_scores(
+                model=model,
+                input_paths=input_paths,
+                configured_channels=list(ica_cfg["eog_channel_names"]),
+            )
+            if ica_cfg["eog_diagnostics"]
+            else {
+                "status": "disabled",
+                "per_file": [],
+                "aggregate_ranking": [],
+            }
+        )
 
-# Load data
-raw = mne.io.read_raw_fif(raw_path, preload=True)
-ica = read_ica(ica_path)
+        diagnostic_images: list[Path] = []
+        if args.processing_pass == "review":
+            if fit_data is None:
+                raise RuntimeError("ICA review requires prepared fit data.")
+            diagnostic_images = generate_component_diagnostics(
+                model=model,
+                fit_data=fit_data,
+                figure_dir=figure_dir,
+                subject_label=subject_label,
+                processing_pass=args.processing_pass,
+                raw_root=raw_root,
+                show=bool(args.interactive and not args.no_display),
+                include_properties=not args.skip_component_properties,
+            )
 
-# Recreate ICA-fit preprocessing on MEG
-raw_fit = raw.copy().pick("meg")
-raw_fit.resample(200)
-raw_fit.filter(1.0, 40.0)
+        exclusions = ica_cfg["manual_exclude"]
+        if exclusions is not None:
+            exclusions = sorted(set(int(value) for value in exclusions))
+        if args.interactive:
+            exclusions = interactive_component_review(
+                n_components=int(model.n_components_),
+                initial_exclusions=exclusions,
+                diagnostic_paths=diagnostic_images,
+                eog_diagnostics=eog_diagnostics,
+            )
+            update_tuning_file(
+                path=decisions_out,
+                raw_root=raw_root,
+                subject_id=cfg["subject"]["id"],
+                section="ica",
+                values={"manual_exclude": exclusions},
+            )
 
-# ICA sources
-src = ica.get_sources(raw_fit)
+        run_reports: list[dict[str, Any]] = []
+        lineage_records: list[dict[str, Any]] = []
+        if args.processing_pass == "review":
+            status = (
+                "review_required" if exclusions is None else "review_complete"
+            )
+            lineage_records = [
+                lineage_record(
+                    source=record,
+                    input_path=input_path,
+                    output_path=None,
+                    status=status,
+                    metadata={
+                        "prefit_ica_model": str(prefit_path),
+                        "manual_exclude": exclusions,
+                    },
+                )
+                for record, input_path in zip(records, input_paths, strict=True)
+            ]
+        else:
+            if exclusions is None:
+                raise RuntimeError(
+                    "ICA apply pass requires an explicit `ica.manual_exclude` "
+                    "list. Use [] after reviewing when no components should be "
+                    "rejected."
+                )
+            invalid = [
+                value
+                for value in exclusions
+                if value < 0 or value >= int(model.n_components_)
+            ]
+            if invalid:
+                raise ValueError(
+                    "Configured ICA exclusions are outside the fitted component "
+                    f"range 0-{int(model.n_components_) - 1}: {invalid}"
+                )
+            model.exclude = list(exclusions)
+            if args.resume and postreject_path.is_file():
+                prepared_postreject = guarded_path(postreject_path, raw_root)
+                existing_postreject = read_ica(
+                    prepared_postreject,
+                    verbose="WARNING",
+                )
+                same_unmixing = np.allclose(
+                    existing_postreject.unmixing_matrix_,
+                    model.unmixing_matrix_,
+                )
+                if (
+                    list(existing_postreject.exclude) != exclusions
+                    or int(existing_postreject.n_components_)
+                    != int(model.n_components_)
+                    or not same_unmixing
+                ):
+                    raise RuntimeError(
+                        "Cannot resume from a post-rejection ICA model that "
+                        "does not match the current prefit model and exclusions: "
+                        f"{prepared_postreject}"
+                    )
+            else:
+                prepared_postreject = prepare_output_path(
+                    postreject_path,
+                    raw_root=raw_root,
+                    overwrite=overwrite,
+                )
+                model.save(
+                    prepared_postreject,
+                    overwrite=overwrite,
+                    verbose="WARNING",
+                )
+            run_reports, lineage_records = apply_ica_to_runs(
+                model=model,
+                exclusions=exclusions,
+                records=records,
+                input_paths=input_paths,
+                sss_dir=sss_dir,
+                raw_root=raw_root,
+                overwrite=overwrite,
+                resume=bool(args.resume),
+            )
+            status = "completed"
 
-# Keep first and fifth components (ICA000 and ICA004)
-src_2 = src.copy().pick([src.ch_names[0], src.ch_names[4]])
+        report_payload = {
+            "stage": STAGE_NAME,
+            "generated_utc": utc_now(),
+            "processing_pass": args.processing_pass,
+            "interactive": bool(args.interactive),
+            "resume": bool(args.resume),
+            "subject_bids_id": subject_label,
+            "status": status,
+            "warnings": warnings,
+            "cache_status": cache_status,
+            "fingerprint": fingerprint,
+            "fit_input_summaries": fit_summaries,
+            "n_components_fitted": int(model.n_components_),
+            "manual_exclude": exclusions,
+            "eog_diagnostics": eog_diagnostics,
+            "prefit_model": str(prefit_path),
+            "postreject_model": (
+                str(postreject_path)
+                if args.processing_pass == "apply"
+                else None
+            ),
+            "runs": run_reports,
+            "blink_annotation_policy": "No ICA-derived blink annotations added.",
+        }
+        report_json = write_json(
+            report_dir / f"03_C_ICA_{args.processing_pass}_report.json",
+            report_payload,
+            raw_root=raw_root,
+        )
+        summary_lines = [
+            f"status: {status}",
+            f"processing_pass: {args.processing_pass}",
+            f"subject: {subject_label}",
+            f"cache_status: {cache_status}",
+            f"n_components_fitted: {int(model.n_components_)}",
+            f"manual_exclude: {exclusions}",
+            f"EOG diagnostics: {eog_diagnostics['status']}",
+            "ICA-derived blink annotations: disabled",
+            f"prefit_model: {prefit_path}",
+        ]
+        if args.processing_pass == "apply":
+            summary_lines.append(f"postreject_model: {postreject_path}")
+            summary_lines.extend(
+                (
+                    f"run{item['acquisition_run_label']:02d} "
+                    f"{item['source_filename']} "
+                    f"({item['execution_status']}) -> {item['output_path']}"
+                )
+                for item in run_reports
+            )
+        report_html = write_simple_html_report(
+            report_dir / f"03_C_ICA_{args.processing_pass}_report.html",
+            title=f"{subject_label} | 03_C Manual ICA ({args.processing_pass})",
+            summary_lines=summary_lines,
+            image_paths=diagnostic_images,
+            raw_root=raw_root,
+        )
+        manifest_status = update_source_manifest_stage(
+            manifest_path=args.source_manifest,
+            raw_root=raw_root,
+            stage_name=STAGE_NAME,
+            processing_pass=args.processing_pass,
+            records=lineage_records,
+            status=status,
+            qc={
+                "report_json": str(report_json),
+                "report_html": str(report_html),
+                "manual_exclude": exclusions,
+                "cache_status": cache_status,
+            },
+        )
+        if args.print_summary:
+            print(f"Manual ICA: {status}")
+            print(f"Cache: {cache_status}")
+            print(f"Components: {int(model.n_components_)}")
+            print(f"Manual exclusions: {exclusions}")
+            print(f"JSON report: {report_json}")
+            print(f"HTML report: {report_html}")
+            print(f"Source manifest: {manifest_status}")
+            if args.interactive:
+                print(f"Accepted tuning: {decisions_out}")
+        return 0
+    except Exception as exc:  # pylint: disable=broad-except
+        print(f"03_C ICA error: {exc}", file=sys.stderr)
+        return 2
 
-# EOG channels
-eog_chs = [ch for ch in ("EOG001", "EOG002") if ch in raw.ch_names]
-if not eog_chs:
-    raise RuntimeError("No EOG channels found in raw file.")
 
-eog = raw.copy().pick(eog_chs)
-eog.resample(200)
-eog.filter(1.0, 40.0, picks="all")
-
-# Combine ICA components + EOG in one scrollable browser
-combo = src_2.copy().add_channels([eog], force_update_info=True)
-
-combo.plot(
-    start=start_sec,
-    duration=duration_sec,
-    n_channels=len(combo.ch_names),
-    scalings="auto",
-    title="ICA000 + ICA004 + EOG001/EOG002",
-    block=True,
-)
-"""
-
-
-# %%
-# -------------------------------------------------------------------------
-# Final report save
-# -------------------------------------------------------------------------
-report.save(out_report, overwrite=True, open_browser=False)
-print(f"Saved HTML report to: {out_report}")
-
-# %%
+if __name__ == "__main__":
+    raise SystemExit(main())

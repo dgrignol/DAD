@@ -1,3 +1,58 @@
+# 24 Jun 2026 18:27
+
+## Add lineage-aware stage 03 preprocessing
+
+### `meg/code/preprocessing_basic/03_A_MaxFilt.py`
+- Refactor Maxwell filtering into a configuration-driven CLI with review/apply passes, explicit overwrite/resume behavior, and source-manifest lineage updates.
+- Discover raw acquisition runs from the resolved profile and preserve exact source stems in `_raw_sss.fif` outputs.
+- Add MNE digitization compatibility checks, per-run bad-channel detection, configurable bad-channel policies, central-run destination selection, before/after QC, and guarded report outputs.
+
+### `meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py`
+- Refactor artifact annotation into a configuration-driven CLI that consumes lineage-matched SSS outputs and writes `_ann.fif`/`_ann.csv` derivatives.
+- Preserve MISC channels, separate EOG diagnostics from annotation policy, and default missing-EOG subjects to disabled EOG-only processing.
+- Add review/apply reporting, threshold tuning support, resume validation, and source-manifest lineage updates.
+
+### `meg/code/preprocessing_basic/03_C_ICA.py`
+- Refactor manual ICA into the production stage-03 ICA branch with explicit component exclusions, compatible prefit cache reuse, review/apply passes, and guarded cleaned FIF outputs.
+- Fit MEG-only data with configured resampling/filtering while keeping EOG scores diagnostic and preserving original non-MEG channels in cleaned run outputs.
+- Validate resume compatibility through lineage, exclusions, channel identity, bad channels, sample counts, and MISC-channel preservation.
+
+### `meg/code/preprocessing_basic/03_C_ICA_auto.py`
+- Mark the automatic MEGNet branch as deprecated experimental code.
+- Add a production gate so normal execution exits before optional MEGNet dependencies are imported unless a developer-only escape hatch is used.
+
+### `meg/code/preprocessing_basic/preprocessing_stage_utils.py`
+- Add shared acquisition-run discovery, run-label parsing, derivative-path construction, guarded output helpers, JSON/text/HTML writers, tuning-file merging, and source-manifest stage updates.
+- Centralize lineage records so 03_A, 03_B, and 03_C use the same source/stage provenance contract.
+
+### `meg/code/preprocessing_basic/render_stage03_mne_reports.py`
+- Add a report-only utility that renders self-contained MNE HTML reports from existing stage-03 JSON metadata, PNG figures, and optional tuning YAML.
+- Validate report inputs and enforce raw-tree output guards without opening raw FIF files or recomputing scientific derivatives.
+
+### `meg/requirements-ica-auto-experimental.txt`
+- Move MEGNet/ONNX automatic-ICA dependencies into an explicit optional file for the deprecated research branch.
+
+### `meg/requirements.txt`
+- Add runtime dependencies needed by the production refactor and remove automatic-ICA packages from the production environment.
+
+### `meg/tests/test_preprocessing_stage_policies.py`
+- Cover Maxwell bad-channel policies, digitization errors, central destination selection, resume validation, EOG mode resolution, manual ICA parsing, mount-independent ICA cache fingerprints, and auto-ICA deprecation.
+
+### `meg/tests/test_preprocessing_stage_smoke.py`
+- Add synthetic smoke tests for artifact annotation, manual ICA apply behavior, headless ICA diagnostics, and Maxwell before/after QC using existing FIF outputs.
+
+### `meg/tests/test_preprocessing_stage_utils.py`
+- Cover run-label parsing, exact source-stem derivative names, tuning-file merges, raw-tree rejection, NumPy JSON normalization, and manifest-stage preservation.
+
+### `meg/tests/test_real_preprocessing_headers.py`
+- Add mounted-dataset header checks for expected ocular modalities across real subject task FIFs, skipped automatically when the raw dataset is unavailable.
+
+### `meg/tests/test_render_stage03_mne_reports.py`
+- Cover MNE report rendering from synthetic stage JSON/PNG inputs and raw-tree output refusal.
+
+Suggested commit message:
+`Add lineage-aware stage 03 preprocessing`
+
 # 24 Jun 2026 18:26
 
 ## Add multisubject config and trigger extraction foundation
