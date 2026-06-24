@@ -24,14 +24,14 @@ Behavior is grounded in:
 
 - `experiment/MoveDot1_experiment_occlusion_v18_rescueTraject.m`
 - `experiment/trigger_codes_occlusion_v9_rescueTraject.md`
-- `triggers_check/compare_reported_vs_observed_triggers.py`
-- `triggers_check/compare_reported_vs_observed_triggers_subject.py`
+- the selected multisubject profile and its exact runtime CSV pattern,
+- retained read-only reported-vs-observed validation artifacts.
 
 ## Trigger Code Contract
-The parser must support and report the following fixed codes when present:
+The parser must support and report the profile-selected condition generation:
 
-- `31, 41, 51`
-- `1..N` dynamic sequence identity (default expected range `1..20`)
+- v18/v19: `31, 41, 51` and identities `1..20`,
+- v20: `71, 81, 91` and identities `1..40`,
 - `111, 112, 114, 115`
 - `116, 117, 118`
 - `201, 202, 113`
@@ -43,6 +43,9 @@ The parser must support and report the following fixed codes when present:
 | 31 | `trial_condition_onset_always_visible` | Condition onset for always-visible trial. |
 | 41 | `trial_condition_onset_occluded_nondeviant` | Condition onset for occluded nondeviant trial. |
 | 51 | `trial_condition_onset_occluded_deviant` | Condition onset for occluded deviant trial. |
+| 71 | `trial_condition_onset_always_visible` | v20 condition onset for always-visible trial. |
+| 81 | `trial_condition_onset_occluded_nondeviant` | v20 condition onset for occluded nondeviant trial. |
+| 91 | `trial_condition_onset_occluded_deviant` | v20 condition onset for occluded deviant trial. |
 | 1..N | `trial_sequence_identity` | Per-trial sequence ID sent at fixed frame offset. |
 | 111 | `occlusion_start` | First frame where occlusion starts. |
 | 112 | `occlusion_complete` | First frame where dot is fully occluded. |
@@ -115,19 +118,16 @@ when the kept code matches the expected/reported code, for both orders:
 - `0 -> reported -> unexpected -> 0`
 - `0 -> unexpected -> reported -> 0`
 
-Subject-level deep comparison (`triggers_check/compare_reported_vs_observed_triggers_subject.py`)
-uses the same expected-trigger-first symmetric rule as first option, with width
-and deterministic fallbacks only when expected identity is unavailable.
+The built-in segment alignment uses the same reported-trigger-first symmetric
+rule, with width and deterministic fallbacks only when reported identity is
+unavailable.
 
-## De-dup / Debounce Contract
-The parser must include explicit de-dup/debounce controls and record their use
-in the companion report.
-
-Minimum policy:
-
-- record the configured debounce parameters,
-- record how many candidate pulses were merged/removed,
-- keep raw-window and post-processed counts to preserve traceability.
+## Window Preservation Contract
+The parser does not apply a generic time-based debounce. Every reconstructed
+non-zero STI101 window is retained except the explicitly documented contiguous
+non-zero transition pair, whose kept/dropped evidence is written to the
+transition warning table. Raw-window and resolved-event counts remain in the
+stage report.
 
 ## Required Outputs
 Step `02_trigger_extraction_custom.py` must write both machine-readable and
@@ -145,6 +145,15 @@ A canonical event table (e.g., CSV/JSON/Parquet) with at least:
 - `time_end_sec`
 - `width_samples`
 - `source_fif`
+- `source_fif_path`
+- `acquisition_run`
+- `raw_sample_frame`
+- `behavioral_block`, `behavioral_run`, `behavioral_trial`
+- `behavioral_context_source`
+- `reported_source_csv`, `reported_row_in_csv`
+- `reported_alignment_status`, `reported_alignment_confidence`
+- `replay_status`, `is_replay_trial`
+- `is_gaze_break`, `is_escape_termination`
 - `is_transition_warning` (boolean)
 - `transition_partner_code` (nullable)
 - `expected_trigger_code` (nullable)
@@ -161,21 +170,48 @@ A concise summary with at least:
 - transition warnings summary,
 - any mismatch or unresolved conditions.
 
+The stage also generates the legacy deep report bundle by default under:
+
+`02_triggers_extraction_custum_report_deeper/`
+
+The bundle retains the historical subject filenames:
+
+- `subXX_all_blocks_reported_vs_observed.md`,
+- `subXX_all_blocks_reported_vs_observed.csv`,
+- `subXX_all_blocks_reported_vs_observed_anomalies.csv`,
+- `subXX_all_blocks_reported_vs_observed_plots/`,
+- `subXX_all_blocks_reported_vs_observed_plots/transition_pulses/`.
+
+Unlike the retired standalone comparator, the renderer consumes the canonical
+step-02 alignment and source associations. It does not infer behavioral blocks
+from acquisition FIF filenames or perform a second independent alignment.
+
+### Observed-Only Context Rule
+An observed STI101 event without a saved CSV row remains `OBSERVED_ONLY`.
+Behavioral block/run may be inferred only from exact `MATCH` or
+`MATCH_WARNING` neighbors in the same source FIF:
+
+1. matching preceding and following segment labels,
+2. an ESC 152 following an exact segment match,
+3. an unambiguous leading or trailing event within one FIF.
+
+The inference source is stored in `behavioral_context_source`. It does not
+turn the event into a reported match or increase exact-match association
+counts.
+
 ## Required Validation Checks
 At minimum, trigger step validation must report:
 
 1. `stim_channel_present` in all analyzed FIF files,
-2. required fixed-code coverage (present/missing),
+2. profile-required subject-code coverage (present/missing),
 3. dynamic sequence code range sanity (`1..N`),
 4. counts of transition-resolution warnings (including collapsed pulses),
-5. event table row count before/after post-processing.
+5. event table row count before/after post-processing,
+6. reported alignment status counts and segment-level source associations.
 
 ## Downstream Epoching Link
-Epoching defaults should use condition onset triggers:
-
-- `always_visible: 31`
-- `occluded_nondeviant: 41`
-- `occluded_deviant: 51`
+Epoching condition onsets must come from the selected profile. The current
+generation mappings are 31/41/51 for v18/v19 and 71/81/91 for v20.
 
 Any change to these mapping assumptions must be updated here and in:
 

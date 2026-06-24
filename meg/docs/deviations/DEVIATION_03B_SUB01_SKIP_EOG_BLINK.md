@@ -13,9 +13,10 @@ This note documents a FLUX deviation according to the template in
   `find_eog_events(..., ch_name="EOG001")`) and added to the `_ann.fif` files.
 
 - Local change:
-  For subject `sub-01` only, EOG-based blink annotation is intentionally skipped
-  in `03_B_ArtefactAnnotation.py`. The blink-only QC figure is also skipped and
-  replaced with an explicit warning in the report/log.
+  For subject `sub-01`, EOG is retained as diagnostics-only by default.
+  `find_eog_events` counts and EOG trace plots are reported, but no EOG-derived
+  `BAD_blink` annotations are added unless an explicit future configuration
+  changes `artifact_annotation.eog_mode` to `annotate`.
 
 - Why deviation is needed for this dataset/task:
   In subject 01, EOG-based blink labels were found to be unreliable for the
@@ -23,20 +24,23 @@ This note documents a FLUX deviation according to the template in
   transients were not tagged by EOG001-based blink annotations).
 
 - Expected impact on preprocessing/analysis:
-  `03_B` now contributes only event + muscle annotations for sub-01. Blink labels
-  for sub-01 are deferred to step 03_C, where they are derived from ICA component
-  0 and reattached to outputs.
+  `03_B` contributes existing and muscle annotations for sub01 while preserving
+  EOG diagnostic evidence. Blink-like ICA components are handled through the
+  explicit manual ICA exclusion list rather than adding detector-derived blink
+  windows.
 
 - Risk or validation concern:
-  ICA000-based blink detection can capture non-blink transients if component 0 is
-  not purely ocular. This is accepted as a temporary subject-specific workaround.
+  No separate blink annotations are available for epoch-level
+  `reject_by_annotation`. Ocular removal depends on the manually reviewed ICA
+  decomposition. EOG plots and component properties must therefore be reviewed
+  together.
 
 - Validation evidence path (report/log/figure):
   - Script logic:
     `/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py`
   - Runtime output:
-    warning text under section "Blink-only QC figure" in
-    `/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/reports/sub-01/ses-01/03_B_ArtefactAnnotation_report.html`
+    pass-specific EOG status and plots in
+    `/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives/reports/sub-01/ses-01/03_B_ArtefactAnnotation_review_report.html`
 
 ## Possible Solutions Considered
 
@@ -48,13 +52,16 @@ This note documents a FLUX deviation according to the template in
 - Pros: still EOG-based.
 - Cons: requires additional detector tuning and validation work.
 
-3. Skip 03_B blink annotation for sub-01 and defer to ICA in 03_C.
-- Pros: minimal immediate change that reflects observed sub-01 data behavior.
-- Cons: introduces cross-step dependency and a subject-specific branch.
+3. Keep EOG diagnostics, skip default EOG annotations, and use manually
+   reviewed ICA exclusions.
+- Pros: preserves evidence without trusting a weak detector or a hardcoded
+  component index.
+- Cons: requires explicit component review.
 
 ## Current Decision
 
-For now, keep this subject-specific deviation:
+Current production decision:
 
-- `03_B` skips EOG blink annotation for sub-01.
-- Blink annotations are added in `03_C` from ICA component 0 for sub-01.
+- `03_B` uses diagnostics-only EOG handling for sub01.
+- `03_C` does not create ICA-derived blink annotations.
+- Ocular component rejection is explicit in `ica.manual_exclude`.

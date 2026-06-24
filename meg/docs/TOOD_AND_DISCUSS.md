@@ -1,9 +1,10 @@
 IMPORTANT point to add/think about
 
-
+Analysis interpretability & documenting
+->the first part of every html report should contain the info about the parameters and settings commented in a way that each one is understandable (how to do? is json already printed at the start? add comments and more info in json that is already printed at the start?)
 
 PREPROCESSING:
-->Notch filter? (present for Ingmar not in FLUX) -> solution cleanline style filter or lowpass at 40
+->Notch filter? (present for Ingmar not in FLUX) -> solution cleanline style filter or lowpass at 40 - Simple: Sinusoidal regression / DFT filtering: Good when frequency and amplitude are reasonably stable. MNE offers method="spectrum_fit", set it for the line noise freq
     ->> Make both solutions as other options and save all the files (create tree folder structure to accomodate and then to use as input from dRSA and compare results)
 ->all data cleaning in separate step? (cleaner but feasible for us? it is just a matter of propagating the info that we should anyway doing, so maybe "06 cleaning and epoching"? I think we are already close to that, just the ICA components are removed before?)
 ->smoothing necessary? why? (the downsample is already "smoothing")
@@ -15,6 +16,7 @@ PREPROCESSING:
 DECODING:
 --> decoding of the occluded condition should see bump at reappearence
 -> ERF of occluded condition
+-> decoding of the position (x,y) itself not just left-right
 
 
 DONE

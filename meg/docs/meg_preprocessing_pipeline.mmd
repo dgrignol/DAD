@@ -1,51 +1,55 @@
 flowchart TB
-    raw[/"Input:<br/>raw *_meg.fif"/]
+    config[/"Default YAML + subject selector<br/>+ optional tuning YAML"/]
+    config --> cfg["pipeline_config.py<br/>merge, validate, resolve, raw guard"]
+    cfg --> runner["run_pipeline.py<br/>preflight + separate stage processes"]
+    runner --> inventory["dataset_inventory.py<br/>read-only optional QC"]
+    runner --> manifest[/"source_manifest.json<br/>raw sources + durable associations<br/>+ derivative lineage"/]
 
-    raw --> trigger_extract["Trigger extraction<br/>02_trigger_extraction_custom.py<br/><br/>Key steps/params:<br/>&bull; read STI101 trigger channel<br/>&bull; min_duration=0.0 s<br/>&bull; transition_max=1 sample<br/>&bull; expected_lookahead=6<br/>&bull; identity codes=1-20<br/>&bull; condition codes=31/41/51"]
-    expected_triggers[/"Input:<br/>reported/expected trigger CSVs<br/>+ config YAML"/] -.-> trigger_extract
-    trigger_extract --> trigger_csv[/"Output:<br/>02_trigger_events.csv"/]
-    trigger_extract --> trigger_json[/"Output:<br/>02_trigger_events.json"/]
-    trigger_extract --> transition_warnings[/"Output:<br/>02_transition_warnings.csv"/]
-    trigger_extract -.-> trigger_report>"Reports:<br/>02_trigger_extraction_custom_report.md/json<br/>+ deep trigger QA bundle"]
+    raw[/"Raw task acquisition FIFs<br/>exact source stems preserved"/]
+    raw --> trigger["02 trigger extraction<br/>observed STI101 + saved CSV evidence"]
+    trigger --> manifest
 
-    raw --> maxfilt["Maxwell filtering / SSS<br/>03_A_MaxFilt.py<br/><br/>Key steps/params:<br/>&bull; find_bad_channels_maxwell<br/>&bull; cross-talk/calibration if present<br/>&bull; reuse block01 bads across runs<br/>&bull; fix_mag_coil_types<br/>&bull; maxwell_filter<br/>&bull; reattach bads into info['bads']<br/>&bull; PSD QC: fmax=60, n_fft=1000"]
-    maxfilt --> sss[/"Output:<br/>*_raw_sss.fif<br/>"/]
-    maxfilt -.-> max_report>"Report:<br/>03_A_MaxFilt_report.html"]
+    raw --> maxwell["03_A Maxwell filtering<br/>detect bads independently per run<br/>policy: reference / union / per-run"]
+    maxwell --> sss[/"*_raw_sss.fif"/]
+    maxwell -.-> maxqc>"Review/apply JSON + HTML + PSD QC"]
+    maxwell --> manifest
 
-    sss --> ann_script["Artefact annotation<br/>03_B_ArtefactAnnotation.py<br/><br/>Key steps/params:<br/>&bull; sub-01: skip EOG blink here<br/>&bull; muscle detection on mag channels<br/>&bull; filter_freq=110-140 Hz<br/>&bull; threshold=10<br/>&bull; min_length_good=0.2 s<br/>&bull; combine existing + muscle annotations"]
-    ann_script --> ann_fif[/"Output:<br/>*_ann.fif<br/>"/]
-    ann_script --> ann_csv[/"Output:<br/>*_ann.csv"/]
-    ann_script -.-> ann_report>"Report:<br/>03_B_ArtefactAnnotation_report.html"]
+    sss --> artifacts["03_B physiological annotation<br/>FLUX muscle threshold default 10<br/>EOG only when channels exist<br/>MISC preserved"]
+    artifacts --> ann[/"*_ann.fif + *_ann.csv"/]
+    artifacts -.-> artqc>"Per-run threshold plots<br/>review/apply JSON + HTML"]
+    artifacts --> manifest
 
-    ann_fif --> branch{"ICA step<br/>choose one branch"}
+    ann --> manualica["03_C production manual ICA<br/>MEG 200 Hz, 1-40 Hz<br/>FastICA 30, seed 97"]
+    manualica --> prefit[("Compatible prefit ICA cache")]
+    manualica -.-> icaqc>"Sources + topographies<br/>component properties + optional EOG ranking"]
+    manualica --> decision{"Explicit manual exclusions?<br/>null = unreviewed<br/>[] = reject none"}
+    decision -->|apply pass| cleaned[/"*_ica.fif"/]
+    cleaned --> manifest
 
-    branch -->|default now| manual_ica["Manual ICA branch<br/>03_C_ICA.py<br/><br/>Key steps/params:<br/>&bull; preserve input info['bads']<br/>&bull; concatenate annotated runs for ICA fit copy (on_mismatch=warn)<br/>&bull; fit copy: MEG only<br/>&bull; resample=200 Hz<br/>&bull; band-pass=1-40 Hz<br/>&bull; FastICA, n_components=30<br/>&bull; random_state=97<br/>&bull; manual exclude sub-01=[1,5]<br/>&bull; EOG diagnostics threshold=0.6"]
-    manual_ica --> manual_prefit[("Output:<br/>ICA model file<br/>*_ica_prefit.fif")]
-    manual_ica --> manual_postreject[("Output:<br/>ICA model file<br/>*_ica_postreject.fif")]
-    manual_ica --> manual_out[/"Output:<br/>*_ica.fif<br/>with propagated info['bads']"/]
-    manual_ica -.-> manual_report>"Report:<br/>03_C_ICA_report.html"]
+    maxqc -.-> tuning[/"03_tuning_choices.yaml"/]
+    artqc -.-> tuning
+    icaqc -.-> tuning
+    tuning -->|--tuning-config| runner
 
-    branch -->|implemented - not default - to be improved| auto_ica["Auto ICA branch<br/>03_C_ICA_auto.py<br/><br/>Key steps/params:<br/>&bull; preserve input info['bads']<br/>&bull; concatenate annotated runs for ICA fit copy (on_mismatch=warn)<br/>&bull; fit copy: MEG only<br/>&bull; band-pass=1-100 Hz<br/>&bull; notch=50/60 Hz<br/>&bull; resample=250 Hz<br/>&bull; Infomax, n_components=20<br/>&bull; random_state=97, max_iter=auto<br/>&bull; MEGNet auto-exclude labels: eye blink/eye movement/heart beat if p>=0.80"]
-    auto_ica --> auto_prefit[("Output:<br/>ICA model file<br/>*_ica_auto_prefit.fif")]
-    auto_ica --> auto_postreject[("Output:<br/>ICA model file<br/>*_ica_auto_postreject.fif")]
-    auto_ica --> auto_labels[/"Output:<br/>MEGNet labels CSV<br/>*_ica_auto_megnet_labels.csv"/]
-    auto_ica --> auto_out[/"Output:<br/>*_ica_auto.fif<br/>with propagated info['bads']"/]
-    auto_ica -.-> auto_report>"Report:<br/>03_C_ICA_auto_report.html"]
+    ann -.-> autoica["03_C_ICA_auto.py<br/>DEPRECATED EXPERIMENTAL<br/>blocked and not registered"]
 
-    manual_out --> cleaned_choice{"Selected cleaned ICA input"}
-    auto_out --> cleaned_choice
+    cleaned --> epoching["04 epoching<br/>manual-ICA lineage gate<br/>run-isolated trial intervals"]
+    trigger --> epoching
+    epoching --> epochs[/"run-all_epo.fif<br/>metadata + trial decisions"/]
+    epoching --> manifest
 
-    trigger_csv --> epoching
-    cleaned_choice --> epoching["Epoching + metadata propagation<br/>04_epoching.py<br/><br/>Key steps/params:<br/>&bull; current ica_variant=manual<br/>&bull; events: 31, 41, 51<br/>&bull; map trial_sequence_identity from 02 events<br/>&bull; concatenate cleaned runs + per-run events (on_mismatch=warn)<br/>&bull; propagate bads into epochs.info['bads']<br/>&bull; tmin=-1.0, tmax=2.667 s<br/>&bull; baseline=None<br/>&bull; linear detrend=1<br/>&bull; reject_by_annotation=True<br/>&bull; reject: grad=5000e-13, mag=4e-12<br/>&bull; drop gaze-break code 150 trials<br/>&bull; drop catch code 116 for condition 31<br/>&bull; blink-center rejection=OFF"]
-    epoching --> epo[/"Output:<br/>sub-*_ses-*_task-Attention_run-all_epo.fif<br/>contains trial_sequence_identity metadata<br/>and propagated epochs.info['bads']"/]
-    epoching --> epoch_metadata[/"Output:<br/>*_epoch_metadata.csv"/]
-    epoching -.-> epoch_figs(["QC figures:<br/>04_epoching_*.png"])
-    epoching -.-> epoch_report>"Report:<br/>04_epoching_report.html"]
+    epochs --> export["06 dRSA export<br/>20/40 identities<br/>fixed MEG channel axis"]
+    export --> tensors[/"Condition MAT + JSON<br/>bad/missing channels = NaN"/]
+    export --> manifest
 
-    epo --> drsa["Export neural tensors for dRSA<br/>06_export_neural_for_drsa.py<br/><br/>Key steps/params:<br/>&bull; input = step-04 epochs FIF only<br/>&bull; requires trial_sequence_identity metadata<br/>&bull; exclude bad MEG channels from export<br/>&bull; guard channel order before MAT export<br/>&bull; identity values=1-20<br/>&bull; crop=0-2.667 s<br/>&bull; resample=120 Hz<br/>&bull; average by condition x identity"]
-    drsa --> mat[/"Output:<br/>condition-specific MAT files<br/>*_condition-*_desc-identityAveraged_neural.mat<br/><br/>Variables:<br/>neural = stimuli x good MEG channels x timepoints<br/>channel_labels = exported channel order"/]
-    drsa -.-> drsa_figs(["QC figures:<br/>06_export_neural_for_drsa_*.png"])
-    drsa -.-> drsa_report>"Report:<br/>06_export_neural_for_drsa_report.html"]
+    epochs -.-> erf["Optional ERF inspection<br/>-0.1 to 0 s baseline"]
+    epochs -.-> decoding["Optional dot-side decoding<br/>-0.4 to -0.2 s baseline"]
 
-    classDef inactive fill:#f6f6f6,stroke:#9a9a9a,color:#666,stroke-dasharray: 4 2;
-    class auto_ica,auto_prefit,auto_postreject,auto_labels,auto_out,auto_report inactive;
+    note1["Trigger 150 trial rejection is downstream,<br/>not physiological artifact removal"]
+    note2["EDF-to-MEG synchronization deferred;<br/>never zip EDF blocks to MEG runs"]
+    artifacts -.-> note1
+    epoching -.-> note1
+    artifacts -.-> note2
+
+    classDef deprecated fill:#f6f6f6,stroke:#9a9a9a,color:#666,stroke-dasharray: 4 2;
+    class autoica deprecated;

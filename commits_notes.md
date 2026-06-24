@@ -1,3 +1,39 @@
+# 24 Jun 2026 18:32
+
+## Document the multisubject MEG pipeline state
+
+### `meg/docs/MULTISUBJECT_MIGRATION_AUDIT.md`
+- Add the full migration audit for the external seven-subject MEG dataset.
+- Record verified subject profiles, read-only source counts, trigger extraction evidence, Stage-03 preprocessing policy, epoch/export contracts, MATLAB dRSA orchestration, cluster execution, dot-side sanity checks, and remaining caveats.
+
+### `meg/docs/MULTISUBJECT_REFACTOR_PROMPTS.md`
+- Update the implementation prompts to reflect completed chats, current pipeline contracts, manual-ICA production status, downstream lineage gates, cluster execution, dot-side sanity workflows, and Stage-08 line-summary work.
+- Clarify future-work boundaries so optional sanity checks and reports do not become required scientific dependencies.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Reconcile the pipeline specification with the new configuration/profile model, source manifest, Stage-03 review/apply flow, epoching/export gates, MATLAB handoff, cluster wrappers, and optional sanity workflows.
+- Update data-flow, output, validation, and execution details for the current multisubject pipeline.
+
+### `meg/docs/TOOD_AND_DISCUSS.md`
+- Add follow-up discussion notes about report interpretability and position decoding.
+- Update the line-noise discussion with MNE spectrum-fit filtering as an option.
+
+### `meg/docs/TRIGGERS_EVENTS.md`
+- Update the trigger/event contract for profile-specific condition codes, canonical event fields, transition-warning preservation, deep report outputs, observed-only context inference, and downstream epoching mappings.
+
+### `meg/docs/deviations/DEVIATION_03B_SUB01_SKIP_EOG_BLINK.md`
+- Replace the older sub01 blink-skip description with the current diagnostics-only EOG policy and explicit manual ICA component-review requirement.
+
+### `meg/docs/deviations/DEVIATION_03C_ICA_DEV_HEAD_T.md`
+- Mark the old native-position and ICA000 blink-workaround decisions as superseded.
+- Document the current central Maxwell destination policy and explicit manual ICA exclusion model.
+
+### `meg/docs/meg_preprocessing_pipeline.mmd`
+- Update the Mermaid source to show the resolved configuration flow, source manifest, Stage-03 review/apply decisions, manual-ICA lineage gate, epoching, dRSA export, optional ERF/decoding checks, and deprecated auto-ICA branch.
+
+Suggested commit message:
+`Document multisubject MEG pipeline state`
+
 # 24 Jun 2026 18:31
 
 ## Add CIMeC cluster orchestration

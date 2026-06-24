@@ -70,19 +70,24 @@ This note documents a FLUX deviation according to the template in
 - Cons: deviates more from FLUX two-run concatenated ICA pattern and increases
   handling complexity (multiple ICA models).
 
-## Current Decision
+## Superseded Decision
 
-For now, keep the current local solution:
+Date superseded: 2026-06-12
 
-- `on_mismatch="warn"` in `03_C_ICA.py` concatenation.
+The temporary native-position workflow is no longer the production decision.
+Production 03_A uses each run's static `dev_head_t` as its source transform and
+maps all runs to the most central actual run. Centrality is the transform
+medoid measured by RMS displacement over the subject's digitization point
+cloud. The destinations are sub01 run02, sub02 run05, sub03 run03, sub04 run04,
+sub05 run02, sub06 run03, and sub07 run03.
 
-This is accepted as an explicit temporary deviation to preserve pipeline
-continuity and FLUX-style structure, with later upgrade path to a common
-Maxwell destination if needed.
+`on_mismatch="warn"` remains in 03_C only as defensive compatibility for
+historical derivatives. Rebuilt stage-03 derivatives should share one
+destination transform and must not depend on that warning path.
 
 ---
 
-## Additional 03_C Deviation: sub-01 blink annotation source (ICA000)
+## Superseded 03_C Deviation: sub-01 blink annotation source (ICA000)
 
 Date: 2026-04-23
 
@@ -93,28 +98,26 @@ Date: 2026-04-23
   Blink annotations are expected to come from the pre-ICA artefact-annotation
   step (EOG-based labels in annotated raw files).
 
-- Local change:
-  For subject `sub-01` only, blink annotations are generated in `03_C` from
-  ICA component 0 (`ICA000`) and injected into:
-  1) the concatenated source-inspection raw used by `ica.plot_sources`, and
-  2) each saved `_ica.fif` output file.
+- Historical local change:
+  The legacy implementation generated blink annotations from ICA component 0.
 
 - Why deviation is needed for this dataset/task:
   Subject 01 EOG-based blink labels were not sufficiently aligned with observed
   blink-like transients in ICA source traces; subject-specific ICA000 labeling
   is used as an operational workaround.
 
-- Expected impact on preprocessing/analysis:
-  Sub-01 blink labels in `_ica.fif` outputs now reflect ICA000 event detection
-  instead of EOG001-based annotations from `03_B`.
+- Current production status:
+  This workaround was removed in the configuration-driven refactor. Component
+  order is arbitrary, so production ICA never assumes ICA000 is ocular.
+  Sub01 EOG is diagnostics-only and ocular cleaning uses explicit manual
+  component exclusions.
 
 - Risk or validation concern:
-  ICA000 can include non-ocular transients; ICA000-based blink labels may include
-  false positives relative to pure blink physiology.
+  The legacy approach could label non-ocular transients. Removing it avoids
+  index-based false assumptions but requires careful manual review.
 
 - Validation evidence path (report/log/figure):
   - Script logic:
     `/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/03_C_ICA.py`
-  - Report log entries under:
-    "Blink annotation source" and "ICA-applied outputs" in
-    `/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/derivatives/reports/sub-01/ses-01/03_C_ICA_report.html`
+  - Current review reports and component diagnostics under:
+    `/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives/reports/sub-01/ses-01/`
