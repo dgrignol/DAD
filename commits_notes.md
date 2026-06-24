@@ -1,3 +1,74 @@
+# 24 Jun 2026 18:26
+
+## Add multisubject config and trigger extraction foundation
+
+### `meg/code/preprocessing_basic/02_trigger_extraction_custom.py`
+- Convert the numbered trigger stage into a documented wrapper around reusable trigger extraction logic.
+- Keep observed STI101 pulses as the scientific event source and route reported CSV rows through the new alignment/QC implementation.
+
+### `meg/code/preprocessing_basic/dataset_inventory.py`
+- Expand read-only discovery from a subject-01 preflight into explicit multisubject source discovery for task FIFs, empty-room recordings, trajectory MATs, TrialStruct MATs, behavioral MATs, debug CSVs, and EDF files.
+- Add durable source-manifest construction that preserves source filenames and keeps MEG acquisition runs, behavioral blocks, trigger CSVs, and EDF files separate until evidence-based association.
+- Update inventory reports and validation to reflect the external raw tree and profile-specific EDF expectations.
+
+### `meg/code/preprocessing_basic/deep_trigger_report.py`
+- Add a legacy-compatible deep trigger report renderer driven by canonical step-02 events, alignments, transition warnings, and segment summaries.
+- Preserve familiar alignment/anomaly CSV and plot outputs while avoiding a second independent FIF/CSV alignment pass.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+- Add supported subject normalization for participants 01-07 and a verified subject-profile selection layer.
+- Merge default, site, subject, and tuning YAMLs in a defined order, with selected-profile facts deriving trigger ranges, condition maps, EOG settings, and discovery globs.
+- Resolve the unique external `subNN_*` raw folder, derivative paths, subject input/output folders, and raw-root guards from the selected profile.
+
+### `meg/code/preprocessing_basic/trigger_extraction.py`
+- Add the reusable implementation for non-zero STI101 window reconstruction, transition-pulse resolution, saved debug CSV parsing, segment alignment, replay/gaze/ESC metadata, source associations, and canonical output writing.
+- Preserve raw sample frames and source FIF identity for downstream run-isolated epoching.
+- Treat reported rows as alignment evidence only; missing reported rows do not create MEG events.
+
+### `meg/params/pipeline_default.yaml`
+- Replace subject-01-specific defaults with shared pipeline settings plus verified subject profiles for participants 01-07.
+- Store per-subject versions, condition codes, identity ranges, trigger policies, ocular modalities, completed blocks, and known exceptions once in `subject_profiles`.
+- Add derived stage defaults for trigger parsing, artifact handling, ICA, epoching, dRSA export, MATLAB dRSA, and eye-model skip policy.
+
+### `meg/params/sub-01.yaml`
+- Reduce the subject file to a selector for participant 01, with scientific facts centralized in `pipeline_default.yaml`.
+
+### `meg/params/sub-02.yaml`
+- Add a selector file for participant 02.
+
+### `meg/params/sub-03.yaml`
+- Add a selector file for participant 03.
+
+### `meg/params/sub-04.yaml`
+- Add a selector file for participant 04.
+
+### `meg/params/sub-05.yaml`
+- Add a selector file for participant 05.
+
+### `meg/params/sub-06.yaml`
+- Add a selector file for participant 06.
+
+### `meg/params/sub-07.yaml`
+- Add a selector file for participant 07.
+
+### `meg/tests/test_deep_trigger_report.py`
+- Cover canonical-to-legacy deep report generation and raw-tree output rejection.
+
+### `meg/tests/test_multisubject_discovery.py`
+- Cover exact subject-folder discovery, profile-derived stage configuration, sub01 irregular run preservation, sub07 date handling, empty-room separation, inventory validation, and source-manifest modality separation.
+
+### `meg/tests/test_no_edf_behavior.py`
+- Update the no-EDF test to the external subject-folder layout and profile-driven EDF expectation.
+
+### `meg/tests/test_pipeline_config.py`
+- Extend configuration tests for profile completeness, site/tuning merge precedence, selector normalization, tuning overrides, derivative rooting, and raw-tree guards.
+
+### `meg/tests/test_trigger_parser.py`
+- Add coverage for v18/v20 CSV parsing, v20 identity-code collisions, replay/gaze/ESC metadata, multi-block acquisition FIF alignment, exact-match-only source associations, and observed-only ESC context inheritance.
+
+Suggested commit message:
+`Add multisubject config and trigger foundation`
+
 # 24 Jun 2026 18:25
 
 ## Use nondeviant paths as expected continuation

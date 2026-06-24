@@ -26,7 +26,50 @@ import pipeline_config  # noqa: E402
 
 
 def _minimal_config(tmp_path: Path) -> dict:
-    """Build a valid core config with separate raw and derivative roots."""
+    """
+    Build a valid multisubject core config with isolated raw/output roots.
+
+    The helper includes all seven profile keys because the default
+    configuration contract validates the complete supported cohort even when a
+    test selects only one participant.
+    """
+    profiles = {}
+    for subject_id in pipeline_config.SUPPORTED_SUBJECT_IDS:
+        profiles[subject_id] = {
+            "external_folder": {
+                "expected_name": f"sub{subject_id}_date",
+            },
+            "versions": {
+                "stimuli": "Vtest",
+                "schedule": "vtest",
+                "runtime": "vtest",
+            },
+            "condition_triggers": {
+                "always_visible": 31,
+                "occluded_nondeviant": 41,
+                "occluded_deviant": 51,
+            },
+            "identity_range": [1, 20],
+            "reported_trigger_csv_pattern": (
+                "output_files/debug_actual_triggers_occlusion_vtest_"
+                "rescueTraject_sub{subject_id}_block*_run*.csv"
+            ),
+            "trigger_policy": {
+                "required_subject_codes": [31, 41, 51],
+                "allowed_fixed_codes": [111, 150, 151, 152],
+                "optional_event_codes": [150, 151, 152],
+                "gaze_break_code": 150,
+                "replay_start_code": 151,
+                "esc_termination_code": 152,
+            },
+            "ocular_modalities": {
+                "eog_channels_in_fif": [],
+                "saved_edf": False,
+            },
+            "completed_behavioral_blocks": [1],
+            "known_exceptions": [],
+        }
+
     return {
         "project": {
             "root": str(tmp_path / "project"),
@@ -35,10 +78,13 @@ def _minimal_config(tmp_path: Path) -> dict:
             "docs_root": str(tmp_path / "project" / "docs"),
             "params_root": str(tmp_path / "project" / "params"),
         },
+        "subject": {
+            "id": "01",
+        },
+        "subject_profiles": profiles,
         "layout": {
             "subject_bids_id": "sub-01",
             "session_bids_id": "ses-01",
-            "raw_subject_folder_name": "sub01_date",
             "derivatives_preprocessing_template": (
                 "preprocessing/{subject_bids_id}/{session_bids_id}"
             ),
@@ -50,8 +96,32 @@ def _minimal_config(tmp_path: Path) -> dict:
             ),
         },
         "data_discovery": {
+            "subject_folder_glob_template": "sub{subject_id}_*",
+            "task_meg_fif_glob_template": "meg/sub{subject_id}_run*.fif",
+            "trajectory_mat_glob_template": (
+                "input_files/MovDot_Sub{subject_id}_V*_rescueTraject.mat"
+            ),
+            "trial_struct_mat_glob_template": (
+                "input_files/Sub{subject_id}_TrialStruct_v*_rescueTraject.mat"
+            ),
+            "behavioral_mat_glob_template": (
+                "output_files/MoveDot*_SUB{subject_id}_BLOCK*.mat"
+            ),
+            "reported_trigger_csv_glob_template": (
+                "output_files/debug*_sub{subject_id}_block*_run*.csv"
+            ),
+            "eyetracker_edf_glob_template": "eyetracker/*.edf",
+            "empty_room_fif_glob_template": "empty_room_{subject_folder_date}.fif",
             "meg_fif_glob": "meg/sub01_run*.fif",
+            "trajectory_mat_glob": (
+                "input_files/MovDot_Sub01_V*_rescueTraject.mat"
+            ),
+            "trial_struct_mat_glob": (
+                "input_files/Sub01_TrialStruct_v*_rescueTraject.mat"
+            ),
+            "behavioral_mat_glob": "output_files/MoveDot*_SUB01_BLOCK*.mat",
             "reported_trigger_csv_glob": "debug*.csv",
+            "eyetracker_edf_glob": "eyetracker/*.edf",
         },
         "runtime": {
             "overwrite_existing": False,
@@ -63,6 +133,7 @@ def _minimal_config(tmp_path: Path) -> dict:
 def test_derivative_templates_resolve_under_authoritative_root(tmp_path):
     """Derivative templates must be rooted at project.derivatives_root."""
     cfg = _minimal_config(tmp_path)
+    (tmp_path / "raw" / "sub01_date").mkdir(parents=True)
     resolved = pipeline_config.build_resolved_paths(cfg)
 
     expected = (
@@ -96,3 +167,156 @@ def test_stage_validation_requires_only_requested_sections(tmp_path):
         required_sections=("trigger_parser",),
     )
     assert errors == ["`trigger_parser` must be a mapping."]
+
+
+def test_site_config_precedes_subject_and_tuning_layers(tmp_path):
+    """Cluster paths merge separately while tuning retains final precedence."""
+    cfg = _minimal_config(tmp_path)
+    default_raw = tmp_path / "default_raw"
+    site_raw = tmp_path / "cluster_raw"
+    site_derivatives = tmp_path / "cluster_derivatives"
+    (site_raw / "sub01_date").mkdir(parents=True)
+    cfg["project"]["data_root"] = str(default_raw)
+
+    import yaml
+
+    default_path = tmp_path / "default.yaml"
+    site_path = tmp_path / "site.yaml"
+    subject_path = tmp_path / "subject.yaml"
+    tuning_path = tmp_path / "tuning.yaml"
+    default_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    site_path.write_text(
+        yaml.safe_dump(
+            {
+                "project": {
+                    "data_root": str(site_raw),
+                    "derivatives_root": str(site_derivatives),
+                },
+                "runtime": {"overwrite_existing": True},
+            }
+        ),
+        encoding="utf-8",
+    )
+    subject_path.write_text(
+        yaml.safe_dump({"subject": {"id": "01"}}),
+        encoding="utf-8",
+    )
+    tuning_path.write_text(
+        yaml.safe_dump({"runtime": {"overwrite_existing": False}}),
+        encoding="utf-8",
+    )
+
+    resolved, _warnings, _default, _subject = (
+        pipeline_config.load_and_resolve_config(
+            default_path,
+            subject_path,
+            tuning_path,
+            site_config_path=site_path,
+        )
+    )
+    assert resolved["resolved_paths"]["data_root"] == str(site_raw.resolve())
+    assert resolved["resolved_paths"]["derivatives_root"] == str(
+        site_derivatives.resolve()
+    )
+    assert resolved["runtime"]["overwrite_existing"] is False
+    assert resolved["_config_sources"]["site"] == str(site_path.resolve())
+
+
+@pytest.mark.parametrize(
+    ("selector", "expected"),
+    [
+        (1, "01"),
+        ("01", "01"),
+        ("sub01", "01"),
+        ("sub-07", "07"),
+    ],
+)
+def test_subject_selector_normalization(selector, expected):
+    """Supported selector spellings resolve to the canonical two-digit ID."""
+    assert pipeline_config.normalize_subject_id(selector) == expected
+
+
+def test_subject_selector_rejects_out_of_range_values():
+    """The external dataset currently supports participants 01 through 07."""
+    with pytest.raises(ValueError, match="01-07"):
+        pipeline_config.normalize_subject_id("08")
+
+
+def test_tuning_config_is_merged_after_subject_config(tmp_path):
+    """Accepted review choices override defaults without replacing the selector."""
+    cfg = _minimal_config(tmp_path)
+    cfg["maxwell_filter"] = {
+        "enabled": True,
+        "crosstalk_file": str(tmp_path / "ct.fif"),
+        "calibration_file": str(tmp_path / "cal.dat"),
+        "bad_channel_policy": "reference_run",
+        "reference_acquisition_run": None,
+        "manual_bad_channels": {"add": [], "remove": [], "by_run": {}},
+        "destination": {
+            "policy": "central_run",
+            "acquisition_run": None,
+        },
+        "find_bad_channels": {},
+        "filter": {},
+    }
+    cfg["artifact_annotation"] = {
+        "enabled": True,
+        "muscle_threshold": 10.0,
+        "muscle_threshold_by_run": {},
+        "muscle_channel_type": "mag",
+        "muscle_min_length_good_sec": 0.2,
+        "muscle_filter_freq_hz": [110.0, 140.0],
+        "eog_mode": "auto",
+        "eog_channel_names": [],
+        "blink_channel": None,
+    }
+    cfg["ica"] = {
+        "enabled": True,
+        "method": "fastica",
+        "n_components": 30,
+        "random_state": 97,
+        "max_iter": "auto",
+        "fit_resample_sfreq_hz": 200.0,
+        "fit_l_freq_hz": 1.0,
+        "fit_h_freq_hz": 40.0,
+        "reuse_prefit": True,
+        "manual_exclude": None,
+        "eog_channel_names": [],
+        "eog_diagnostics": True,
+    }
+    raw_subject = tmp_path / "raw" / "sub01_date"
+    raw_subject.mkdir(parents=True)
+    default_path = tmp_path / "default.yaml"
+    subject_path = tmp_path / "subject.yaml"
+    tuning_path = tmp_path / "tuning.yaml"
+    import yaml
+
+    default_path.write_text(yaml.safe_dump(cfg), encoding="utf-8")
+    subject_path.write_text(yaml.safe_dump({"subject": {"id": "01"}}), encoding="utf-8")
+    tuning_path.write_text(
+        yaml.safe_dump(
+            {
+                "subject": {"id": "01"},
+                "artifact_annotation": {
+                    "muscle_threshold_by_run": {"run01": 8.0}
+                },
+                "ica": {"manual_exclude": [0, 3]},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    resolved, _warnings, _default, _subject = (
+        pipeline_config.load_and_resolve_config(
+            default_path,
+            subject_path,
+            tuning_path,
+            required_sections=("maxwell_filter", "artifact_annotation", "ica"),
+        )
+    )
+    assert resolved["subject"]["id"] == "01"
+    assert resolved["artifact_annotation"]["muscle_threshold_by_run"] == {
+        "run01": 8.0
+    }
+    assert resolved["ica"]["manual_exclude"] == [0, 3]
+    assert resolved["_config_sources"]["tuning"] == str(tuning_path.resolve())

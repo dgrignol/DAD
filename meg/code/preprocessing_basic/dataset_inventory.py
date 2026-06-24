@@ -3,32 +3,39 @@
 dataset_inventory.py
 
 Purpose
-Discover and validate subject inputs before expensive MEG processing. This is
-a reusable preflight module, not a mandatory numbered transformation stage.
-`run_pipeline.py` calls it automatically, and it can also be run directly when
-an inventory report is useful.
+Discover and validate external multisubject inputs before expensive MEG
+processing. This module is reusable infrastructure, not a numbered scientific
+stage. It also builds the durable source manifest written by run_pipeline.py.
 
 Usage examples
-1) Print a preflight summary without writing a report:
+1) Run read-only preflight for one subject:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/dataset_inventory.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-07.yaml \
      --print-summary
 
-2) Write optional JSON and Markdown inventories:
+2) Write optional QC reports and a durable provenance manifest:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/dataset_inventory.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-07.yaml \
      --out-json /tmp/dataset_inventory.json \
-     --out-md /tmp/dataset_inventory.md
+     --out-md /tmp/dataset_inventory.md \
+     --source-manifest /tmp/source_manifest.json
 
 Data flow
-resolved configuration -> file discovery -> lazy FIF-header inspection ->
-machine-readable inventory and preflight status.
+resolved configuration -> explicit source-category discovery -> lazy FIF-header
+inspection -> optional inventory QC and durable source manifest.
+
+Scientific boundary
+MEG files are acquisition runs; behavioral MAT, trigger CSV, and EDF files are
+organized by experiment block. Discovery keeps those lists separate and never
+zips them positionally. The manifest reserves an empty association table for a
+later trigger-derived mapping.
 
 Safety
-All configured raw files are opened read-only. Report outputs are checked with
-`assert_output_path_outside_raw()` before any directory is created.
+The external raw tree is opened read-only. Every output passes
+``assert_output_path_outside_raw()`` before directories are created or files
+are written.
 """
 
 from __future__ import annotations
@@ -36,11 +43,12 @@ from __future__ import annotations
 import argparse
 import json
 import platform
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 import mne
 
@@ -50,11 +58,12 @@ from pipeline_config import (
 )
 
 
-INVENTORY_SCHEMA_VERSION = "2.0"
+INVENTORY_SCHEMA_VERSION = "4.0"
+SOURCE_MANIFEST_SCHEMA_VERSION = "2.0"
 
 
 # -----------------------------------------------------------------------------
-# Discovery helpers
+# Explicit external-source discovery
 # -----------------------------------------------------------------------------
 
 
@@ -63,56 +72,76 @@ def _iso_utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _glob_files(root: Path, pattern: str) -> list[Path]:
+    """Return sorted unique files matching one configured relative glob."""
+    return sorted({path.resolve() for path in root.glob(pattern) if path.is_file()})
+
+
 def discover_meg_fif_files(
     subject_data_dir: str | Path,
     meg_fif_glob: str,
 ) -> list[Path]:
-    """Return sorted unique FIF paths matching the configured subject glob."""
-    root = Path(subject_data_dir).expanduser().resolve()
-    return sorted(
-        {path.resolve() for path in root.glob(meg_fif_glob) if path.is_file()}
-    )
-
-
-def discover_files(
-    search_roots: Iterable[str | Path],
-    *,
-    glob_pattern: str | None = None,
-    extensions: Iterable[str] = (),
-) -> list[Path]:
     """
-    Discover files across configured roots using a glob or extension filter.
+    Return task acquisition FIFs matching the subject-specific task pattern.
 
-    Trigger CSV discovery is normally non-recursive and glob-based. Eye files
-    can be nested, so extension-based discovery is recursive.
+    The configured pattern is rooted at the subject directory and starts with
+    ``meg/subNN_run``. Root-level empty-room files therefore cannot enter the
+    task-run list.
     """
-    discovered: set[Path] = set()
-    normalized_exts = {str(ext).lower() for ext in extensions}
-    for root_value in search_roots:
-        root = Path(root_value).expanduser().resolve()
-        if not root.is_dir():
-            continue
-        if glob_pattern is not None:
-            discovered.update(
-                path.resolve()
-                for path in root.glob(glob_pattern)
-                if path.is_file()
-            )
-        if normalized_exts:
-            discovered.update(
-                path.resolve()
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.lower() in normalized_exts
-            )
-    return sorted(discovered)
+    return _glob_files(Path(subject_data_dir).expanduser().resolve(), meg_fif_glob)
+
+
+def discover_subject_sources(cfg: Mapping[str, Any]) -> dict[str, list[Path]]:
+    """
+    Reproduce all source discovery directly from resolved configuration.
+
+    Required scientific source categories stay separate. In particular, no
+    positional relationship is inferred among task FIFs, behavioral blocks,
+    debug-trigger chunks, or EDF files.
+    """
+    resolved = cfg["resolved_paths"]
+    discovery = cfg["data_discovery"]
+    subject_root = Path(resolved["subject_data_dir"]).resolve()
+    data_root = Path(resolved["data_root"]).resolve()
+
+    return {
+        "task_meg_fif": discover_meg_fif_files(
+            subject_root,
+            str(discovery["meg_fif_glob"]),
+        ),
+        "empty_room_fif": _glob_files(
+            data_root,
+            str(discovery["empty_room_fif_glob"]),
+        ),
+        "trajectory_mat": _glob_files(
+            subject_root,
+            str(discovery["trajectory_mat_glob"]),
+        ),
+        "trial_struct_mat": _glob_files(
+            subject_root,
+            str(discovery["trial_struct_mat_glob"]),
+        ),
+        "behavioral_mat": _glob_files(
+            subject_root,
+            str(discovery["behavioral_mat_glob"]),
+        ),
+        "reported_trigger_csv": _glob_files(
+            subject_root,
+            str(discovery["reported_trigger_csv_glob"]),
+        ),
+        "eyetracker_edf": _glob_files(
+            subject_root,
+            str(discovery["eyetracker_edf_glob"]),
+        ),
+    }
 
 
 def summarize_fif_file(fif_path: str | Path, stim_channel: str) -> dict[str, Any]:
     """
-    Read only the FIF header and summarize acquisition/channel metadata.
+    Read only a FIF header and summarize acquisition/channel metadata.
 
-    The raw object is not preloaded, so this preflight does not read the full
-    signal into memory or alter the source file.
+    The raw object is not preloaded. MISC channels are reported explicitly so
+    the left-eye analog traces remain visible for future EDF-to-MEG alignment.
     """
     path = Path(fif_path).expanduser().resolve()
     raw = mne.io.read_raw_fif(path, preload=False, verbose="ERROR")
@@ -133,12 +162,66 @@ def summarize_fif_file(fif_path: str | Path, stim_channel: str) -> dict[str, Any
             for name, kind in zip(raw.ch_names, channel_types, strict=True)
             if kind == "eog"
         ],
+        "misc_channel_names": [
+            name
+            for name, kind in zip(raw.ch_names, channel_types, strict=True)
+            if kind == "misc"
+        ],
     }
 
 
 # -----------------------------------------------------------------------------
-# Inventory construction
+# Inventory validation and optional QC rendering
 # -----------------------------------------------------------------------------
+
+
+def _validate_discovered_sources(
+    cfg: Mapping[str, Any],
+    sources: Mapping[str, list[Path]],
+) -> tuple[list[str], list[str]]:
+    """
+    Validate required source categories without using prepared trial counts.
+
+    Presence and uniqueness are checked for the subject-specific trajectory and
+    TrialStruct files. Behavioral and trigger files only need to be non-empty;
+    their saved contents determine presented trials, replay, and ESC handling.
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+    subject_dir = Path(cfg["resolved_paths"]["subject_data_dir"])
+
+    if len(sources["task_meg_fif"]) == 0:
+        errors.append(f"No task MEG FIF files found under {subject_dir / 'meg'}.")
+    if len(sources["trajectory_mat"]) != 1:
+        errors.append(
+            "Expected exactly one subject-specific presented trajectory MAT; "
+            f"found {len(sources['trajectory_mat'])}."
+        )
+    if len(sources["trial_struct_mat"]) != 1:
+        errors.append(
+            "Expected exactly one subject-specific TrialStruct MAT; "
+            f"found {len(sources['trial_struct_mat'])}."
+        )
+    if not sources["behavioral_mat"]:
+        errors.append("No saved behavioral MAT files were discovered.")
+    if not sources["reported_trigger_csv"]:
+        errors.append("No saved debug trigger CSV files were discovered.")
+
+    ocular = cfg.get("subject_profile", {}).get("ocular_modalities", {})
+    saved_edf_expected = bool(ocular.get("saved_edf", False))
+    if saved_edf_expected and not sources["eyetracker_edf"]:
+        errors.append("The subject profile expects saved EDF files, but none were found.")
+    if not saved_edf_expected and sources["eyetracker_edf"]:
+        warnings.append(
+            "EDF files were found although the selected subject profile marks "
+            "saved EDF data as unavailable."
+        )
+    if len(sources["empty_room_fif"]) > 1:
+        errors.append(
+            "More than one date-matched empty-room recording was discovered: "
+            f"{[str(path) for path in sources['empty_room_fif']]}"
+        )
+    return errors, warnings
 
 
 def build_inventory_payload(
@@ -148,53 +231,30 @@ def build_inventory_payload(
     warnings: list[str],
 ) -> dict[str, Any]:
     """
-    Discover configured inputs and return a complete preflight payload.
+    Discover configured inputs and return a complete read-only preflight.
 
-    This signature intentionally remains straightforward for tests and other
-    pipeline modules. The returned inventory is data, not a required derivative
-    consumed by later stages.
+    The inventory remains optional QC data. Later stages can reproduce source
+    discovery from configuration and do not consume this payload as a
+    scientific input.
     """
     resolved = cfg["resolved_paths"]
-    discovery = cfg["data_discovery"]
     trigger_cfg = cfg.get("trigger_parser", {})
     eye_cfg = cfg.get("eye_model", {})
+    sources = discover_subject_sources(cfg)
+    errors, discovery_warnings = _validate_discovered_sources(cfg, sources)
+    inventory_warnings = [*warnings, *discovery_warnings]
 
-    subject_data_dir = Path(resolved["subject_data_dir"]).resolve()
     stim_channel = str(trigger_cfg.get("stim_channel", "STI101"))
-    fif_files = discover_meg_fif_files(
-        subject_data_dir,
-        str(discovery["meg_fif_glob"]),
-    )
-    trigger_csvs = discover_files(
-        discovery.get("reported_trigger_search_roots", []),
-        glob_pattern=str(discovery["reported_trigger_csv_glob"]),
-    )
-    eye_files = discover_files(
-        discovery.get("eye_search_glob_roots", []),
-        extensions=discovery.get("eye_search_extensions", []),
-    )
-
     fif_summaries: list[dict[str, Any]] = []
-    errors: list[str] = []
-    inventory_warnings = list(warnings)
-    for fif_path in fif_files:
+    for fif_path in sources["task_meg_fif"]:
         try:
             fif_summaries.append(summarize_fif_file(fif_path, stim_channel))
         except Exception as exc:  # pylint: disable=broad-except
             errors.append(f"Could not read FIF header {fif_path}: {exc}")
 
-    subject_dir_exists = subject_data_dir.is_dir()
-    has_fifs = bool(fif_files)
     stim_ok = bool(fif_summaries) and all(
         item["stim_channel_present"] for item in fif_summaries
     )
-    if not subject_dir_exists:
-        errors.append(f"Subject data directory does not exist: {subject_data_dir}")
-    if subject_dir_exists and not has_fifs:
-        errors.append(
-            f"No FIF files matched {discovery['meg_fif_glob']!r} in "
-            f"{subject_data_dir}."
-        )
     if fif_summaries and not stim_ok:
         missing = [
             item["path"]
@@ -202,17 +262,22 @@ def build_inventory_payload(
             if not item["stim_channel_present"]
         ]
         errors.append(f"Stim channel {stim_channel!r} missing from: {missing}")
-    if not trigger_csvs:
-        inventory_warnings.append(
-            "No reported trigger CSV files found; trigger extraction may still "
-            "use observed STI data, but reported-vs-observed QA is unavailable."
-        )
 
-    eye_available = bool(eye_files)
+    eye_available = bool(sources["eyetracker_edf"])
     eye_enabled = bool(eye_cfg.get("enabled", False))
     eye_skip_if_missing = bool(eye_cfg.get("skip_if_missing", True))
     eye_will_skip = eye_enabled and eye_skip_if_missing and not eye_available
     status = "error" if errors else ("warning" if inventory_warnings else "ok")
+
+    counts = {key: len(paths) for key, paths in sources.items()}
+    # Compatibility aliases keep existing report readers stable.
+    counts["meg_fif_files"] = counts["task_meg_fif"]
+    counts["reported_trigger_csv_files"] = counts["reported_trigger_csv"]
+    counts["eye_files"] = counts["eyetracker_edf"]
+
+    files = {key: [str(path) for path in paths] for key, paths in sources.items()}
+    files["meg_fif"] = fif_summaries
+    files["eye"] = files["eyetracker_edf"]
 
     return {
         "inventory_schema_version": INVENTORY_SCHEMA_VERSION,
@@ -220,34 +285,47 @@ def build_inventory_payload(
         "status": status,
         "subject_bids_id": cfg["layout"]["subject_bids_id"],
         "session_bids_id": cfg["layout"]["session_bids_id"],
+        "subject_profile": cfg.get("subject_profile", {}),
         "config_sources": {
             "default": str(default_config_path),
             "subject": str(subject_config_path) if subject_config_path else None,
         },
         "paths": {
             "data_root": resolved["data_root"],
-            "subject_data_dir": str(subject_data_dir),
+            "subject_data_dir": resolved["subject_data_dir"],
             "derivatives_root": resolved["derivatives_root"],
         },
         "discovery": {
-            "meg_fif_glob": discovery["meg_fif_glob"],
-            "reported_trigger_csv_glob": discovery["reported_trigger_csv_glob"],
+            "subject_folder_pattern": cfg["data_discovery"][
+                "subject_folder_glob_template"
+            ],
+            "meg_fif_glob": cfg["data_discovery"]["meg_fif_glob"],
+            "reported_trigger_csv_glob": cfg["data_discovery"][
+                "reported_trigger_csv_glob"
+            ],
             "stim_channel": stim_channel,
         },
         "checks": {
-            "subject_data_dir_exists": subject_dir_exists,
-            "has_meg_fif_files": has_fifs,
+            "subject_data_dir_exists": Path(resolved["subject_data_dir"]).is_dir(),
+            "has_meg_fif_files": bool(sources["task_meg_fif"]),
             "stim_channel_checks_passed": stim_ok,
-            "reported_trigger_csv_found": bool(trigger_csvs),
+            "subject_trajectory_unique": len(sources["trajectory_mat"]) == 1,
+            "trial_struct_unique": len(sources["trial_struct_mat"]) == 1,
+            "behavioral_mat_found": bool(sources["behavioral_mat"]),
+            "reported_trigger_csv_found": bool(sources["reported_trigger_csv"]),
             "eye_data_available": eye_available,
+            "empty_room_kept_separate": not bool(
+                set(sources["task_meg_fif"]) & set(sources["empty_room_fif"])
+            ),
         },
-        "counts": {
-            "meg_fif_files": len(fif_files),
-            "reported_trigger_csv_files": len(trigger_csvs),
-            "eye_files": len(eye_files),
-        },
+        "counts": counts,
         "eye_model_status": {
             "enabled": eye_enabled,
+            "saved_edf_expected": bool(
+                cfg.get("subject_profile", {})
+                .get("ocular_modalities", {})
+                .get("saved_edf", False)
+            ),
             "skip_if_missing": eye_skip_if_missing,
             "will_skip_due_to_missing_eye_data": eye_will_skip,
             "skip_reason": (
@@ -259,11 +337,7 @@ def build_inventory_payload(
                 else None
             ),
         },
-        "files": {
-            "meg_fif": fif_summaries,
-            "reported_trigger_csv": [str(path) for path in trigger_csvs],
-            "eye": [str(path) for path in eye_files],
-        },
+        "files": files,
         "validation": {
             "is_valid": not errors,
             "warnings": inventory_warnings,
@@ -288,36 +362,49 @@ def inventory_markdown(payload: Mapping[str, Any]) -> str:
         f"- raw subject directory: `{payload['paths']['subject_data_dir']}`",
         f"- derivatives root: `{payload['paths']['derivatives_root']}`",
         "",
-        "## Counts",
-        f"- MEG FIF files: **{payload['counts']['meg_fif_files']}**",
-        f"- reported trigger CSV files: **{payload['counts']['reported_trigger_csv_files']}**",
-        f"- eye files: **{payload['counts']['eye_files']}**",
-        "",
-        "## Checks",
+        "## Source Counts",
     ]
-    lines.extend(
-        f"- {key}: `{value}`" for key, value in payload["checks"].items()
-    )
-    lines.extend(["", "## MEG FIF Files"])
+    for key in (
+        "task_meg_fif",
+        "empty_room_fif",
+        "trajectory_mat",
+        "trial_struct_mat",
+        "behavioral_mat",
+        "reported_trigger_csv",
+        "eyetracker_edf",
+    ):
+        lines.append(f"- {key}: **{payload['counts'][key]}**")
+
+    lines.extend(["", "## Checks"])
+    lines.extend(f"- {key}: `{value}`" for key, value in payload["checks"].items())
+    lines.extend(["", "## Task MEG Acquisition Runs"])
     if payload["files"]["meg_fif"]:
         for item in payload["files"]["meg_fif"]:
             lines.append(
                 f"- `{item['path']}`: {item['sfreq_hz']} Hz, "
-                f"{item['n_channels']} channels, EOG={item['eog_channel_names']}"
+                f"{item['n_channels']} channels, EOG={item['eog_channel_names']}, "
+                f"MISC={item['misc_channel_names']}"
             )
     else:
         lines.append("- none")
+
     lines.extend(["", "## Validation"])
-    if payload["validation"]["warnings"]:
-        lines.append("- warnings:")
-        lines.extend(f"  - {item}" for item in payload["validation"]["warnings"])
-    else:
-        lines.append("- warnings: none")
-    if payload["validation"]["errors"]:
-        lines.append("- errors:")
-        lines.extend(f"  - {item}" for item in payload["validation"]["errors"])
-    else:
-        lines.append("- errors: none")
+    lines.append(
+        "- warnings: "
+        + (
+            "; ".join(payload["validation"]["warnings"])
+            if payload["validation"]["warnings"]
+            else "none"
+        )
+    )
+    lines.append(
+        "- errors: "
+        + (
+            "; ".join(payload["validation"]["errors"])
+            if payload["validation"]["errors"]
+            else "none"
+        )
+    )
     lines.append("")
     return "\n".join(lines)
 
@@ -328,7 +415,7 @@ def write_inventory_reports(
     out_json: str | Path | None,
     out_md: str | Path | None,
 ) -> dict[str, str]:
-    """Write requested inventory formats after enforcing the raw-root guard."""
+    """Write requested optional inventory formats outside the raw tree."""
     raw_root = payload["paths"]["data_root"]
     outputs: dict[str, str] = {}
     if out_json is not None:
@@ -348,28 +435,162 @@ def write_inventory_reports(
 
 
 # -----------------------------------------------------------------------------
+# Durable source manifest
+# -----------------------------------------------------------------------------
+
+
+def _source_record(path: Path, data_root: Path) -> dict[str, Any]:
+    """Build a path-preserving source record with a raw-root-relative path."""
+    return {
+        "source_filename": path.name,
+        "source_path": str(path),
+        "raw_relative_path": str(path.relative_to(data_root)),
+        "size_bytes": path.stat().st_size,
+    }
+
+
+def _extract_filename_number(name: str, label: str) -> int | None:
+    """Extract a case-insensitive numeric filename label such as run or block."""
+    match = re.search(rf"{re.escape(label)}(\d+)", name, flags=re.IGNORECASE)
+    return int(match.group(1)) if match else None
+
+
+def build_source_manifest_payload(
+    cfg: Mapping[str, Any],
+    default_config_path: Path,
+    subject_config_path: Path | None,
+    warnings: list[str],
+) -> dict[str, Any]:
+    """
+    Build durable source lineage without asserting cross-modality alignment.
+
+    Acquisition run labels are parsed only from MEG filenames. Behavioral
+    block/run labels are parsed only from their own filenames. The association
+    table remains empty until trigger-derived evidence is available.
+    """
+    sources = discover_subject_sources(cfg)
+    resolved = cfg["resolved_paths"]
+    data_root = Path(resolved["data_root"]).resolve()
+
+    task_runs = []
+    for path in sources["task_meg_fif"]:
+        record = _source_record(path, data_root)
+        record["acquisition_run_label"] = _extract_filename_number(path.name, "run")
+        task_runs.append(record)
+
+    behavior_files = []
+    for path in sources["behavioral_mat"]:
+        record = _source_record(path, data_root)
+        record["behavioral_block_label"] = _extract_filename_number(
+            path.name,
+            "block",
+        )
+        behavior_files.append(record)
+
+    trigger_files = []
+    for path in sources["reported_trigger_csv"]:
+        record = _source_record(path, data_root)
+        record["behavioral_block_label"] = _extract_filename_number(
+            path.name,
+            "block",
+        )
+        record["within_block_run_label"] = _extract_filename_number(
+            path.name,
+            "run",
+        )
+        trigger_files.append(record)
+
+    return {
+        "source_manifest_schema_version": SOURCE_MANIFEST_SCHEMA_VERSION,
+        "generated_utc": _iso_utc_now(),
+        "subject_bids_id": cfg["layout"]["subject_bids_id"],
+        "session_bids_id": cfg["layout"]["session_bids_id"],
+        "subject_profile": cfg["subject_profile"],
+        "config_sources": {
+            "default": str(default_config_path),
+            "subject": str(subject_config_path) if subject_config_path else None,
+        },
+        "raw_dataset": {
+            "read_only": True,
+            "data_root": str(data_root),
+            "subject_folder_name": resolved["subject_folder_name"],
+            "subject_folder_path": resolved["subject_data_dir"],
+            "subject_folder_date": resolved["subject_folder_date"],
+        },
+        "sources": {
+            "task_meg_acquisition_runs": task_runs,
+            "empty_room_recordings": [
+                _source_record(path, data_root)
+                for path in sources["empty_room_fif"]
+            ],
+            "presented_trajectory_files": [
+                _source_record(path, data_root)
+                for path in sources["trajectory_mat"]
+            ],
+            "trial_struct_files": [
+                _source_record(path, data_root)
+                for path in sources["trial_struct_mat"]
+            ],
+            "behavioral_block_outputs": behavior_files,
+            "debug_trigger_files": trigger_files,
+            "eyetracker_edf_files": [
+                _source_record(path, data_root)
+                for path in sources["eyetracker_edf"]
+            ],
+        },
+        "trigger_derived_associations": {
+            "status": "pending",
+            "method": (
+                "Populate from observed MEG triggers and saved behavioral/debug "
+                "records; never infer by positional list order."
+            ),
+            "meg_acquisition_run_to_behavioral_segments": [],
+        },
+        "warnings": list(warnings),
+    }
+
+
+def write_source_manifest(
+    payload: Mapping[str, Any],
+    path: str | Path,
+) -> Path:
+    """Write one durable source manifest after applying the shared raw guard."""
+    raw_root = payload["raw_dataset"]["data_root"]
+    resolved = assert_output_path_outside_raw(path, raw_root)
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(
+        json.dumps(payload, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return resolved
+
+
+# -----------------------------------------------------------------------------
 # Command-line interface
 # -----------------------------------------------------------------------------
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
-    """Build the optional standalone preflight CLI."""
+    """Build the standalone read-only discovery and manifest CLI."""
     parser = argparse.ArgumentParser(description="Inventory DAD MEG subject inputs.")
     parser.add_argument("--config", required=True)
+    parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
     parser.add_argument("--out-json", default=None)
     parser.add_argument("--out-md", default=None)
+    parser.add_argument("--source-manifest", default=None)
     parser.add_argument("--print-summary", action="store_true")
     return parser
 
 
 def main() -> int:
-    """Run preflight discovery and optionally serialize the inventory."""
+    """Run discovery, optional FIF preflight, and requested serialization."""
     args = build_arg_parser().parse_args()
     try:
         cfg, warnings, default_path, subject_path = load_and_resolve_config(
             args.config,
             args.subject_config,
+            site_config_path=args.site_config,
         )
         payload = build_inventory_payload(
             cfg,
@@ -382,15 +603,25 @@ def main() -> int:
             out_json=args.out_json,
             out_md=args.out_md,
         )
+        if args.source_manifest:
+            manifest = build_source_manifest_payload(
+                cfg,
+                default_path,
+                subject_path,
+                warnings,
+            )
+            write_source_manifest(manifest, args.source_manifest)
     except Exception as exc:  # pylint: disable=broad-except
         print(f"Dataset inventory error: {exc}", file=sys.stderr)
         return 2
 
     if args.print_summary:
         print(f"Inventory status: {payload['status']}")
-        print(f"MEG FIF files: {payload['counts']['meg_fif_files']}")
-        print(f"Trigger CSV files: {payload['counts']['reported_trigger_csv_files']}")
-        print(f"Eye files: {payload['counts']['eye_files']}")
+        print(f"Task MEG FIF files: {payload['counts']['task_meg_fif']}")
+        print(f"Behavioral MAT files: {payload['counts']['behavioral_mat']}")
+        print(f"Trigger CSV files: {payload['counts']['reported_trigger_csv']}")
+        print(f"Eye EDF files: {payload['counts']['eyetracker_edf']}")
+        print(f"Empty-room FIF files: {payload['counts']['empty_room_fif']}")
     return 0 if payload["validation"]["is_valid"] else 2
 
 

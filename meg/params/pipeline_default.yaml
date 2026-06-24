@@ -1,138 +1,417 @@
 # pipeline_default.yaml
 #
 # Purpose:
-#   Global defaults for the MEG preprocessing + analysis-prep pipeline.
-#   Subject-specific files (for example, sub-01.yaml) override values here.
+#   Define shared MEG pipeline settings and the verified profiles for all seven
+#   participants in the external read-only dataset. Subject YAML files contain
+#   only the selected subject ID; pipeline_config.py derives labels, trigger
+#   ranges, condition maps, ocular settings, and discovery globs from the
+#   selected profile.
 #
 # Usage examples:
-#   1) Run preflight + trigger extraction with a subject override:
-#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/run_pipeline.py \
-#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml
-#
-#   2) Validate configuration only:
+#   1) Validate one subject without writing outputs:
 #      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/pipeline_config.py \
 #        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-04.yaml \
 #        --validate-only --print-summary
 #
-# Data flow summary:
-#   project paths + dataset selectors -> inventory/load -> trigger extraction ->
-#   preprocessing -> ICA -> epoching -> dRSA export -> optional eye model.
+#   2) Run read-only preflight and preview the registered stage:
+#      python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/run_pipeline.py \
+#        --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+#        --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-04.yaml \
+#        --dry-run
+#
+# Data flow:
+#   subject.id -> verified subject profile -> unique external subNN_* folder ->
+#   source discovery -> optional inventory + durable source manifest -> numbered
+#   scientific transformations.
 
 project:
-  root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg" # Canonical implementation root so all relative templates resolve consistently.
-  data_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data" # Local raw-data root after moving subject data under meg/.
-  derivatives_root: "/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives" # Single root for all generated outputs and intermediates; separate from the read-only data tree.
-  docs_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/docs" # Documentation root to keep specs and run logs colocated with code.
-  params_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params" # Parameter-file root for default + subject overrides.
+  root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg"
+  data_root: "/Volumes/MORWUR/Projects/DAMIANO/Attention/data"
+  derivatives_root: "/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives"
+  docs_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/docs"
+  params_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params"
+
+subject:
+  id: "01"
+
+# Verified participant facts live here once. Do not copy these facts into stage
+# settings or subject selector files; pipeline_config.py derives stage fields.
+subject_profiles:
+  "01":
+    external_folder:
+      expected_name: "sub01_150426"
+      acquisition_date_label: "150426"
+    versions:
+      stimuli: "V28"
+      schedule: "v21"
+      runtime: "v18"
+    condition_triggers:
+      always_visible: 31
+      occluded_nondeviant: 41
+      occluded_deviant: 51
+    identity_range: [1, 20]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v18_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: &trigger_policy_v18_v19
+      required_subject_codes: [31, 41, 51]
+      allowed_fixed_codes: [111, 112, 113, 114, 115, 116, 117, 118, 150, 151, 152, 201, 202]
+      optional_event_codes: [113, 116, 117, 118, 150, 151, 152, 201, 202]
+      gaze_break_code: 150
+      replay_start_code: 151
+      esc_termination_code: 152
+    iti_sec_range: [0.5, 1.0]
+    visual_content_variant: "V28"
+    ocular_modalities:
+      eog_channels_in_fif: ["EOG001", "EOG002"]
+      saved_edf: false
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: []
+      misc_preserve_channels: []
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    known_exceptions:
+      - "Seven acquisition FIFs use irregular run numbering; some FIFs contain multiple behavioral blocks."
+      - "Saved eye-tracker data were lost, although online gaze and replay logic worked."
+  "02":
+    external_folder:
+      expected_name: "sub02_130526"
+      acquisition_date_label: "130526"
+    versions:
+      stimuli: "V29"
+      schedule: "v22"
+      runtime: "v19"
+    condition_triggers:
+      always_visible: 31
+      occluded_nondeviant: 41
+      occluded_deviant: 51
+    identity_range: [1, 20]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v19_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v18_v19
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V29"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    known_exceptions: []
+  "03":
+    external_folder:
+      expected_name: "sub03_200526"
+      acquisition_date_label: "200526"
+    versions:
+      stimuli: "V29"
+      schedule: "v22"
+      runtime: "v19"
+    condition_triggers:
+      always_visible: 31
+      occluded_nondeviant: 41
+      occluded_deviant: 51
+    identity_range: [1, 20]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v19_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v18_v19
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V29"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    known_exceptions: []
+  "04":
+    external_folder:
+      expected_name: "sub04_220526"
+      acquisition_date_label: "220526"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v20"
+    condition_triggers:
+      always_visible: 71
+      occluded_nondeviant: 81
+      occluded_deviant: 91
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v20_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: &trigger_policy_v20
+      required_subject_codes: [71, 81, 91]
+      allowed_fixed_codes: [111, 112, 113, 114, 115, 116, 117, 118, 150, 151, 152, 201, 202]
+      optional_event_codes: [113, 116, 117, 118, 150, 151, 152, 201, 202]
+      gaze_break_code: 150
+      replay_start_code: 151
+      esc_termination_code: 152
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions:
+      - "Behavioral block02/run03 terminated after 18 of 47 trials; use only trials actually presented and saved."
+  "05":
+    external_folder:
+      expected_name: "sub05_260526"
+      acquisition_date_label: "260526"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v20"
+    condition_triggers:
+      always_visible: 71
+      occluded_nondeviant: 81
+      occluded_deviant: 91
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v20_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v20
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "06":
+    external_folder:
+      expected_name: "sub06_260526"
+      acquisition_date_label: "260526"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v20"
+    condition_triggers:
+      always_visible: 71
+      occluded_nondeviant: 81
+      occluded_deviant: 91
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v20_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v20
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "07":
+    external_folder:
+      expected_name: "sub07_270526"
+      acquisition_date_label: "270526"
+      prior_migration_label: "sub07_260527"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v20"
+    condition_triggers:
+      always_visible: 71
+      occluded_nondeviant: 81
+      occluded_deviant: 91
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v20_rescueTraject_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v20
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities:
+      eog_channels_in_fif: []
+      saved_edf: true
+      online_gaze_trigger_code: 150
+      misc_eye_tracker_signal_channels: ["MISC001", "MISC002", "MISC003"]
+      misc_preserve_channels: ["MISC001", "MISC002", "MISC003", "MISC004", "MISC005", "MISC006"]
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions:
+      - "The raw tree and FIF filenames use 270526; prior migration notes listed 260527. Prefix discovery plus the raw folder date is authoritative."
 
 layout:
-  subject_bids_id: "sub-01" # BIDS-like subject label used in derivative paths and reports.
-  session_bids_id: "ses-01" # Single-session convention requested for this dataset.
-  raw_subject_folder_name: "sub01" # Actual on-disk raw folder name under data_root.
-  derivatives_preprocessing_template: "preprocessing/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
-  derivatives_analysis_template: "analysis/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
-  derivatives_reports_template: "reports/{subject_bids_id}/{session_bids_id}" # Relative to project.derivatives_root.
+  subject_bids_id: "sub-01"
+  session_bids_id: "ses-01"
+  derivatives_preprocessing_template: "preprocessing/{subject_bids_id}/{session_bids_id}"
+  derivatives_analysis_template: "analysis/{subject_bids_id}/{session_bids_id}"
+  derivatives_reports_template: "reports/{subject_bids_id}/{session_bids_id}"
 
 data_discovery:
-  meg_fif_glob: "SUB01_block*_meg.fif" # Matches MNE-conformant sub01 naming style (single and merged block FIFs).
-  reported_trigger_csv_glob: "debug_actual_triggers*_sub01_block*_run*.csv" # Matches experiment debug trigger exports used for trigger alignment checks.
-  reported_trigger_search_roots: # Search both local-first and original project path for robustness.
-    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/experiment/output_files/sub01" # Preferred local path if experiment outputs are moved under meg/.
-    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment/output_files/sub01" # Fallback legacy path currently containing known sub01 trigger CSVs.
-  eye_search_extensions: # Accepted eye-tracker sidecar formats for optional eye-model stage.
-    - ".edf" # Native EyeLink EDF is the primary expected format.
-    - ".asc" # ASCII export fallback used in some labs.
-    - ".tsv" # Tabular pre-export fallback for already-converted gaze data.
-  eye_search_glob_roots:
-    - "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/sub01" # Search near subject raw data first because eye data may be placed alongside FIF.
+  subject_folder_glob_template: "sub{subject_id}_*"
+  task_meg_fif_glob_template: "meg/sub{subject_id}_run*.fif"
+  trajectory_mat_glob_template: "input_files/MovDot_Sub{subject_id}_V*_rescueTraject.mat"
+  trial_struct_mat_glob_template: "input_files/Sub{subject_id}_TrialStruct_v*_rescueTraject.mat"
+  behavioral_mat_glob_template: "output_files/MoveDot1_occlusion_v*_rescueTraject_SUB{subject_id}_BLOCK*.mat"
+  reported_trigger_csv_glob_template: "output_files/debug_actual_triggers*_sub{subject_id}_block*_run*.csv"
+  eyetracker_edf_glob_template: "eyetracker/*.edf"
+  empty_room_fif_glob_template: "empty_room_{subject_folder_date}.fif"
 
 trigger_parser:
-  stim_channel: "STI101" # Neuromag standard trigger channel confirmed present in sub01 FIF files.
-  min_duration_sec: 0.0 # Keep all pulses initially; short artifacts are handled explicitly by transition-collapse logic.
-  transition_max_samples: 1 # Collapse 1-sample digital-line transients observed in trigger-check reports.
-  expected_lookahead: 6 # Resolve transition pairs against near-future expected stream without allowing large alignment jumps.
-  collapse_short_transition_pulses: true # Enable robust handling of 0->A->B->0 transition artifacts.
-  mark_transition_match_warning: true # Preserve transparency by labeling collapsed-transition alignments as warnings.
-  include_width_outliers: false # Keep default report focused on alignment mismatches, not width diagnostics.
-  enable_deep_confrontation_report: true # Run subject-level reported-vs-observed deep QA report during step 02 by default.
-  deep_report_output_subdir: "02_triggers_extraction_custum_report_deeper" # Keep deep report artifacts in a stable subfolder under derivatives reports.
-  deep_report_variant: "rescueTraject" # Restrict deep comparator to rescueTraject CSV variant to avoid mixing trigger generator versions.
-  expected_sequence_code_min: 1 # Dynamic trial sequence codes start at 1 in this experiment.
-  expected_sequence_code_max: 20 # Default generator produced 20 sequence identities per condition.
-  required_trigger_codes: # Mandatory fixed codes required by experiment design and checks.
-    - 31 # Condition onset: always_visible.
-    - 41 # Condition onset: occluded_nondeviant.
-    - 51 # Condition onset: occluded_deviant.
-    - 111 # Occlusion start.
-    - 112 # Occlusion complete.
-    - 114 # Occlusion end start.
-    - 115 # Occlusion end complete.
-    - 116 # Catch type-1 disappear.
-    - 117 # Catch type-1 reappear.
-    - 118 # Catch question start.
-    - 201 # Catch question correct.
-    - 202 # Catch question incorrect.
-    - 113 # Catch question timeout.
-    - 150 # Gaze break.
-    - 151 # Replay start.
-    - 152 # ESC termination.
-  write_machine_readable_events: true # Needed for downstream epoching/export scripts and testability.
-  write_human_summary: true # Needed for quick QC and run-log reporting.
+  stim_channel: "STI101"
+  min_duration_sec: 0.0
+  transition_max_samples: 1
+  expected_lookahead: 6
+  alignment_slack_events: 250
+  collapse_short_transition_pulses: true
+  mark_transition_match_warning: true
+  include_width_outliers: false
+  enable_deep_confrontation_report: true
+  deep_report_output_subdir: "02_triggers_extraction_custum_report_deeper"
+  deep_report_variant: "rescueTraject"
+  deep_report_anomaly_window_ms: 500.0
+  deep_report_transition_window_ms: 3.0
+  write_machine_readable_events: true
+  write_human_summary: true
 
 preprocessing:
-  # FLUX alignment note:
-  # Keep SSS configurable; default is enabled and can be overridden per subject.
-  enable_maxwell_sss: true # Default enabled per your latest decision, with documented ability to override for representational analyses.
-  maxwell_st_duration_sec: 10.0 # Conservative temporal SSS window commonly used to stabilize compensation without overfragmenting data.
-  maxwell_origin: "auto" # Use sensor-geometry-derived origin to avoid hard-coded head origin assumptions.
-  enable_ssp: false # Keep SSP disabled by default to avoid stacking denoising methods unless explicitly requested.
-  line_freq_hz: 50.0 # Mains frequency for Italy/Europe power grid.
-  highpass_hz: 0.01 # Very low cutoff to preserve slow components; stronger high-pass can be set per analysis need.
-  lowpass_hz: 40.0 # Standard low-pass for ERP-like analyses and stable ICA behavior.
-  notch_freqs_hz:
-    - 50.0 # Primary mains notch.
-    - 100.0 # First harmonic notch.
-  resample_sfreq_hz: null # Keep native sampling by default to avoid premature decimation choices.
-  annotate_artifacts: true # Enable explicit artifact annotation before ICA/epoch rejection.
+  enable_maxwell_sss: true
+  maxwell_st_duration_sec: 10.0
+  maxwell_origin: "auto"
+  enable_ssp: false
+  line_freq_hz: 50.0
+  highpass_hz: 0.01
+  lowpass_hz: 40.0
+  notch_freqs_hz: [50.0, 100.0]
+  resample_sfreq_hz: null
+  annotate_artifacts: true
+  preserve_misc_channels: true
 
+# Stage 03_A. Facility calibration resources are project inputs and are not
+# discovered from any subject raw folder. Bad channels detected in any run are
+# applied to all runs by default. Each static dev_head_t is mapped to the most
+# central actual acquisition run.
+maxwell_filter:
+  enabled: true
+  crosstalk_file: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
+  calibration_file: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"
+  bad_channel_policy: "union"
+  reference_acquisition_run: null
+  manual_bad_channels:
+    add: []
+    remove: []
+    by_run: {}
+  destination:
+    policy: "central_run"
+    acquisition_run: null
+  find_bad_channels:
+    limit: 7.0
+    duration_sec: 5.0
+    min_count: 5
+    origin: "auto"
+    h_freq_hz: 40.0
+  filter:
+    origin: "auto"
+    st_duration_sec: null
+    st_correlation: 0.98
+
+# Stage 03_B. FLUX's muscle threshold of 10 is retained for noninteractive
+# review runs. `auto` EOG mode becomes diagnostics-only when profile EOG
+# channels exist and disabled otherwise; it never uses EDF files.
+artifact_annotation:
+  enabled: true
+  muscle_threshold: 10.0
+  muscle_threshold_by_run: {}
+  muscle_channel_type: "mag"
+  muscle_min_length_good_sec: 0.2
+  muscle_filter_freq_hz: [110.0, 140.0]
+  eog_mode: "auto"
+  eog_channel_names: []
+  blink_channel: null
+  blink_tmin_sec: -0.25
+  blink_tmax_sec: 0.25
+
+# Stage 03_C manual branch. A null exclusion list means that component review
+# has not been completed. An empty list means reviewed with no exclusions.
 ica:
-  enabled: true # ICA is part of planned FLUX-aligned preprocessing flow.
-  method: "fastica" # Deterministic and widely used baseline ICA method in MNE pipelines.
-  n_components: 0.99 # Variance-based dimensionality cap to keep near-full-rank decomposition.
-  random_state: 97 # Fixed seed for reproducible ICA decomposition.
-  max_iter: "auto" # Let MNE choose convergence iterations based on data behavior.
-  eog_channel_names:
-    - "EOG001" # Detected as EOG in sub01 FIF channel metadata.
-    - "EOG002" # Detected as EOG in sub01 FIF channel metadata.
-  ecg_channel_names: [] # Kept empty because no ECG channel was found in sub01 FIF files.
+  enabled: true
+  method: "fastica"
+  n_components: 30
+  random_state: 97
+  max_iter: "auto"
+  fit_resample_sfreq_hz: 200.0
+  fit_l_freq_hz: 1.0
+  fit_h_freq_hz: 40.0
+  reuse_prefit: true
+  manual_exclude: null
+  eog_channel_names: []
+  eog_diagnostics: true
+  eog_guided_score_threshold: 0.6
+  ecg_channel_names: []
+
+# The automatic MEGNet branch is retained only as deprecated experimental code.
+# It is not registered in run_pipeline.py and must not be used for production.
+ica_auto:
+  deprecated: true
+  production_enabled: false
 
 epoching:
-  enabled: true # Epoch extraction is required for condition-level analyses and dRSA export.
-  tmin_sec: -0.5 # Requested pre-onset buffer before condition onset trigger.
-  tmax_sec: 2.667 # Matches trial motion duration (2.67 s) from methods document.
-  baseline_sec:
-    - -0.4 # baseline start to reduce risk of previous-trial carryover with short ITIs (ITIs were between 500 and 1000 ms).
-    - -0.1 # End before onset to avoid contamination by onset-locked sensory response.
-  reject_by_annotation: true # Drop/ignore segments marked as artifacts during preprocessing.
-  event_id_map:
-    always_visible: 31 # Condition-onset event used for always-visible epochs.
-    occluded_nondeviant: 41 # Condition-onset event used for occluded nondeviant epochs.
-    occluded_deviant: 51 # Condition-onset event used for occluded deviant epochs.
+  enabled: true
+  tmin_sec: -0.5
+  tmax_sec: 2.667
+  baseline_sec: null
+  detrend: 1
+  reject_by_annotation: true
+  event_id_map: {}
+  identity_range: []
+  amplitude_reject:
+    grad: 5.0e-10
+    mag: 4.0e-12
+  trial_exclusion:
+    # Behavioral trigger evidence is evaluated inside each acquisition run.
+    # Replay trials remain included because they were actually presented/saved.
+    gaze_break_codes: [150]
+    catch_type_1_codes: [116, 117]
+    catch_type_2_codes: [113, 118, 201, 202]
+    esc_termination_codes: [152]
+    exclude_gaze_break: true
+    exclude_catch_type_1: true
+    exclude_catch_type_2: true
+    exclude_esc_termination: true
+    exclude_replay_trials: false
+    exclude_unresolved_transitions: true
 
 export:
-  enabled: true # dRSA prep requires explicit export artifacts.
-  output_format: "npz" # Compact, numpy-native format for fast Python analysis loading.
-  include_evoked: true # Save condition averages for quick QC and summary analyses.
-  include_epochs_metadata: true # Preserve trial-level provenance for model-alignment checks.
+  enabled: true
+  output_format: "mat"
+  tmin_sec: 0.0
+  tmax_sec: 2.667
+  sampling_rate_hz: 120.0
+  canonical_meg_channels_file: "code/preprocessing_basic/drsa_canonical_meg_channels.txt"
+  missing_identity_policy: "error"
+  bad_or_missing_channel_policy: "nan"
+  include_epochs_metadata: true
+
+matlab_drsa:
+  enabled: true
+  matlab_bin: "/Applications/MATLAB_R2020a.app/bin/matlab"
+  use_arch_x86_64: false
+  analyses: ["real"]
+  drsa_type: "corr"
+  conditions_to_run: ["always_visible", "occluded_nondeviant", "occluded_deviant"]
+  sensor_groups_to_run: ["wholeBrain"]
+  model_source: "observed"
+  pcr_strategy: "baseline_pcr_border"
+  smooth_neural: true
+  smooth_window_samples: 15
+  smoothing_plots: false
+  plot_smoothing_window: 9
+  group_average_subjects: ["01", "02", "03", "04", "05", "06", "07"]
+  # 1-based stimulus frame indices converted to seconds as (frame - 1) / Hz.
+  occlusion_timing:
+    frame_frequency_hz: 120.0
+    first_complete_occlusion_frame: 130
+    reappearance_frame: 191
 
 eye_model:
-  enabled: true # Keep eye-model stage available when eye data exists.
-  skip_if_missing: true # Non-negotiable requirement: pipeline must succeed without EDF.
-  skip_reason_when_missing: "No EDF/eye-tracker input found under configured eye search roots." # Explicit metadata reason when eye stage is skipped.
+  enabled: true
+  skip_if_missing: true
+  skip_reason_when_missing: "No saved EDF eye-tracker input exists for this subject."
+  edf_to_meg_synchronization: "deferred"
 
 runtime:
-  stop_on_error: true # Fail fast so broken steps do not silently propagate.
-  save_intermediates: true # Persist each major step to support restart/resume without rerunning raw ingest.
-  overwrite_existing: false # Protect existing derivatives by default; force overwrite only intentionally.
-  log_level: "INFO" # Balanced verbosity for routine runs and debugging context.
+  stop_on_error: true
+  save_intermediates: true
+  overwrite_existing: false
+  log_level: "INFO"

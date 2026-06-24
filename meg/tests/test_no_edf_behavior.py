@@ -45,9 +45,12 @@ def test_inventory_marks_eye_model_skip_when_no_edf(tmp_path):
     - no eye files in configured eye search roots.
     """
     subject_data_dir = tmp_path / "data" / "sub01"
-    reports_csv_dir = tmp_path / "experiment" / "output_files" / "sub01"
-    subject_data_dir.mkdir(parents=True, exist_ok=True)
-    reports_csv_dir.mkdir(parents=True, exist_ok=True)
+    meg_dir = subject_data_dir / "meg"
+    input_dir = subject_data_dir / "input_files"
+    output_dir = subject_data_dir / "output_files"
+    meg_dir.mkdir(parents=True, exist_ok=True)
+    input_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # Minimal FIF that passes step-01 header checks.
     sfreq = 1000.0
@@ -56,12 +59,17 @@ def test_inventory_marks_eye_model_skip_when_no_edf(tmp_path):
     data = np.zeros((2, 1000), dtype=float)
     info = mne.create_info(ch_names=ch_names, sfreq=sfreq, ch_types=ch_types)
     raw = mne.io.RawArray(data, info, verbose="ERROR")
-    fif_path = subject_data_dir / "SUB01_block01_meg.fif"
+    fif_path = meg_dir / "sub01_run01_150426.fif"
     raw.save(fif_path, overwrite=True, verbose="ERROR")
 
-    # Minimal reported-trigger CSV so "has_reported_trigger_csv_files" is true.
+    # Required saved scientific inputs are discovered by explicit category.
+    (input_dir / "MovDot_Sub01_V28_rescueTraject.mat").write_bytes(b"MAT")
+    (input_dir / "Sub01_TrialStruct_v21_rescueTraject.mat").write_bytes(b"MAT")
+    (output_dir / "MoveDot1_occlusion_v18_rescueTraject_SUB01_BLOCK01.mat").write_bytes(
+        b"MAT"
+    )
     csv_path = (
-        reports_csv_dir
+        output_dir
         / "debug_actual_triggers_occlusion_v18_rescueTraject_sub01_block01_run01.csv"
     )
     csv_path.write_text("trigger,trial,frame,seconds,label\n31,1,1,0.0,trial_condition_onset\n")
@@ -79,12 +87,28 @@ def test_inventory_marks_eye_model_skip_when_no_edf(tmp_path):
             "subject_data_dir": str(subject_data_dir),
             "derivatives_root": str(tmp_path / "derivatives"),
         },
+        "subject_profile": {
+            "ocular_modalities": {
+                "saved_edf": False,
+            },
+        },
         "data_discovery": {
-            "meg_fif_glob": "SUB01_block*_meg.fif",
-            "reported_trigger_csv_glob": "debug_actual_triggers*_sub01_block*_run*.csv",
-            "reported_trigger_search_roots": [str(reports_csv_dir)],
-            "eye_search_glob_roots": [str(subject_data_dir)],
-            "eye_search_extensions": [".edf", ".asc", ".tsv"],
+            "subject_folder_glob_template": "sub{subject_id}_*",
+            "meg_fif_glob": "meg/sub01_run*.fif",
+            "trajectory_mat_glob": (
+                "input_files/MovDot_Sub01_V*_rescueTraject.mat"
+            ),
+            "trial_struct_mat_glob": (
+                "input_files/Sub01_TrialStruct_v*_rescueTraject.mat"
+            ),
+            "behavioral_mat_glob": (
+                "output_files/MoveDot1_occlusion_v*_rescueTraject_SUB01_BLOCK*.mat"
+            ),
+            "reported_trigger_csv_glob": (
+                "output_files/debug_actual_triggers*_sub01_block*_run*.csv"
+            ),
+            "eyetracker_edf_glob": "eyetracker/*.edf",
+            "empty_room_fif_glob": "empty_room_150426.fif",
         },
         "trigger_parser": {
             "stim_channel": "STI101",
