@@ -34,6 +34,7 @@ directory creation or writing.
 | 06 | `06_export_neural_for_drsa.py` | Active | Identity-averaged MAT/JSON export on a fixed MEG channel axis. |
 | Optional | `XX_ERF_manual.py` | Optional inspection | Interactive ERF inspection using resolved epochs and event definitions. |
 | Optional | `sanity_checks/01_dot_side_decoding.py` | Optional sanity check | Configuration-driven sliding-window dot-side decoding for observed and expected/predicted trajectory sources. |
+| Optional | `sanity_checks/03_dot_side_time_generalization.py` | Optional sanity check | Train-time x test-time dot-side decoding matrix for observed and expected/predicted trajectory sources. |
 
 ## Configuration Layers
 
@@ -635,6 +636,53 @@ The group wrapper is:
 qsub meg/cluster/submit_dot_side_group_report.sh
 ```
 
+`sanity_checks/03_dot_side_time_generalization.py` is the matrix companion to
+the line-decoding sanity check. It preserves the same four analysis keys,
+trajectory-label rules, `--decode-window-samples` sliding-window definition,
+and same-identity trial averaging options. For each train-time center it builds
+stratified folds from the train-time labels once, fits the regularized LDA
+inside each fold, and reuses those folds/models across every test-time center.
+The primary output matrix stores `accuracy_balanced_undersampled_sets` with
+rows as train time and columns as test time.
+
+Train rows are skipped when train-time labels are single-class or the minority
+class cannot support the configured `--n-splits`. Test cells are NaN when the
+held-out test labels cannot be balanced in every reused fold. Because
+time-generalization requires train and test feature vectors to have the same
+length, cells crossing different edge-clipped window widths are also explicit
+NaNs with a `feature_dimension_mismatch` reason. The NPZ bundle is the
+reload-friendly matrix format; the companion long CSV provides one row per
+train/test cell for auditing.
+
+Participant outputs are written under:
+
+```text
+derivatives/sanity_checks/sub-XX/ses-01/dot_side_time_generalization/<condition>/<model-source>/
+```
+
+Each participant bundle contains a summary JSON, matrix NPZ, long matrix CSV,
+heatmap PNG, and MNE HTML report. Occluded-condition heatmaps mark first
+complete occlusion and first reappearance on both train-time and test-time
+axes.
+
+`sanity_checks/04_dot_side_time_generalization_group_report.py` builds the
+group companion. It validates that included subjects share matrix shape, time
+axis, decoding settings, random seed, and trial-averaging settings. Group
+statistics use a conservative all-subject finite-cell mask, so clusters cannot
+bridge NaN cells from skipped participant train/test combinations. The
+inferential test is a one-sample sign-flip cluster permutation over the 2D
+train-time x test-time lattice using 4-neighbor adjacency; the default
+cluster-forming threshold is `p=0.05`, cluster alpha is `0.05`, and subjects
+01-07 use exact sign flips by default. Group plots show the valid-cell group
+mean matrix with significant 2D clusters shaded and outlined in red.
+
+Cluster wrappers are:
+
+```bash
+qsub -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh
+qsub meg/cluster/submit_dot_side_time_generalization_group_report.sh
+```
+
 ## Verification Contract
 
 Required lightweight checks before participant processing:
@@ -650,7 +698,7 @@ Required lightweight checks before participant processing:
 - validate Stage-07 handoff generation for subjects 01-07 after Stage 06,
 - run MATLAB `checkcode` on Stage-07 analysis scripts before cluster
   submission,
-- run dot-side sanity-check helper and wrapper tests,
+- run dot-side line and time-generalization sanity-check helper and wrapper tests,
 - run `bash -n` for all cluster wrappers,
 - validate the dot-side sanity-check handoff for at least one 20-identity and
   one 40-identity subject before participant array jobs.

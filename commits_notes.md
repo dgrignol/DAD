@@ -1,3 +1,47 @@
+# 24 Jun 2026 19:02
+
+## Add dot-side time-generalization decoding
+
+### `meg/code/sanity_checks/03_dot_side_time_generalization.py`
+- Add the participant-level train-time x test-time dot-side decoding workflow as a separate sanity-check script rather than expanding the existing 1D line decoder.
+- Reuse the established Stage-04 validation, model-condition resolution, dynamic dot-side labels, posterior gradiometer selection, same-identity trial averaging, and regularized LDA behavior from the existing dot-side decoder.
+- Build one stratified fold assignment per train time, reuse it across all test times, and store explicit NaNs for unsupported train rows, unbalanceable test cells, and train/test feature-dimension mismatches from edge-clipped windows.
+- Export summary JSON, compressed NPZ matrices, long-form matrix CSV, participant heatmap PNG, and MNE HTML report with occlusion/reappearance markers on both axes.
+
+### `meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py`
+- Add the group companion report for completed participant time-generalization outputs.
+- Load and validate subject matrix bundles, enforce shared time axes and decoding settings, and compute group-valid cells only where every included subject has a finite value.
+- Implement a 2D one-sample sign-flip cluster permutation over the train-time x test-time lattice with 4-neighbor adjacency, exact sign flips for small groups, configurable cluster thresholds, and NaN gaps that prevent cluster bridging.
+- Write group mean matrix NPZ files plus group-first linked and embedded HTML reports, with significant 2D clusters shaded and outlined on the group heatmaps before participant-specific sections.
+
+### `meg/cluster/submit_dot_side_time_generalization.sh`
+- Add an SGE array wrapper that runs one participant per task and sequentially evaluates the four standard dot-side analysis keys.
+- Expose decode grid, window width, same-identity trial averaging, random seed, fold count, validate-only, resume, rebuild, selected-analysis, and optional output-root controls through environment variables.
+
+### `meg/cluster/submit_dot_side_time_generalization_group_report.sh`
+- Add a one-task SGE aggregation wrapper for the time-generalization group report.
+- Expose subject selection, metric selection, missing-subject handling, rebuild/resume behavior, and 2D cluster-permutation settings through documented environment variables.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+- Include the new time-generalization subject and group wrappers in the minimal cluster deployment payload.
+
+### `meg/cluster/README.md`
+- Document the cluster runbook for validating, submitting, monitoring, and aggregating dot-side time-generalization jobs.
+- Record the output directory layout, matrix artifact names, default resource expectations, dependency-submission example, and 2D cluster-permutation interpretation.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Register the time-generalization script as an optional sanity-check workflow.
+- Document the matrix data flow, NPZ/CSV output contract, train/test NaN policies, edge-window feature policy, group all-subject finite-cell mask, 2D cluster statistics, and qsub wrappers.
+
+### `meg/tests/test_dot_side_time_generalization.py`
+- Add synthetic helper tests for train-row skipping, test-cell skipping, feature-dimension mismatch handling, 2D cluster detection, NaN gaps that split clusters, and group-first HTML generation.
+
+### `meg/tests/test_cluster_wrappers.py`
+- Extend wrapper and deployment tests so the new time-generalization qsub scripts parse, expose the expected controls, and are included in the cluster payload.
+
+Suggested commit message:
+`Add dot-side time-generalization decoding`
+
 # 24 Jun 2026 18:33
 
 ## Add pilot abstract

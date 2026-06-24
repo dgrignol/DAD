@@ -97,6 +97,8 @@ FILES=(
     "meg/cluster/submit_drsa_line_summaries.sh"
     "meg/cluster/submit_dot_side_decoding.sh"
     "meg/cluster/submit_dot_side_group_report.sh"
+    "meg/cluster/submit_dot_side_time_generalization.sh"
+    "meg/cluster/submit_dot_side_time_generalization_group_report.sh"
     "meg/cluster/deploy_review_to_cluster.sh"
     "meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
     "meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"

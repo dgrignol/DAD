@@ -26,6 +26,15 @@ DRSA_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_drsa_analysis.sh"
 DRSA_LINE_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_drsa_line_summaries.sh"
 DOT_SIDE_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_dot_side_decoding.sh"
 DOT_SIDE_GROUP_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_dot_side_group_report.sh"
+DOT_SIDE_TG_WRAPPER = (
+    REPO_ROOT / "meg" / "cluster" / "submit_dot_side_time_generalization.sh"
+)
+DOT_SIDE_TG_GROUP_WRAPPER = (
+    REPO_ROOT
+    / "meg"
+    / "cluster"
+    / "submit_dot_side_time_generalization_group_report.sh"
+)
 DEPLOY_WRAPPER = REPO_ROOT / "meg" / "cluster" / "deploy_review_to_cluster.sh"
 
 
@@ -83,6 +92,8 @@ def test_drsa_and_deploy_wrappers_have_valid_bash_syntax():
         DRSA_LINE_WRAPPER,
         DOT_SIDE_WRAPPER,
         DOT_SIDE_GROUP_WRAPPER,
+        DOT_SIDE_TG_WRAPPER,
+        DOT_SIDE_TG_GROUP_WRAPPER,
         DEPLOY_WRAPPER,
     ):
         completed = subprocess.run(
@@ -112,6 +123,8 @@ def test_deploy_payload_includes_dot_side_sanity_check():
     assert '"meg/code/sanity_checks/"' in text
     assert '"meg/cluster/submit_dot_side_decoding.sh"' in text
     assert '"meg/cluster/submit_dot_side_group_report.sh"' in text
+    assert '"meg/cluster/submit_dot_side_time_generalization.sh"' in text
+    assert '"meg/cluster/submit_dot_side_time_generalization_group_report.sh"' in text
 
 
 def test_dot_side_wrapper_exposes_decoding_controls():
@@ -137,6 +150,26 @@ def test_dot_side_group_wrapper_exposes_cluster_controls():
     assert "DAD_CLUSTER_ALPHA" in text
     assert "DAD_DOT_SIDE_GROUP_SUBJECTS" in text
     assert "submit_dot_side_group_report.sh" in text
+
+
+def test_dot_side_time_generalization_wrappers_expose_cluster_controls():
+    """Time-generalization wrappers should expose matrix and 2D cluster knobs."""
+    subject_text = DOT_SIDE_TG_WRAPPER.read_text(encoding="utf-8")
+    group_text = DOT_SIDE_TG_GROUP_WRAPPER.read_text(encoding="utf-8")
+
+    assert "03_dot_side_time_generalization.py" in subject_text
+    assert "DAD_DOT_SIDE_TG_ANALYSES" in subject_text
+    assert "DAD_DECODE_WINDOW_SAMPLES" in subject_text
+    assert "DAD_TRIALS_PER_AVERAGE" in subject_text
+    assert "all_trials_per_identity" in subject_text
+    assert "dot_side_time_generalization" in subject_text
+
+    assert "04_dot_side_time_generalization_group_report.py" in group_text
+    assert "DAD_DOT_SIDE_TG_METRIC" in group_text
+    assert "DAD_CLUSTER_FORMING_P" in group_text
+    assert "DAD_CLUSTER_ALPHA" in group_text
+    assert "DAD_CLUSTER_TAIL" in group_text
+    assert "2D cluster" in group_text
 
 
 def test_drsa_line_summary_wrapper_exposes_stage08_controls():

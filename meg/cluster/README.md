@@ -16,6 +16,8 @@ The automatic MEGNet branch is deprecated and is never submitted.
 - `submit_drsa_analysis.sh`: optional Stage-07 MATLAB dRSA array job.
 - `submit_dot_side_decoding.sh`: optional dot-side sanity-check array job.
 - `submit_dot_side_group_report.sh`: optional dot-side group report job.
+- `submit_dot_side_time_generalization.sh`: optional dot-side matrix decoding array job.
+- `submit_dot_side_time_generalization_group_report.sh`: optional dot-side matrix group report job.
 - `../params/pipeline_cluster.yaml`: cluster-only path overrides.
 - `../params/pipeline_default.yaml`: shared scientific defaults.
 - `../params/sub-XX.yaml`: subject selectors.
@@ -630,6 +632,100 @@ It contains:
 2. only after all group analyses, subjects 01-07 with each subject's four
    three-panel figures plus a three-condition source-trial count figure by
    trajectory identity before trial averaging.
+
+### Run Optional Dot-Side Time-Generalization Check
+
+The time-generalization companion trains the dot-side classifier at each
+sliding-window center and tests it at every other center, producing a
+train-time x test-time matrix for the same four analysis keys:
+
+1. `always_visible_observed`
+2. `occluded_nondeviant_observed`
+3. `occluded_deviant_observed`
+4. `occluded_deviant_predicted`
+
+Validate representative inputs without writing outputs:
+
+```bash
+qsub -v DAD_VALIDATE_ONLY=1 -t 1,4 \
+  meg/cluster/submit_dot_side_time_generalization.sh
+```
+
+Run all subjects with the default 120 Hz grid, 10-sample windows, 5-fold
+stratified CV, and seed `42`:
+
+```bash
+qsub -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh
+```
+
+Use identity-level pseudo-trials or selected analyses:
+
+```bash
+export DAD_DOT_SIDE_TG_ANALYSES="occluded_deviant_observed,occluded_deviant_predicted"
+qsub -v DAD_DOT_SIDE_TG_ANALYSES,DAD_TRIALS_PER_AVERAGE=all_trials_per_identity \
+  -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh
+```
+
+The matrix decoder is heavier than the 1D line decoder because each valid
+train window is evaluated against every valid test window. The default wrapper
+requests 4 slots and 32G. If larger windows or single-trial decoding run
+slowly, request more memory explicitly:
+
+```bash
+qsub -pe smp 8 -l h_vmem=48G -t 1-7 \
+  meg/cluster/submit_dot_side_time_generalization.sh
+```
+
+Participant outputs are written under:
+
+```text
+.../derivatives/sanity_checks/sub-XX/ses-01/dot_side_time_generalization/<condition>/<model-source>/
+```
+
+Inspect, in order:
+
+1. `<condition>_<model-source>_dot_side_time_generalization_summary.json`
+2. `<condition>_<model-source>_dot_side_time_generalization_matrix.npz`
+3. `<condition>_<model-source>_dot_side_time_generalization_matrix.csv`
+4. `<condition>_<model-source>_dot_side_time_generalization_heatmap.png`
+5. `<condition>_<model-source>_dot_side_time_generalization_report.html`
+
+Build the group time-generalization report after the participant array
+finishes. With a dependency:
+
+```bash
+tg_job="$(qsub -terse -v DAD_REBUILD=1 -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh)"
+tg_job_id="${tg_job%%.*}"
+qsub -hold_jid "$tg_job_id" -v DAD_REBUILD=1 \
+  meg/cluster/submit_dot_side_time_generalization_group_report.sh
+```
+
+The group report uses `accuracy_balanced_undersampled_sets` by default and
+tests `accuracy - 0.5` with a 2D sign-flip cluster permutation over the
+train-time x test-time lattice. A group cell is included only when every
+included subject has a finite value, so clusters cannot bridge NaN cells from
+skipped participant train/test windows. Significant 2D clusters are shaded and
+outlined in red on the group mean matrix.
+
+Change the cluster-forming threshold or run a two-sided test:
+
+```bash
+qsub -v DAD_CLUSTER_FORMING_P=0.01,DAD_CLUSTER_TAIL=two-sided \
+  meg/cluster/submit_dot_side_time_generalization_group_report.sh
+```
+
+Group outputs are written under:
+
+```text
+.../derivatives/sanity_checks/group/ses-01/dot_side_time_generalization/<condition>/<model-source>/
+.../derivatives/reports/group/ses-01/dot_side_time_generalization/combined/
+```
+
+The combined embedded report is:
+
+```text
+.../dot_side_time_generalization/combined/dot_side_time_generalization_all_analyses_group_report_embedded.html
+```
 
 ### Local dot-side commands
 
