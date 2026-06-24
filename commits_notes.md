@@ -1,3 +1,26 @@
+# 24 Jun 2026 18:30
+
+## Add dot-side decoding sanity reports
+
+### `meg/code/sanity_checks/01_dot_side_decoding.py`
+- Refactor the dot-side sanity check to resolve configuration, subject paths, model MATs, and raw-tree output guards through the shared MEG pipeline infrastructure.
+- Add observed/predicted model-source selection, with predicted occluded-deviant labels derived from the matched `occluded_nondeviant` trajectory in the same observed MAT.
+- Add centered sliding-window decoding, deterministic same-identity trial averaging, all-trials-per-identity averaging, occlusion timing markers, richer summary JSON, and validate-only/resume/overwrite controls.
+
+### `meg/code/sanity_checks/02_dot_side_group_report.py`
+- Add a combined group report builder for completed per-subject dot-side outputs.
+- Implement standard analysis registry, group figures, source-trial count plots, linked and embedded HTML reports, and one-sample sign-flip cluster permutation testing.
+- Support missing-subject handling, CI/SEM display bands, configurable metrics, and occlusion timing markers.
+
+### `meg/tests/test_dot_side_decoding.py`
+- Cover sliding-window edge clipping, odd/even window centering, same-identity averaging, all-trials-per-identity mode, 20/40-identity model validation, predicted deviant model selection, output paths, skipped windows, and diagnostics.
+
+### `meg/tests/test_dot_side_group_report.py`
+- Cover cluster permutation behavior, CI/SEM intervals, NaN gaps, standard analysis keys, cross-analysis setting validation, report ordering, missing-subject handling, time-axis mismatch rejection, combined report generation, and occlusion markers.
+
+Suggested commit message:
+`Add dot-side decoding sanity reports`
+
 # 24 Jun 2026 18:29
 
 ## Add MATLAB dRSA handoff and line summaries
