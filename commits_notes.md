@@ -1,3 +1,43 @@
+# 24 Jun 2026 18:29
+
+## Add MATLAB dRSA handoff and line summaries
+
+### `meg/code/analysis/A_dRSA.m`
+- Refactor real-neural dRSA to consume the Python-generated Stage-07 handoff instead of hardcoded subject paths and V28/predicted MAT filenames.
+- Validate shared identity, time, and channel axes from Stage-06 sidecars; remove all-NaN channels before analysis.
+- Build observed, expected/predicted, and prediction-error models from the shared observed trajectory MAT.
+
+### `meg/code/analysis/A_dRSA_alt.m`
+- Refactor alternate sensor-group dRSA to use the same handoff, model-selection, dynamic identity, and output conventions as the main real-neural script.
+- Keep sensor-group analyses selectable without reconstructing paths inside MATLAB.
+
+### `meg/code/analysis/dRSA_simulations.m`
+- Refactor model-vs-model and neural-vs-neural simulations to use handoff-driven paths, model sources, sensor groups, and smoothed display outputs.
+- Preserve expected/predicted occluded-deviant handling through the matched nondeviant trajectory condition.
+
+### `meg/code/analysis/drsa_stage_utils.m`
+- Add shared MATLAB utilities for loading handoffs, validating Stage-06 neural sidecars, selecting trajectory trials, enforcing expected-path correspondence, building position/direction tensors, constructing dRSA parameters, exporting figures, smoothing matrices, and normalizing sensor groups.
+
+### `meg/code/preprocessing_basic/07_run_matlab_drsa.py`
+- Add the optional Stage-07 Python orchestration layer that validates Stage-06 exports, writes a MATLAB handoff JSON, launches selected MATLAB analysis families, records reports, supports resume/overwrite, and updates MATLAB dRSA lineage.
+- Include local/cluster MATLAB binary validation, optional `arch -x86_64` startup, model-source selection, smoothed plot options, and group-average report generation.
+
+### `meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py`
+- Add Stage-08 summary plotting from existing Stage-07 result MAT files without rerunning MATLAB.
+- Compute interval lag curves, group averages, optional display smoothing, and optional shaded uncertainty bands with linked and embedded HTML reports.
+
+### `meg/code/preprocessing_basic/drsa_result_utils.py`
+- Add shared Python helpers for reading MATLAB v7/v7.3 dRSA results, normalizing result metadata, deriving occlusion timing, smoothing display matrices, and embedding report images.
+
+### `meg/tests/test_drsa_line_summaries.py`
+- Cover lag-curve conventions, occlusion-frame conversion, interval support modes, shaded bands, NaN handling, result-label inference, CLI execution on synthetic derivatives, and embedded report generation.
+
+### `meg/tests/test_matlab_drsa_stage.py`
+- Cover Stage-07 handoff validation, expected output path coverage, MATLAB batch command construction, observed/predicted model-source selection, and group-average report behavior.
+
+Suggested commit message:
+`Add MATLAB dRSA handoff and line summaries`
+
 # 24 Jun 2026 18:28
 
 ## Add lineage-gated epoching and dRSA export
