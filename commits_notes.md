@@ -1,3 +1,14 @@
+# 24 Jun 2026 18:33
+
+## Add pilot abstract
+
+### `paper/abstract.md`
+- Add a concise pilot abstract describing the moving-object occlusion MEG study, dynamic RSA approach, observed/expected/prediction-error model comparison, and preliminary seven-participant findings.
+- Summarize the current interpretation that position representations are weakened or transformed during occlusion and that post-reappearance activity follows observed sensory evidence more strongly than a separable prediction-error code.
+
+Suggested commit message:
+`Add pilot abstract`
+
 # 24 Jun 2026 18:32
 
 ## Document the multisubject MEG pipeline state
