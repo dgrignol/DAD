@@ -62,6 +62,7 @@ triggers_check/__pycache__/
 # above these globs (or use: git add -f <path>).
 *.mat
 *.png
+*.pptx
 *.csv
 *.html
 *.fif

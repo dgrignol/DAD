@@ -1,3 +1,14 @@
+# 24 Jun 2026 18:24
+
+## Ignore PowerPoint artifacts
+
+### `.gitignore`
+- Add `*.pptx` to the generated/binary artifact ignore block so PowerPoint decks do not appear as normal untracked commit candidates.
+- This intentionally keeps `results_pilot.pptx` out of the working-tree commit plan unless it is force-added later as a deliberate binary artifact.
+
+Suggested commit message:
+`Ignore PowerPoint artifacts`
+
 # 10 Jun 2026 15:04
 
 ## Update current methods and preserve pilot protocols
