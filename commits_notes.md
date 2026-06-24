@@ -1,3 +1,61 @@
+# 24 Jun 2026 18:31
+
+## Add CIMeC cluster orchestration
+
+### `CIMeC_cluster_docs.md`
+- Add the user-facing CIMeC cluster reference covering VPN/SSH access, compute-node usage, qsub basics, environment activation, and MATLAB submission examples.
+
+### `meg/cluster/README.md`
+- Add the DAD-specific CIMeC cluster runbook for deployment, micromamba environment creation, preprocessing review/apply, epoch/export, MATLAB dRSA, line summaries, and monitoring.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+- Add a guarded rsync deployment helper that copies the minimal DAD MEG processing payload to the cluster destination outside the raw data tree.
+- Include preprocessing, downstream, MATLAB analysis, sanity-check, parameter, cluster, calibration, and simulation helper files.
+
+### `meg/cluster/environment.yml`
+- Add the conda-forge `dad-meg` environment definition with pinned Python, MNE, numerical, plotting, and machine-learning packages for cluster execution.
+
+### `meg/cluster/requirements.txt`
+- Add a binary-wheel-only pip fallback for the same headless runtime dependencies.
+
+### `meg/cluster/submit_dot_side_decoding.sh`
+- Add an SGE array wrapper for optional per-subject dot-side decoding sanity checks with documented decoding, averaging, seed, validation, and rebuild controls.
+
+### `meg/cluster/submit_dot_side_group_report.sh`
+- Add a one-task SGE wrapper for combined group dot-side reports, cluster-permutation settings, missing-subject handling, and validation-only runs.
+
+### `meg/cluster/submit_drsa_analysis.sh`
+- Add an SGE array wrapper for optional Stage-07 MATLAB dRSA with MATLAB binary discovery, model-source controls, analysis selection, and memory notes.
+
+### `meg/cluster/submit_drsa_line_summaries.sh`
+- Add a one-task SGE wrapper for Stage-08 dRSA line-summary reports with subject, condition, sensor-group, smoothing, shading, and interval-lag controls.
+
+### `meg/cluster/submit_epoch_export.sh`
+- Add an SGE array wrapper for Stage-04 epoching followed by Stage-06 neural export, with resume/rebuild behavior and source-manifest prerequisites.
+
+### `meg/cluster/submit_preprocessing_apply.sh`
+- Add an apply-pass wrapper that delegates to the shared review wrapper with explicit apply and rebuild settings.
+
+### `meg/cluster/submit_preprocessing_review.sh`
+- Add the main SGE array wrapper for Stage-03 review, including selected-stage recovery, resume/rebuild behavior, tuning reuse, and headless runtime setup.
+
+### `meg/code/preprocessing_basic/run_pipeline.py`
+- Register stable preprocessing, epoching, export, and optional MATLAB dRSA stages.
+- Forward site/tuning configs, source manifests, review/apply controls, overwrite/resume flags, and deep-trigger-report options to stage subprocesses.
+- Refresh source manifests while preserving trigger-derived associations and derivative lineage.
+
+### `meg/params/pipeline_cluster.yaml`
+- Add CIMeC path overrides for project, raw data, derivatives, docs, params, Maxwell resources, and MATLAB binary selection without changing scientific defaults.
+
+### `meg/tests/test_cluster_wrappers.py`
+- Cover wrapper syntax, deployment payload contents, dot-side controls, group-report controls, Stage-08 controls, MATLAB model-source controls, and CIMeC MATLAB resource discovery.
+
+### `meg/tests/test_run_pipeline.py`
+- Cover source-manifest forwarding, site-config forwarding, deep-report opt-out, review controls, downstream noninteractive controls, resume forwarding, and manifest preservation.
+
+Suggested commit message:
+`Add CIMeC cluster orchestration`
+
 # 24 Jun 2026 18:30
 
 ## Add dot-side decoding sanity reports

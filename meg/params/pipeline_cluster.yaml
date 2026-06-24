@@ -1,0 +1,41 @@
+# pipeline_cluster.yaml
+#
+# Purpose:
+#   Override only machine-specific project paths when the DAD preprocessing
+#   pipeline runs on the CIMeC cluster. Scientific defaults remain in
+#   pipeline_default.yaml, participant selection remains in sub-XX.yaml, and
+#   reviewed decisions remain in each subject's 03_tuning_choices.yaml.
+#
+# Usage:
+#   python meg/code/preprocessing_basic/run_pipeline.py \
+#     --config meg/params/pipeline_default.yaml \
+#     --site-config meg/params/pipeline_cluster.yaml \
+#     --subject-config meg/params/sub-02.yaml \
+#     --stages maxwell_filter artifact_annotation ica_manual \
+#     --processing-pass review --resume
+#
+# Data flow:
+#   pipeline_default.yaml -> this site override -> subject selector -> optional
+#   tuning decisions. All output templates are still resolved relative to the
+#   derivative root by pipeline_config.py.
+#
+# Safety:
+#   The raw root below is read-only pipeline input. The derivative root is a
+#   sibling tree and every output still passes the shared raw-tree guard.
+
+project:
+  root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg"
+  data_root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/data"
+  derivatives_root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/derivatives"
+  docs_root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/docs"
+  params_root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/params"
+
+maxwell_filter:
+  crosstalk_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
+  calibration_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"
+
+matlab_drsa:
+  # Override this with DAD_MATLAB_BIN if the cluster MATLAB installation lives
+  # elsewhere. The stage refuses relative executables so jobs do not depend on
+  # shell PATH state.
+  matlab_bin: "/usr/local/MATLAB/R2020a/bin/matlab"

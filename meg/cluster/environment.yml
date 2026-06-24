@@ -1,0 +1,30 @@
+# environment.yml
+#
+# Purpose
+# Define the headless Python environment used by the CIMeC first-pass MEG
+# preprocessing review job. Packages come from conda-forge as compiled
+# binaries, avoiding source builds against the cluster's old system compiler.
+# GUI backends and deprecated automatic-ICA dependencies are excluded.
+#
+# Create a new environment on a compute node:
+#   micromamba create -y -f meg/cluster/environment.yml
+#
+# The conservative version pins form a mutually compatible Python 3.11 stack
+# and keep the first cluster pass reproducible.
+
+name: dad-meg
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11
+  - pyyaml=6.0
+  - numpy=1.26
+  - scipy=1.13
+  - h5py=3.11
+  # MNE 1.9 and earlier do not read the Polhemus extra points embedded in
+  # these task FIFs. MNE 1.10 is required for origin="auto" in Maxwell steps.
+  - mne=1.10.2
+  - matplotlib=3.8
+  - pandas=2.2
+  - scikit-learn=1.5

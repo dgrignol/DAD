@@ -4,14 +4,15 @@ run_pipeline.py
 
 Purpose
 Provide one command-line entrypoint for configuration resolution, automatic
-dataset preflight, provenance snapshots, and execution of pipeline stages that
-have a stable noninteractive CLI.
+dataset preflight, durable source lineage, provenance snapshots, and execution
+of pipeline stages that have a stable noninteractive CLI.
 
 Current scope
-Only `trigger_extraction` is registered. The remaining preprocessing scripts
-are intentionally not exposed until their hardcoded paths and subject settings
-are refactored. Future stages should be added to `build_stage_commands()` after
-they accept the same config/subject-config contract.
+The stable production stages are trigger extraction, Maxwell filtering,
+physiological artifact annotation, manual ICA, epoching, and dRSA neural
+export. MATLAB dRSA is registered as an optional downstream analysis stage.
+The automatic MEGNet ICA branch is deprecated experimental code and is
+intentionally not registered.
 
 Usage examples
 1) Preflight only:
@@ -35,9 +36,53 @@ Usage examples
      --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
      --stages trigger_extraction
 
+   The trigger stage writes both the canonical event/alignment derivatives and
+   the legacy deep Markdown/CSV/plot report bundle. Add
+   `--disable-deep-trigger-report` only when those plots are intentionally not
+   required.
+
+4) Run the first-pass production preprocessing review:
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/run_pipeline.py \
+     --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --stages maxwell_filter artifact_annotation ica_manual \
+     --processing-pass review
+
+5) Apply accepted tuning:
+   python .../run_pipeline.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml \
+     --tuning-config .../03_tuning_choices.yaml \
+     --stages maxwell_filter artifact_annotation ica_manual \
+     --processing-pass apply --overwrite
+
+6) Resume interrupted preprocessing stages. Existing derivatives are
+   validated before they are skipped:
+
+   python .../run_pipeline.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-01.yaml \
+     --tuning-config .../03_tuning_choices.yaml \
+     --stages maxwell_filter artifact_annotation ica_manual \
+     --processing-pass review --resume
+
+7) Run the noninteractive review pass on the CIMeC cluster:
+
+   python .../run_pipeline.py --config .../pipeline_default.yaml \
+     --site-config .../pipeline_cluster.yaml \
+     --subject-config .../sub-02.yaml \
+     --stages maxwell_filter artifact_annotation ica_manual \
+     --processing-pass review --resume
+
+   The SGE array wrapper and launch guide live in ``meg/cluster``.
+
+8) Run downstream epoching and dRSA export after manual-ICA apply completion:
+
+   python .../run_pipeline.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-04.yaml \
+     --stages epoching export_drsa
+
 Data flow
-configuration -> resolved-config snapshot -> automatic inventory/preflight ->
-selected stage subprocesses -> pipeline run log.
+configuration -> resolved-config snapshot + source manifest -> automatic
+inventory/preflight -> selected stage subprocesses -> pipeline run log.
 
 Safety
 The runner validates every infrastructure output against the configured raw
@@ -57,7 +102,12 @@ from pathlib import Path
 from time import monotonic
 from typing import Any, Mapping
 
-from dataset_inventory import build_inventory_payload, write_inventory_reports
+from dataset_inventory import (
+    build_inventory_payload,
+    build_source_manifest_payload,
+    write_inventory_reports,
+    write_source_manifest,
+)
 from pipeline_config import (
     assert_output_path_outside_raw,
     load_and_resolve_config,
@@ -65,7 +115,15 @@ from pipeline_config import (
 )
 
 
-SUPPORTED_STAGES = ("trigger_extraction",)
+SUPPORTED_STAGES = (
+    "trigger_extraction",
+    "maxwell_filter",
+    "artifact_annotation",
+    "ica_manual",
+    "epoching",
+    "export_drsa",
+    "matlab_drsa",
+)
 
 
 def _iso_utc_now() -> str:
@@ -76,14 +134,23 @@ def _iso_utc_now() -> str:
 def build_stage_commands(
     *,
     config_path: Path,
+    site_config_path: Path | None = None,
     subject_config_path: Path | None,
+    source_manifest_path: Path,
     disable_deep_trigger_report: bool,
+    tuning_config_path: Path | None = None,
+    processing_pass: str = "review",
+    interactive: bool = False,
+    no_display: bool = False,
+    decisions_out: Path | None = None,
+    overwrite: bool = False,
+    resume: bool = False,
 ) -> dict[str, list[str]]:
     """
     Build subprocess commands for currently supported pipeline stages.
 
-    New stages belong here only after they are configuration-driven and
-    noninteractive. This keeps `--dry-run` honest about what can be automated.
+    Registered stages have stable configuration-driven CLIs. Interactivity is
+    opt-in; batch mode remains the default.
     """
     script_dir = Path(__file__).resolve().parent
     trigger_command = [
@@ -91,13 +158,82 @@ def build_stage_commands(
         str(script_dir / "02_trigger_extraction_custom.py"),
         "--config",
         str(config_path),
+        "--source-manifest",
+        str(source_manifest_path),
         "--print-summary",
     ]
     if subject_config_path is not None:
         trigger_command.extend(["--subject-config", str(subject_config_path)])
+    if site_config_path is not None:
+        trigger_command.extend(["--site-config", str(site_config_path)])
     if disable_deep_trigger_report:
         trigger_command.append("--disable-deep-trigger-report")
-    return {"trigger_extraction": trigger_command}
+
+    commands = {"trigger_extraction": trigger_command}
+    stage_scripts = {
+        "maxwell_filter": "03_A_MaxFilt.py",
+        "artifact_annotation": "03_B_ArtefactAnnotation.py",
+        "ica_manual": "03_C_ICA.py",
+    }
+    for stage_name, script_name in stage_scripts.items():
+        command = [
+            sys.executable,
+            str(script_dir / script_name),
+            "--config",
+            str(config_path),
+            "--source-manifest",
+            str(source_manifest_path),
+            "--processing-pass",
+            processing_pass,
+            "--print-summary",
+        ]
+        if subject_config_path is not None:
+            command.extend(["--subject-config", str(subject_config_path)])
+        if site_config_path is not None:
+            command.extend(["--site-config", str(site_config_path)])
+        if tuning_config_path is not None:
+            command.extend(["--tuning-config", str(tuning_config_path)])
+        if interactive:
+            command.append("--interactive")
+        if no_display:
+            command.append("--no-display")
+        if decisions_out is not None:
+            command.extend(["--decisions-out", str(decisions_out)])
+        if overwrite:
+            command.append("--overwrite")
+        if resume:
+            command.append("--resume")
+        commands[stage_name] = command
+
+    # Downstream scientific stages consume the completed manifest lineage and
+    # do not expose Stage-03 review/apply or interactive decision controls.
+    downstream_scripts = {
+        "epoching": "04_epoching.py",
+        "export_drsa": "06_export_neural_for_drsa.py",
+        "matlab_drsa": "07_run_matlab_drsa.py",
+    }
+    for stage_name, script_name in downstream_scripts.items():
+        command = [
+            sys.executable,
+            str(script_dir / script_name),
+            "--config",
+            str(config_path),
+            "--source-manifest",
+            str(source_manifest_path),
+            "--print-summary",
+        ]
+        if subject_config_path is not None:
+            command.extend(["--subject-config", str(subject_config_path)])
+        if site_config_path is not None:
+            command.extend(["--site-config", str(site_config_path)])
+        if tuning_config_path is not None:
+            command.extend(["--tuning-config", str(tuning_config_path)])
+        if overwrite:
+            command.append("--overwrite")
+        if resume:
+            command.append("--resume")
+        commands[stage_name] = command
+    return commands
 
 
 def _write_run_log(
@@ -115,10 +251,39 @@ def _write_run_log(
     return resolved
 
 
+def preserve_durable_manifest_sections(
+    new_manifest: dict[str, Any],
+    existing_manifest_path: Path,
+) -> dict[str, Any]:
+    """
+    Preserve evidence-derived manifest sections across orchestration runs.
+
+    Source discovery is refreshed from configuration, while trigger-derived
+    associations and scientific derivative lineage remain durable.
+    """
+    if not existing_manifest_path.is_file():
+        return new_manifest
+    try:
+        existing = json.loads(
+            existing_manifest_path.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return new_manifest
+    for key in ("trigger_derived_associations", "derivative_lineage"):
+        if key in existing:
+            new_manifest[key] = existing[key]
+    return new_manifest
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build the orchestration CLI."""
     parser = argparse.ArgumentParser(description="Run the DAD MEG pipeline.")
     parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--site-config",
+        default=None,
+        help="Optional machine/site path override YAML.",
+    )
     parser.add_argument("--subject-config", default=None)
     parser.add_argument(
         "--stages",
@@ -131,7 +296,54 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--continue-on-error", action="store_true")
     parser.add_argument("--disable-deep-trigger-report", action="store_true")
+    parser.add_argument(
+        "--processing-pass",
+        choices=("review", "apply"),
+        default="review",
+        help="Review generates QC/tuning evidence; apply requires accepted ICA choices.",
+    )
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Prompt for bad-channel, muscle-threshold, and ICA decisions.",
+    )
+    parser.add_argument(
+        "--no-display",
+        action="store_true",
+        help="With --interactive, save plots without opening GUI windows.",
+    )
+    parser.add_argument(
+        "--tuning-config",
+        default=None,
+        help="Accepted review decisions YAML used for an apply pass.",
+    )
+    parser.add_argument(
+        "--decisions-out",
+        default=None,
+        help="Interactive decisions YAML; defaults to 03_tuning_choices.yaml.",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Intentionally replace existing scientific stage derivatives.",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help=(
+            "Resume supported preprocessing stages by validating and skipping "
+            "existing derivatives. Mutually exclusive with --overwrite."
+        ),
+    )
     parser.add_argument("--resolved-config-out", default=None)
+    parser.add_argument(
+        "--source-manifest",
+        default=None,
+        help=(
+            "Durable source-lineage JSON. Defaults to source_manifest.json in "
+            "the subject derivatives report directory."
+        ),
+    )
     parser.add_argument(
         "--write-inventory",
         action="store_true",
@@ -149,11 +361,39 @@ def build_arg_parser() -> argparse.ArgumentParser:
 def main() -> int:
     """Resolve inputs, run preflight, execute selected stages, and log results."""
     args = build_arg_parser().parse_args()
+    if args.resume and args.overwrite:
+        print(
+            "Pipeline configuration error: --resume and --overwrite are "
+            "mutually exclusive.",
+            file=sys.stderr,
+        )
+        return 2
     try:
+        required_sections = []
+        if "trigger_extraction" in args.stages:
+            required_sections.append("trigger_parser")
+        if "maxwell_filter" in args.stages:
+            required_sections.append("maxwell_filter")
+        if "artifact_annotation" in args.stages:
+            required_sections.append("artifact_annotation")
+        if "ica_manual" in args.stages:
+            required_sections.append("ica")
+        if (
+            "epoching" in args.stages
+            or "export_drsa" in args.stages
+            or "matlab_drsa" in args.stages
+        ):
+            required_sections.append("epoching")
+        if "export_drsa" in args.stages or "matlab_drsa" in args.stages:
+            required_sections.append("export")
+        if "matlab_drsa" in args.stages:
+            required_sections.append("matlab_drsa")
         cfg, warnings, config_path, subject_config_path = load_and_resolve_config(
             args.config,
             args.subject_config,
-            required_sections=("trigger_parser",),
+            args.tuning_config,
+            site_config_path=args.site_config,
+            required_sections=tuple(required_sections),
         )
     except Exception as exc:  # pylint: disable=broad-except
         print(f"Pipeline configuration error: {exc}", file=sys.stderr)
@@ -183,12 +423,39 @@ def main() -> int:
         if args.run_log
         else reports_dir / "pipeline_run.json"
     )
+    source_manifest_path = (
+        Path(args.source_manifest).expanduser().resolve()
+        if args.source_manifest
+        else reports_dir / "source_manifest.json"
+    )
+    tuning_config_path = (
+        Path(args.tuning_config).expanduser().resolve()
+        if args.tuning_config
+        else None
+    )
+    site_config_path = (
+        Path(args.site_config).expanduser().resolve()
+        if args.site_config
+        else None
+    )
+    decisions_out = (
+        Path(args.decisions_out).expanduser().resolve()
+        if args.decisions_out
+        else reports_dir / "03_tuning_choices.yaml"
+    )
 
     run_payload: dict[str, Any] = {
         "started_utc": _iso_utc_now(),
         "subject_bids_id": cfg["layout"]["subject_bids_id"],
         "session_bids_id": cfg["layout"]["session_bids_id"],
         "dry_run": bool(args.dry_run),
+        "processing_pass": args.processing_pass,
+        "interactive": bool(args.interactive),
+        "tuning_config": str(tuning_config_path) if tuning_config_path else None,
+        "site_config": str(site_config_path) if site_config_path else None,
+        "decisions_out": str(decisions_out),
+        "overwrite": bool(args.overwrite),
+        "resume": bool(args.resume),
         "preflight_skipped": bool(args.skip_preflight),
         "selected_stages": list(args.stages),
         "warnings": warnings,
@@ -198,6 +465,25 @@ def main() -> int:
     try:
         written_config = write_resolved_config(resolved_config_out, cfg)
         run_payload["resolved_config"] = str(written_config)
+
+        # The source manifest is durable provenance. It is independent of the
+        # optional inventory reports and never asserts positional alignment
+        # between MEG acquisition runs and behavioral blocks.
+        source_manifest = build_source_manifest_payload(
+            cfg,
+            config_path,
+            subject_config_path,
+            warnings,
+        )
+        source_manifest = preserve_durable_manifest_sections(
+            source_manifest,
+            source_manifest_path,
+        )
+        written_manifest = write_source_manifest(
+            source_manifest,
+            source_manifest_path,
+        )
+        run_payload["source_manifest"] = str(written_manifest)
 
         if not args.skip_preflight:
             inventory = build_inventory_payload(
@@ -229,8 +515,17 @@ def main() -> int:
 
         commands = build_stage_commands(
             config_path=config_path,
+            site_config_path=site_config_path,
             subject_config_path=subject_config_path,
+            source_manifest_path=source_manifest_path,
             disable_deep_trigger_report=args.disable_deep_trigger_report,
+            tuning_config_path=tuning_config_path,
+            processing_pass=args.processing_pass,
+            interactive=args.interactive,
+            no_display=args.no_display,
+            decisions_out=decisions_out,
+            overwrite=args.overwrite,
+            resume=args.resume,
         )
         for stage in args.stages:
             command = commands[stage]

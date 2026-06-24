@@ -1,0 +1,23 @@
+# requirements.txt
+#
+# Purpose:
+#   Provide a binary-wheel-only fallback for the headless dependencies required
+#   by the CIMeC first-pass MEG preprocessing review job. The supported cluster
+#   setup uses environment.yml and conda-forge instead, because unrestricted
+#   pip resolution may select a NumPy source release that cannot be compiled by
+#   the cluster's GCC 4.8.5.
+#
+# Fallback usage on a compute node:
+#   python -m pip install --only-binary=:all: \
+#     -r meg/cluster/requirements.txt
+#
+# Qt/browser packages and deprecated automatic-ICA dependencies are excluded.
+
+PyYAML==6.0.3
+numpy==1.26.4
+scipy==1.13.1
+h5py==3.11.0
+mne==1.10.2
+matplotlib==3.8.4
+pandas==2.2.3
+scikit-learn==1.5.2
