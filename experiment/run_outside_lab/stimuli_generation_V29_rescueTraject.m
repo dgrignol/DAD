@@ -10,14 +10,14 @@
 %   in V20 while replacing source-file transforms with de novo trajectory
 %   synthesis (v18-style controls):
 %     - one baseline nondeviant trajectory per sequence,
-%     - one deviant trajectory per sequence (turn/curvature change),
-%     - one predicted deviant baseline per sequence.
+%     - one deviant trajectory per sequence (turn/curvature change).
 %
 %   From those generated trajectories, the script exports:
 %     1) always_visible
 %     2) occluded_nondeviant
 %     3) occluded_deviant
-%   plus occluded_deviant_predicted in MovDot_SubXX_V29_rescueTraject_predicted.mat.
+%   The nondeviant trial with the same sequence identity is also the expected
+%   continuation used by downstream occluded-deviant analyses.
 %
 % Optional central-fixation collision handling:
 %   - configured through Config_stimuli_generation_V29_rescueTraject.fixationCollisionMode.
@@ -112,9 +112,6 @@
 %   - input_files/MovDot_SubXX_V29_rescueTraject.mat
 %       with xySeqs containing always_visible / occluded_nondeviant /
 %       occluded_deviant and full occlusion metadata fields.
-%   - input_files/MovDot_SubXX_V29_rescueTraject_predicted.mat
-%       with xySeqsPredicted containing occluded_deviant_predicted trials
-%       and matching metadata.
 %   - input_files/MovDot_SubXX_V29_rescueTraject_paths.png
 %       with one plot_paths panel per observed condition
 %       (always_visible / occluded_nondeviant / occluded_deviant).
@@ -274,10 +271,8 @@ end
 
 targetObservedFile = fullfile(inputDir, sprintf( ...
     Config_stimuli_generation_V29_rescueTraject.observedFilePattern, targetSubjectID));
-targetPredictedFile = fullfile(inputDir, sprintf( ...
-    Config_stimuli_generation_V29_rescueTraject.predictedFilePattern, targetSubjectID));
 
-if isfile(targetObservedFile) || isfile(targetPredictedFile)
+if isfile(targetObservedFile)
     doOverwrite = logical(overwriteExisting);
     if ~doOverwrite
         choice = '';
@@ -441,28 +436,24 @@ generationCfg.minimumAbsCurvatureDeg = rad2deg(generationCfg.dotSpeedDegPerFrame
 rng(targetSubjectID);
 rngState = rng;
 
-%% Generate base one-dot trajectories (nondeviant, deviant, predicted baseline)
+%% Generate paired base one-dot trajectories (nondeviant and deviant)
 % Data flow: generationCfg + fixedDevianceFrame -> paired base trajectories.
 baseNondeviantCell = cell(nTrials, 1);
 baseDeviantCell = cell(nTrials, 1);
-basePredictedCell = cell(nTrials, 1);
 
 for iTrial = 1:nTrials
-    [trialNondev, trialDev, trialPred] = local_generate_trial_triplet( ...
+    [trialNondev, trialDev] = local_generate_trial_pair( ...
         iTrial, generationCfg, fixedDevianceFrame, deviantConditionCode);
     baseNondeviantCell{iTrial} = trialNondev;
     baseDeviantCell{iTrial} = trialDev;
-    basePredictedCell{iTrial} = trialPred;
 end
 
 baseNondeviant = vertcat(baseNondeviantCell{:});
 baseDeviant = vertcat(baseDeviantCell{:});
-basePredicted = vertcat(basePredictedCell{:});
 
 %% Build observed output trials for occlusion paradigm
 % Data flow: paired base trials -> condition metadata -> flattened xySeqs.
 observedCell = cell(3 * nTrials, 1);
-splicedObservedDeviant = cell(nTrials, 1);
 
 for iTrial = 1:nTrials
     trialNondev = baseNondeviant(iTrial);
@@ -497,37 +488,8 @@ for iTrial = 1:nTrials
         trialDevSpliced, deviantConditionCode, 'occluded_deviant', true, ...
         timing, pathbandDev, alphaOcc, geomOcc);
 
-    splicedObservedDeviant{iTrial} = observedCell{rowOccDev};
 end
 xySeqs = vertcat(observedCell{:});
-
-%% Build predicted output trials (occluded deviant predicted branch)
-% Data flow: predicted baseline + observed deviant prefix -> xySeqsPredicted.
-predictedCell = cell(nTrials, 1);
-for iTrial = 1:nTrials
-    trialObservedDev = splicedObservedDeviant{iTrial};
-    trialPredictedDev = basePredicted(iTrial);
-
-    devFrame = local_infer_deviance_frame(framesPerTrial, fixedDevianceFrame);
-    timing = local_build_occlusion_timing( ...
-        framesPerTrial, devFrame, fixedOcclusionEndFrame, alphaFadeInFrames);
-    [alphaOcc, geomOcc] = local_build_alpha_profiles(framesPerTrial, timing);
-
-    % Modeling assumption retained from v18-v27:
-    % predicted and observed are forced identical until reappearance starts.
-    adjustedPred = trialPredictedDev;
-    rs = timing.reappearance_start_frame;
-    if rs > 1
-        adjustedPred.xy(1:(rs - 1), :) = trialObservedDev.xy(1:(rs - 1), :);
-    end
-    pathbandPred = local_build_pathband_metadata( ...
-        adjustedPred.xy, adjustedPred.xy, devFrame, timing, dotRadiusDeg, pathBandWidthDeg, pathBandStyle);
-
-    predictedCell{iTrial} = local_attach_occlusion_fields( ...
-        adjustedPred, deviantConditionCode, 'occluded_deviant_predicted', true, ...
-        timing, pathbandPred, alphaOcc, geomOcc);
-end
-xySeqsPredicted = vertcat(predictedCell{:});
 
 %% Build Cfg and reproducibility metadata
 % Data flow: Config_stimuli_generation_V29_rescueTraject snapshot + runtime values -> Cfg + repro outputs.
@@ -596,12 +558,10 @@ repro.v29_rescueTraject_pathband_occlusion = struct( ...
 %% Save outputs
 % Data flow: generated structs -> MAT files in Config_stimuli_generation_V29_rescueTraject.inputDirectory.
 save(targetObservedFile, 'xySeqs', 'Cfg', 'repro');
-save(targetPredictedFile, 'xySeqsPredicted', 'Cfg');
 pathsPlotFile = local_save_observed_condition_paths_plot( ...
     xySeqs, Cfg, targetObservedFile, showPathPlots);
 
 fprintf('Saved observed occlusion dataset: %s\n', targetObservedFile);
-fprintf('Saved predicted occlusion dataset: %s\n', targetPredictedFile);
 fprintf('Saved condition paths plot: %s\n', pathsPlotFile);
 fprintf('Generation fps: %.3f Hz (config default %.3f Hz)\n', fps, configFrameFrequencyHz);
 fprintf('Trials per condition: %d (always_visible / occluded_nondeviant / occluded_deviant).\n', nTrials);
@@ -637,9 +597,9 @@ mappedFrame = round(eventTimeSec * targetFps) + 1;
 mappedFrame = max(1, mappedFrame);
 end
 
-function [trialNondev, trialDev, trialPred] = local_generate_trial_triplet( ...
+function [trialNondev, trialDev] = local_generate_trial_pair( ...
         sequenceIndex, generationCfg, devFrame, deviantConditionCode)
-% LOCAL_GENERATE_TRIAL_TRIPLET Generate paired one-dot paths for one sequence.
+% LOCAL_GENERATE_TRIAL_PAIR Generate paired one-dot paths for one sequence.
 %
 % Data flow:
 %   sampled direction/curvature/turn controls -> relative paths ->
@@ -752,7 +712,6 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
 
     nondevXY = relativeNondevXY + startOffset;
     deviantXY = relativeDeviantXY + startOffset;
-    predictedXY = relativeNondevXY + startOffset; % no-deviant baseline for deviant branch.
 
     if ~local_paths_within_bounds(nondevXY, generationCfg.minPosDeg, generationCfg.maxPosDeg) || ...
             ~local_paths_within_bounds(deviantXY, generationCfg.minPosDeg, generationCfg.maxPosDeg)
@@ -774,9 +733,9 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
             case 'retry'
                 continue;
             case 'move'
-                [nondevMoved, deviantMoved, predictedMoved, moveSucceeded] = ...
+                [nondevMoved, deviantMoved, moveSucceeded] = ...
                     local_translate_paths_out_of_fixation_zone( ...
-                    nondevXY, deviantXY, predictedXY, ...
+                    nondevXY, deviantXY, ...
                     generationCfg.fixationCenterDeg, generationCfg.fixationExclusionRadiusDeg, ...
                     generationCfg.minPosDeg, generationCfg.maxPosDeg, ...
                     generationCfg.fixationMovePaddingDeg, ...
@@ -787,7 +746,6 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
                 end
                 nondevXY = nondevMoved;
                 deviantXY = deviantMoved;
-                predictedXY = predictedMoved;
             otherwise
                 error('Unexpected fixationCollisionMode: %s', generationCfg.fixationCollisionMode);
         end
@@ -807,10 +765,6 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
     trialDev = local_build_base_trial( ...
         deviantConditionCode, generationCfg.pathDurationSec, sequenceIndex, deviantXY, ...
         pathAllDeviant, curvynessDeviant, directionDeviantDegRaw);
-    trialPred = local_build_base_trial( ...
-        deviantConditionCode, generationCfg.pathDurationSec, sequenceIndex, predictedXY, ...
-        pathAllNondev, curvynessNondev, directionNondevDeg);
-
     % Keep turn-rescue metadata for downstream diagnostics.
     trialNondev.sampledDeviantTurnDeg = sampledTurnDeg;
     trialNondev.usedDeviantTurnDeg = usedTurnDeg;
@@ -822,10 +776,6 @@ for attempt = 1:generationCfg.maxAttemptsPerTrial
     trialDev.turnRescueScale = turnRescueScale;
     trialDev.turnRescueApplied = turnRescueApplied;
 
-    trialPred.sampledDeviantTurnDeg = sampledTurnDeg;
-    trialPred.usedDeviantTurnDeg = usedTurnDeg;
-    trialPred.turnRescueScale = turnRescueScale;
-    trialPred.turnRescueApplied = turnRescueApplied;
     return;
 end
 
@@ -903,9 +853,9 @@ distToFixation = sqrt(sum((double(xy(:, 1:2)) - fixationCenterDeg) .^ 2, 2));
 avoids = all(distToFixation >= exclusionRadiusDeg);
 end
 
-function [nondevMoved, deviantMoved, predictedMoved, moveSucceeded] = ...
+function [nondevMoved, deviantMoved, moveSucceeded] = ...
         local_translate_paths_out_of_fixation_zone( ...
-        nondevXY, deviantXY, predictedXY, fixationCenterDeg, exclusionRadiusDeg, ...
+        nondevXY, deviantXY, fixationCenterDeg, exclusionRadiusDeg, ...
         minPosDeg, maxPosDeg, paddingDeg, directionSamples, shiftSamples)
 % LOCAL_TRANSLATE_PATHS_OUT_OF_FIXATION_ZONE
 % Try a minimal rigid translation that makes both paired paths leave
@@ -916,7 +866,6 @@ function [nondevMoved, deviantMoved, predictedMoved, moveSucceeded] = ...
 %   translated trajectories or failure (caller retries new sample).
 nondevMoved = nondevXY;
 deviantMoved = deviantXY;
-predictedMoved = predictedXY;
 moveSucceeded = false;
 
 if exclusionRadiusDeg <= 0
@@ -976,11 +925,9 @@ end
 
 nondevMoved = nondevXY + bestShiftVec;
 deviantMoved = deviantXY + bestShiftVec;
-predictedMoved = predictedXY + bestShiftVec;
 
 if ~local_paths_within_bounds(nondevMoved, minPosDeg, maxPosDeg) || ...
-        ~local_paths_within_bounds(deviantMoved, minPosDeg, maxPosDeg) || ...
-        ~local_paths_within_bounds(predictedMoved, minPosDeg, maxPosDeg)
+        ~local_paths_within_bounds(deviantMoved, minPosDeg, maxPosDeg)
     return;
 end
 if ~local_path_avoids_fixation_zone(nondevMoved, fixationCenterDeg, exclusionRadiusDeg) || ...

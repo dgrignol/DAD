@@ -327,27 +327,21 @@ fpsTag = sprintf('%03dHz', targetFpsHz);
 
 canonicalObservedPath = fullfile(practiceDir, 'input_files', ...
     sprintf(scheduleCfg.inputFilePattern, targetSubjectID));
-canonicalPredictedPath = fullfile(practiceDir, 'input_files', ...
-    sprintf('MovDot_Sub%02d_V28_rescueTraject_predicted.mat', targetSubjectID));
 canonicalSchedulePath = fullfile(practiceDir, 'input_files', ...
     sprintf(scheduleCfg.outputFilePattern, targetSubjectID));
 
 cachedObservedPath = fullfile(practiceDir, 'input_files', ...
     sprintf('MovDot_Sub%02d_V28_rescueTraject_%s.mat', targetSubjectID, fpsTag));
-cachedPredictedPath = fullfile(practiceDir, 'input_files', ...
-    sprintf('MovDot_Sub%02d_V28_rescueTraject_predicted_%s.mat', targetSubjectID, fpsTag));
 cachedSchedulePath = fullfile(practiceDir, 'input_files', ...
     sprintf('Sub%02d_TrialStruct_v21_rescueTraject_%s.mat', targetSubjectID, fpsTag));
 
-haveCachedInput = isfile(cachedObservedPath) && ...
-    isfile(cachedPredictedPath) && isfile(cachedSchedulePath) && ...
+haveCachedInput = isfile(cachedObservedPath) && isfile(cachedSchedulePath) && ...
     local_input_file_matches_fps(cachedObservedPath, targetFpsHz);
 
 if haveCachedInput
     % Use cached fps-specific files by syncing them into canonical names
     % consumed by runtime and schedule scripts.
     copyfile(cachedObservedPath, canonicalObservedPath, 'f');
-    copyfile(cachedPredictedPath, canonicalPredictedPath, 'f');
     copyfile(cachedSchedulePath, canonicalSchedulePath, 'f');
     fprintf('Using cached practice inputs for %d Hz (%s).\n', targetFpsHz, fpsTag);
 else
@@ -358,7 +352,7 @@ else
     stimScriptEsc = local_escape_single_quotes(fullfile(practiceDir, 'stimuli_generation_V28_rescueTraject.m'));
 
     % Section: generate shared V28 stimulus file with target fps override.
-    % Data flow: target fps + shared subject -> canonical observed/predicted files.
+    % Data flow: target fps + shared subject -> canonical observed file.
     overwriteExisting = true;
     baseFpsHz = double(Config_stimuli_generation_V28_rescueTraject.frameFrequency);
     baseFixedDevFrame = double(Config_stimuli_generation_V28_rescueTraject.fixedDevianceFrame);
@@ -397,13 +391,12 @@ else
         practiceDirEsc, iSub, randomSeed, numBlocks, double(overwriteExisting), createScriptEsc);
     evalin('base', cmdCreate);
 
-    if ~isfile(canonicalObservedPath) || ~isfile(canonicalPredictedPath) || ~isfile(canonicalSchedulePath)
+    if ~isfile(canonicalObservedPath) || ~isfile(canonicalSchedulePath)
         error('Failed to generate one or more canonical practice input files for %d Hz.', targetFpsHz);
     end
 
     % Cache generated canonical files under fps-tagged names.
     copyfile(canonicalObservedPath, cachedObservedPath, 'f');
-    copyfile(canonicalPredictedPath, cachedPredictedPath, 'f');
     copyfile(canonicalSchedulePath, cachedSchedulePath, 'f');
     fprintf('Generated and cached practice inputs for %d Hz (%s).\n', targetFpsHz, fpsTag);
 end
@@ -412,10 +405,8 @@ inputSelection = struct();
 inputSelection.targetFpsHz = targetFpsHz;
 inputSelection.fpsTag = fpsTag;
 inputSelection.cachedObservedPath = cachedObservedPath;
-inputSelection.cachedPredictedPath = cachedPredictedPath;
 inputSelection.cachedSchedulePath = cachedSchedulePath;
 inputSelection.canonicalObservedPath = canonicalObservedPath;
-inputSelection.canonicalPredictedPath = canonicalPredictedPath;
 inputSelection.canonicalSchedulePath = canonicalSchedulePath;
 end
 

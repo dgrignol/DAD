@@ -62,7 +62,7 @@
 % Data flow summary:
 %   1) Load one-dot center-relative condition trials from MovDot_SubXX.mat.
 %   2) Build observed position/direction streams for each condition.
-%   3) Load one-dot predicted occluded-deviant trials from MovDot_SubXX_predicted.mat.
+%   3) Use matched occluded_nondeviant trials as the expected continuation.
 %   4) Run standard occluded_nondeviant/occluded_deviant dRSA.
 %   5) Build signal-level PE streams (observed - predicted), enforce PE
 %      post-deviance windows, then run deviant PE dRSA for the three neural
@@ -93,11 +93,7 @@
 %   - Observed one-dot input, resolved in this priority:
 %       1) MovDot_SubXX_V27_eyeTrackerReplay_blockResume.mat
 %       2) MovDot_SubXX.mat
-%       3) highest-version MovDot_SubXX*.mat candidate (excluding predicted)
-%   - Predicted one-dot input, resolved in this priority:
-%       1) MovDot_SubXX_V27_eyeTrackerReplay_blockResume_predicted.mat
-%       2) MovDot_SubXX_predicted.mat
-%       3) highest-version MovDot_SubXX*_predicted.mat candidate
+%       3) highest-version compatible MovDot_SubXX*.mat candidate
 %
 % Outputs:
 %   - Standard one-dot outputs:
@@ -255,8 +251,8 @@ outputDir = fullfile(repoRoot, 'simulations', 'output');
 
 %% Resolve raw input files and center-relative metadata source
 % Data flow: participant number -> version-aware file resolver -> one-dot loaders.
-[inputFile, predictedInputFile, inputFilesResolved] = ...
-    local_resolve_occlusion_input_files(repoRoot, participantNumber);
+[inputFile, inputFilesResolved] = ...
+    local_resolve_occlusion_input_file(repoRoot, participantNumber);
 if ~isfile(inputFile)
     error('Observed input file not found: %s', inputFile);
 end
@@ -338,13 +334,13 @@ for iCond = 1:numel(inputConditions)
     pePathFile = '';
     peDot1 = [];
     dot1TrialsPredicted = [];
-    predictedSimulationFile = '';
+    expectedSourceCondition = '';
     observedInputFileUsed = '';
     observedInputField = '';
     observedInputColumns = [];
-    predictedInputFileUsed = '';
-    predictedInputField = '';
-    predictedInputColumns = [];
+    expectedInputFileUsed = '';
+    expectedInputField = '';
+    expectedInputColumns = [];
     peDirectionDot1 = [];
     peCutFrame = [];
     peCutSource = 'notApplicable';
@@ -529,25 +525,25 @@ for iCond = 1:numel(inputConditions)
         observedInputField = observedLoadMeta.xyField;
         observedInputColumns = observedLoadMeta.xyColumnCount;
 
-        %% Load predicted one-dot occluded-deviant streams (deviant only)
-        % Data flow: MovDot_SubXX_predicted.mat -> occluded_deviant condition -> one-dot arrays.
+        %% Load matched nondeviant streams as the expected continuation
+        % Data flow: observed xySeqs -> occluded_nondeviant -> expected model.
         dot1TrialsPredicted = [];
-        predictedSimulationFile = '';
-        predictedInputField = '';
-        predictedInputColumns = [];
+        expectedSourceCondition = '';
+        expectedInputField = '';
+        expectedInputColumns = [];
         conditionCutFrame = local_resolve_cut_frame(observedLoadMeta, size(dot1Trials, 3), deviantOnset);
         conditionEventFrames = local_resolve_plot_event_frames( ...
             observedLoadMeta, size(dot1Trials, 3), deviantOnset);
         if usePredictedModels
-            if ~isfile(predictedInputFile)
-                error('Predicted input file not found for deviant branch: %s', predictedInputFile);
+            expectedSourceCondition = 'occluded_nondeviant';
+            [dot1TrialsPredicted, expectedLoadMeta] = local_load_one_dot_condition_trials( ...
+                inputFile, expectedSourceCondition, centerRelativeRectSize, false);
+            expectedInputFileUsed = expectedLoadMeta.sourceFile;
+            expectedInputField = expectedLoadMeta.xyField;
+            expectedInputColumns = expectedLoadMeta.xyColumnCount;
+            if ~isequal(observedLoadMeta.sequenceValues, expectedLoadMeta.sequenceValues)
+                error('Observed deviant and expected nondeviant sequence identities do not match.');
             end
-            [dot1TrialsPredicted, predictedLoadMeta] = local_load_one_dot_condition_trials( ...
-                predictedInputFile, 'occluded_deviant', centerRelativeRectSize, true);
-            predictedSimulationFile = predictedInputFile;
-            predictedInputFileUsed = predictedLoadMeta.sourceFile;
-            predictedInputField = predictedLoadMeta.xyField;
-            predictedInputColumns = predictedLoadMeta.xyColumnCount;
             if ~isequal(size(dot1TrialsPredicted), size(dot1Trials))
                 error(['Predicted occluded-deviant one-dot trials do not match observed size. ' ...
                     'Observed=%s Predicted=%s.'], mat2str(size(dot1Trials)), ...
@@ -951,10 +947,10 @@ for iCond = 1:numel(inputConditions)
         repro.observedInputFileUsed = observedInputFileUsed;
         repro.observedInputField = observedInputField;
         repro.observedInputColumns = observedInputColumns;
-        repro.predictedInputFileUsed = predictedInputFileUsed;
-        repro.predictedInputField = predictedInputField;
-        repro.predictedInputColumns = predictedInputColumns;
-        repro.predictedSimulationFile = predictedSimulationFile;
+        repro.expectedInputFileUsed = expectedInputFileUsed;
+        repro.expectedInputField = expectedInputField;
+        repro.expectedInputColumns = expectedInputColumns;
+        repro.expectedSourceCondition = expectedSourceCondition;
         repro.inputFilesResolved = inputFilesResolved;
         repro.peModelNames = peModelNames;
         repro.peTargetLabels = peTargetLabels;
@@ -1851,11 +1847,8 @@ function [dot1Trials, meta] = local_load_one_dot_condition_trials( ...
 %       'experiment/input_files/MovDot_Sub70.mat', 'always_visible', [], false);
 %   [nondev, meta] = local_load_one_dot_condition_trials( ...
 %       'experiment/input_files/MovDot_Sub70.mat', 'occluded_nondeviant', [], false);
-%   [predDev, meta] = local_load_one_dot_condition_trials( ...
-%       'experiment/input_files/MovDot_Sub70_predicted.mat', 'occluded_deviant', [], true);
-%
 % Inputs:
-%   rawInputFile         : file path to MovDot_SubXX.mat or MovDot_SubXX_predicted.mat.
+%   rawInputFile         : file path to a MovDot stimulus MAT containing xySeqs.
 %   conditionLabel       : 'always_visible', 'occluded_nondeviant', or
 %                          'occluded_deviant'.
 %   centerRelativeRectSize : optional [width height] override for recentering.
@@ -1880,10 +1873,8 @@ end
 sourceData = load(rawInputFile);
 if isfield(sourceData, 'xySeqs')
     xyField = 'xySeqs';
-elseif isfield(sourceData, 'xySeqsPredicted')
-    xyField = 'xySeqsPredicted';
 else
-    error('Expected xySeqs or xySeqsPredicted in %s.', rawInputFile);
+    error('Expected xySeqs in %s.', rawInputFile);
 end
 
 allTrials = sourceData.(xyField)(:);
@@ -1942,8 +1933,7 @@ switch conditionLabel
         end
     case 'occluded_deviant'
         if any(strlength(labelValues) > 0)
-            conditionMask = strcmp(labelValues, 'occluded_deviant') | ...
-                strcmp(labelValues, 'occluded_deviant_predicted');
+            conditionMask = strcmp(labelValues, 'occluded_deviant');
         else
             if isempty(condValues)
                 error('No condition_label or condition field in %s.', rawInputFile);
@@ -1972,6 +1962,17 @@ if isempty(condTrials)
     end
     error('No %s one-dot trials found in %s (%s).', conditionLabel, rawInputFile, xyField);
 end
+
+% Sort every condition by sequence before pairing observed and expected paths.
+if ~isfield(condTrials, 'sequence')
+    error('Condition %s lacks sequence identities in %s.', conditionLabel, rawInputFile);
+end
+sequenceValues = round(double([condTrials.sequence]));
+[sequenceValues, sequenceOrder] = sort(sequenceValues);
+if numel(unique(sequenceValues)) ~= numel(sequenceValues)
+    error('Condition %s has duplicate sequence identities in %s.', conditionLabel, rawInputFile);
+end
+condTrials = condTrials(sequenceOrder);
 
 frameCounts = arrayfun(@(s) size(s.xy, 1), condTrials);
 if any(frameCounts ~= frameCounts(1))
@@ -2012,12 +2013,12 @@ meta = struct( ...
     'occlusionCompleteFrames', local_extract_optional_frame_vector(condTrials, 'occlusion_complete_frame'), ...
     'occlusionEndFrames', local_extract_optional_frame_vector(condTrials, 'occlusion_end_frame'), ...
     'reappearanceStartFrames', local_extract_optional_frame_vector(condTrials, 'reappearance_start_frame'), ...
-    'sequenceValues', local_extract_optional_sequence_vector(condTrials));
+    'sequenceValues', sequenceValues(:)');
 end
 
-function [observedFile, predictedFile, resolvedMeta] = ...
-        local_resolve_occlusion_input_files(repoRoot, participantNumber)
-% LOCAL_RESOLVE_OCCLUSION_INPUT_FILES Resolve participant inputs across versioned experiment outputs.
+function [observedFile, resolvedMeta] = ...
+        local_resolve_occlusion_input_file(repoRoot, participantNumber)
+% LOCAL_RESOLVE_OCCLUSION_INPUT_FILE Resolve one observed MAT across versions.
 %
 % Purpose:
 %   Keep simulation compatibility across legacy and new experiment naming
@@ -2029,7 +2030,6 @@ function [observedFile, predictedFile, resolvedMeta] = ...
 %
 % Outputs:
 %   observedFile : chosen observed file path.
-%   predictedFile: chosen predicted file path.
 %   resolvedMeta : resolver diagnostics saved in reproducibility metadata.
 
 inputDir = fullfile(repoRoot, 'experiment', 'input_files');
@@ -2039,52 +2039,32 @@ end
 
 obsV27 = fullfile(inputDir, sprintf('MovDot_Sub%02d_V27_eyeTrackerReplay_blockResume.mat', participantNumber));
 obsLegacy = fullfile(inputDir, sprintf('MovDot_Sub%02d.mat', participantNumber));
-predV27 = fullfile(inputDir, sprintf('MovDot_Sub%02d_V27_eyeTrackerReplay_blockResume_predicted.mat', participantNumber));
-predLegacy = fullfile(inputDir, sprintf('MovDot_Sub%02d_predicted.mat', participantNumber));
 
 obsGlob = dir(fullfile(inputDir, sprintf('MovDot_Sub%02d*.mat', participantNumber)));
-predGlob = dir(fullfile(inputDir, sprintf('MovDot_Sub%02d*_predicted.mat', participantNumber)));
 
 obsCandidates = {obsV27, obsLegacy};
 for i = 1:numel(obsGlob)
     curr = fullfile(inputDir, obsGlob(i).name);
-    if endsWith(curr, '_predicted.mat')
-        continue;
-    end
     obsCandidates{end + 1} = curr; %#ok<AGROW>
 end
 
-predCandidates = {predV27, predLegacy};
-for i = 1:numel(predGlob)
-    predCandidates{end + 1} = fullfile(inputDir, predGlob(i).name); %#ok<AGROW>
-end
-
 [observedFile, observedRanking] = local_pick_best_input_file( ...
-    obsCandidates, obsV27, obsLegacy, false);
-[predictedFile, predictedRanking] = local_pick_best_input_file( ...
-    predCandidates, predV27, predLegacy, true);
+    obsCandidates, obsV27, obsLegacy);
 
 if isempty(observedFile)
     error(['No observed input found for participant %02d in %s. Expected one of:\n' ...
         '  %s\n  %s\n  or another MovDot_Sub%02d*.mat candidate.'], ...
         participantNumber, inputDir, obsV27, obsLegacy, participantNumber);
 end
-if isempty(predictedFile)
-    error(['No predicted input found for participant %02d in %s. Expected one of:\n' ...
-        '  %s\n  %s\n  or another MovDot_Sub%02d*_predicted.mat candidate.'], ...
-        participantNumber, inputDir, predV27, predLegacy, participantNumber);
-end
-
 resolvedMeta = struct();
 resolvedMeta.inputDir = inputDir;
 resolvedMeta.observedFile = observedFile;
-resolvedMeta.predictedFile = predictedFile;
 resolvedMeta.observedRanking = observedRanking;
-resolvedMeta.predictedRanking = predictedRanking;
+resolvedMeta.expectedSourceCondition = 'occluded_nondeviant';
 end
 
 function [bestFile, rankedTable] = local_pick_best_input_file( ...
-        candidateList, preferredV27, preferredLegacy, isPredicted)
+        candidateList, preferredV27, preferredLegacy)
 % LOCAL_PICK_BEST_INPUT_FILE Rank and pick the best existing candidate.
 %
 % Ranking policy:
@@ -2103,9 +2083,12 @@ for i = 1:numel(uniqueCandidates)
     if ~isfile(curr)
         continue;
     end
+    candidateData = load(curr, 'xySeqs');
+    if ~isfield(candidateData, 'xySeqs')
+        continue;
+    end
     [~, baseName, ext] = fileparts(curr);
     fileName = [baseName, ext];
-    fileScore = 0;
     if strcmp(curr, preferredV27)
         fileScore = 2000;
     elseif strcmp(curr, preferredLegacy)
@@ -2120,12 +2103,6 @@ for i = 1:numel(uniqueCandidates)
         if contains(lower(fileName), 'blockresume')
             fileScore = fileScore + 20;
         end
-    end
-    if isPredicted && ~endsWith(fileName, '_predicted.mat')
-        continue;
-    end
-    if ~isPredicted && endsWith(fileName, '_predicted.mat')
-        continue;
     end
     scoreRows = [scoreRows; fileScore, i]; %#ok<AGROW>
 end
@@ -2142,8 +2119,8 @@ for k = 1:numel(orderIdx)
     score = row(1);
     listIdx = row(2);
     curr = char(uniqueCandidates{listIdx});
-    rankedTable{k, 1} = curr; %#ok<AGROW>
-    rankedTable{k, 2} = score; %#ok<AGROW>
+    rankedTable{k, 1} = curr;
+    rankedTable{k, 2} = score;
 end
 bestFile = rankedTable{1, 1};
 end
@@ -2173,26 +2150,6 @@ for iTrial = 1:nTrials
         value = trials(iTrial).(fieldName);
         if ~isempty(value) && isfinite(double(value))
             frameVector(iTrial) = round(double(value));
-        end
-    end
-end
-end
-
-function sequenceVector = local_extract_optional_sequence_vector(trials)
-% LOCAL_EXTRACT_OPTIONAL_SEQUENCE_VECTOR Extract sequence IDs per trial.
-%
-% Inputs:
-%   trials : struct array of condition trials.
-%
-% Output:
-%   sequenceVector : column vector with NaN for missing/invalid entries.
-nTrials = numel(trials);
-sequenceVector = nan(nTrials, 1);
-for iTrial = 1:nTrials
-    if isfield(trials(iTrial), 'sequence')
-        value = trials(iTrial).sequence;
-        if ~isempty(value) && isfinite(double(value))
-            sequenceVector(iTrial) = round(double(value));
         end
     end
 end

@@ -158,7 +158,5 @@ classdef Config_stimuli_generation_V28_rescueTraject
         % Versioned output filenames for the path-band occluder branch.
         % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject.mat
         observedFilePattern = 'MovDot_Sub%02d_V28_rescueTraject.mat';
-        % Example: subject 66 -> MovDot_Sub66_V28_rescueTraject_predicted.mat
-        predictedFilePattern = 'MovDot_Sub%02d_V28_rescueTraject_predicted.mat';
     end
 end

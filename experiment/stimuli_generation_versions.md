@@ -164,7 +164,8 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
   shape via minimal rigid translation when feasible**: use **V22**.
 - **Generate config-driven occlusion stimuli with shared-placement turn-magnitude
   rescue (reduce deviant turn before rejection) to keep clockwise/counterclockwise
-  balance closer to 50/50 while preserving matched pre-deviance branches**:
+  balance closer to 50/50, preserve matched pre-deviance branches, and expose
+  the nondeviant condition as the expected continuation in one MAT**:
   use **V28_rescueTraject**.
 - **Reduce residual position-direction coupling while preserving constant
   within-trial curvature**: use **v14**.
@@ -622,12 +623,46 @@ Legend: values in round brackets `(value)` are set in the saved config/repro but
 - **Rescue diagnostics in per-trial metadata**:
   output trials include `sampledDeviantTurnDeg`, `usedDeviantTurnDeg`,
   `turnRescueScale`, and `turnRescueApplied` for downstream QC and bias audits.
+- **Single-file expected continuation contract**: each sequence identity has
+  the same full path in `always_visible` and `occluded_nondeviant`, while
+  `occluded_deviant` shares that path through the deviance frame. Downstream
+  expected models select the matching nondeviant trial from `xySeqs`.
+  *Example*: expected-versus-actual dRSA uses two condition rows from one MAT
+  and cannot introduce a reappearance-time file splice.
 
 **Keeps from V22**
 - Fixed-frame occlusion timeline controlled by config defaults.
 - Matched pre-deviance branch construction for deviant vs nondeviant variants.
 - Fixation collision handling modes (`off`, `retry`, `move`) with optional
   rigid-translation rescue around fixation.
+
+**Omits (relative to the former rescueTraject output contract)**
+- **Standalone expected-path MAT output**: expected paths are no longer
+  duplicated because the corresponding nondeviant path is already present in
+  the observed condition set.
+
+### V29_rescueTraject - `run_outside_lab/stimuli_generation_V29_rescueTraject.m`
+
+**Adds**
+- **Single observed condition file for experiment and analysis**: preserves
+  sequence-matched always-visible, nondeviant, and deviant paths and uses the
+  nondeviant condition as the expected continuation.
+
+**Omits**
+- **Redundant standalone expected-path output**.
+
+### V30_rescueTraject - `stimuli_generation_V30_rescueTraject.m`
+
+**Adds**
+- **Current single-file rescueTraject contract**: generated `xySeqs` contains
+  all three conditions, and sequence-matched `occluded_nondeviant` trials are
+  the canonical expected continuation for occluded-deviant analyses.
+- **Deployment parity**: local, MEG-lab, and outside-lab copies use the same
+  one-file generation and overwrite contract.
+
+**Omits**
+- **Redundant standalone expected-path output and associated launcher/config
+  dependencies**.
 
 **Usage examples (MATLAB code style)**
 - Interactive generation from `experiment/`:

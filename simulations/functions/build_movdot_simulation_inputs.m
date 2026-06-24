@@ -32,12 +32,9 @@
 %                         Relative paths are resolved like stimuliPath.
 %       'suppressDispText' : 0/1 to suppress console output (default: 0).
 %       'AllowMissingConditions' : true to allow files with only deviant or
-%                         nondeviant trials (default: false). This is useful
-%                         for MovDot_SubXX_predicted.mat inputs that only
-%                         contain the deviant condition.
+%                         nondeviant trials (default: false).
 %       'XySeqsField'  : override the struct field name containing xySeqs
-%                         (default: ''). If empty, auto-detects xySeqs or
-%                         xySeqsPredicted.
+%                         (default: ''). If empty, uses xySeqs.
 %       'RectSize'     : optional [width height] in degrees to use when
 %                         recentering (default: []). If empty, uses
 %                         Cfg.rectSize from the stimulus file; errors if
@@ -105,13 +102,8 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     if isempty(strtrim(xySeqsField))
         if isfield(data, 'xySeqs')
             xySeqsField = 'xySeqs';
-        elseif isfield(data, 'xySeqsPredicted')
-            xySeqsField = 'xySeqsPredicted';
-            if ~suppressDispText
-                fprintf('Using xySeqsPredicted from %s\n', stimuliPath);
-            end
         else
-            error('Stimulus file does not contain xySeqs or xySeqsPredicted: %s', stimuliPath);
+            error('Stimulus file does not contain xySeqs: %s', stimuliPath);
         end
     else
         if ~isfield(data, xySeqsField)
@@ -137,33 +129,10 @@ function outputFiles = build_movdot_simulation_inputs(stimuliPath, varargin)
     dot2Name = rgb_to_name(dot2Rgb);
 
     xyAllRaw = data.(xySeqsField);
-    % Special-case predicted deviant inputs: keep row 2 (condition 45) trials.
-    if strcmp(xySeqsField, 'xySeqsPredicted') && ndims(xyAllRaw) >= 2 ...
-            && size(xyAllRaw, 1) >= 2
-        [~, baseName, ~] = fileparts(stimuliPath);
-        outputFiles = struct('condition', {}, 'file', {});
-        deviantTrials = reshape(xyAllRaw(2, :, :), [], 1);
-        nonDeviantTrials = reshape(xyAllRaw(1, :, :), [], 1);
-        outputFiles(end+1) = save_trials( ...
-            baseName, 'nondeviant', nonDeviantTrials, outputDir, ...
-            dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
-            suppressDispText, allowMissingConditions, centerOptions);
-        outputFiles(end+1) = save_trials( ...
-            baseName, 'deviant', deviantTrials, outputDir, ...
-            dot1Rgb, dot2Rgb, dot1Name, dot2Name, stimuliPath, ...
-            suppressDispText, allowMissingConditions, centerOptions);
-        return;
-    end
     xyAll = xyAllRaw(:);
     conditions = [xyAll.condition];
-    if strcmp(xySeqsField, 'xySeqsPredicted')
-        % Predicted deviant files use condition==45 for the deviant-only paths.
-        deviantMask = conditions == 45;
-        nonDeviantMask = conditions == 0;
-    else
-        deviantMask = conditions > 0;
-        nonDeviantMask = conditions == 0;
-    end
+    deviantMask = conditions > 0;
+    nonDeviantMask = conditions == 0;
 
     %% Build per-condition arrays and save results
     [~, baseName, ~] = fileparts(stimuliPath);

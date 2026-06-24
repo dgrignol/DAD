@@ -12,7 +12,7 @@
 %   Resolver priority:
 %     1) MovDot_SubXX_V27_eyeTrackerReplay_blockResume.mat
 %     2) MovDot_SubXX.mat
-%     3) highest-version MovDot_SubXX*.mat candidate (excluding predicted)
+%     3) highest-version compatible MovDot_SubXX*.mat candidate
 %
 %   Then plots the same sampled trial identities across all three
 %   conditions using shared x/y limits.
@@ -300,9 +300,6 @@ allCandidates = dir(fullfile(inputDir, sprintf('MovDot_Sub%02d*.mat', participan
 candidateList = {preferredV27, preferredLegacy};
 for i = 1:numel(allCandidates)
     curr = fullfile(inputDir, allCandidates(i).name);
-    if endsWith(curr, '_predicted.mat')
-        continue;
-    end
     candidateList{end + 1} = curr; %#ok<AGROW>
 end
 
@@ -336,11 +333,12 @@ for i = 1:numel(uniqueCandidates)
     if ~isfile(curr)
         continue;
     end
-    [~, baseName, ext] = fileparts(curr);
-    fileName = [baseName, ext];
-    if endsWith(fileName, '_predicted.mat')
+    candidateData = load(curr, 'xySeqs');
+    if ~isfield(candidateData, 'xySeqs')
         continue;
     end
+    [~, baseName, ext] = fileparts(curr);
+    fileName = [baseName, ext];
     if strcmp(curr, preferredV27)
         fileScore = 2000;
     elseif strcmp(curr, preferredLegacy)
@@ -369,8 +367,8 @@ for k = 1:numel(orderIdx)
     row = scoreRows(orderIdx(k), :);
     score = row(1);
     listIdx = row(2);
-    rankedTable{k, 1} = char(uniqueCandidates{listIdx}); %#ok<AGROW>
-    rankedTable{k, 2} = score; %#ok<AGROW>
+    rankedTable{k, 1} = char(uniqueCandidates{listIdx});
+    rankedTable{k, 2} = score;
 end
 bestFile = rankedTable{1, 1};
 end

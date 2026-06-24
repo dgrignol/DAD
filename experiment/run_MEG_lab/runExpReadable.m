@@ -28,7 +28,7 @@
 %   - lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
 %
 % Outputs:
-%   - input_files/MovDot_SubXX_V30_rescueTraject*.mat
+%   - input_files/MovDot_SubXX_V30_rescueTraject.mat
 %   - input_files/SubXX_TrialStruct_v23_rescueTraject.mat
 %   - output_files/MoveDot1_occlusion_v20_rescueTraject_SUBXX_BLOCKYY.mat
 %
@@ -67,7 +67,7 @@ launcherCfgPath = fullfile(tempdir, ...
 save(launcherCfgPath, 'launcherCfg');
 
 %% Step 1: Stimuli generation (V30)
-% Data flow: targetSub + overwrite flag -> MovDot_SubXX_V30_rescueTraject*.mat
+% Data flow: targetSub + overwrite flag -> MovDot_SubXX_V30_rescueTraject.mat
 run('lib/Config_runtime_v20_rescueTraject.m');
 addpath('lib');
 cfgStim = Config_stimuli_generation_V30_rescueTraject;  % explicit dependency touchpoint
@@ -77,9 +77,7 @@ overwriteExisting = launcherCfg.overwriteStimuliInput; %#ok<NASGU>  % consumed b
 allowInteractivePrompts = launcherCfg.allowInteractivePrompts; %#ok<NASGU>  % consumed by called script workspace
 stimObservedFile = fullfile(cfgStim.inputDirectory, ...
     sprintf(cfgStim.observedFilePattern, launcherCfg.targetSub));
-stimPredictedFile = fullfile(cfgStim.inputDirectory, ...
-    sprintf(cfgStim.predictedFilePattern, launcherCfg.targetSub));
-stimFilesExist = isfile(stimObservedFile) && isfile(stimPredictedFile);
+stimFilesExist = isfile(stimObservedFile);
 if stimFilesExist && ~launcherCfg.overwriteStimuliInput
     fprintf(['Step 1 skipped: existing stimuli files found for Sub%02d and ' ...
         'overwriteStimuliInput=false.\n'], launcherCfg.targetSub);

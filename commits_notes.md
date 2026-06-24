@@ -1,3 +1,76 @@
+# 24 Jun 2026 18:25
+
+## Use nondeviant paths as expected continuation
+
+### `experiment/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Remove the separate `predictedFilePattern` contract from the main V30 stimulus configuration.
+- Keep the observed MAT as the single canonical generated stimulus file for downstream experiment and analysis code.
+
+### `experiment/practice/lib/Config_stimuli_generation_V28_rescueTraject.m`
+- Remove the practice V28 predicted-file pattern so practice generation follows the same single-file expected-continuation contract.
+
+### `experiment/practice/run_practice_occlusion_v1.m`
+- Stop checking, copying, caching, and returning FPS-specific predicted MAT files.
+- Treat the canonical observed MAT and schedule MAT as the complete practice input set.
+
+### `experiment/practice/stimuli_generation_V28_rescueTraject.m`
+- Remove the predicted baseline branch, `xySeqsPredicted` construction, and separate predicted MAT save.
+- Document that the sequence-matched `occluded_nondeviant` trial is the expected continuation for occluded-deviant analyses.
+- Simplify trajectory generation and fixation-zone translation helpers from triplets to nondeviant/deviant pairs.
+
+### `experiment/runExpReadable.m`
+- Update launcher documentation and skip logic so V30 generation is considered complete when the observed MAT exists.
+
+### `experiment/run_MEG_lab/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Remove the lab-copy predicted-file pattern to keep deployment parity with the main V30 generator.
+
+### `experiment/run_MEG_lab/runExpReadable.m`
+- Update MEG-lab launch checks to require only the observed V30 MAT before skipping stimulus generation.
+
+### `experiment/run_MEG_lab/stimuli_generation_V30_rescueTraject.m`
+- Remove predicted trajectory generation and saving from the MEG-lab V30 copy.
+- Use paired nondeviant/deviant base trajectories and the observed condition set as the downstream model source.
+
+### `experiment/run_outside_lab/RUNME.m`
+- Update unused-subject detection so outside-lab subject slots are occupied by observed stimulus or TrialStruct files, not by the removed predicted MAT.
+
+### `experiment/run_outside_lab/lib/Config_stimuli_generation_V29_rescueTraject.m`
+- Remove the outside-lab V29 predicted-file pattern.
+
+### `experiment/run_outside_lab/lib/Config_stimuli_generation_V30_rescueTraject.m`
+- Remove the outside-lab V30 predicted-file pattern.
+
+### `experiment/run_outside_lab/stimuli_generation_V29_rescueTraject.m`
+- Remove V29 predicted branch generation and save logic.
+- Retain one observed MAT containing the condition-matched nondeviant continuation.
+
+### `experiment/run_outside_lab/stimuli_generation_V30_rescueTraject.m`
+- Remove V30 predicted branch generation and save logic from the outside-lab copy.
+- Keep the condition set in one MAT as the complete model source for downstream expected-versus-observed comparisons.
+
+### `experiment/stimuli_generation_V30_rescueTraject.m`
+- Remove the main V30 predicted MAT output and predicted trajectory helper flow.
+- Preserve sequence-matched shared paths in `always_visible` and `occluded_nondeviant`, with occluded-deviant sharing the prefix through the deviance frame.
+
+### `experiment/stimuli_generation_versions.md`
+- Document the single-file expected-continuation contract for V28, V29, and V30 rescueTraject outputs.
+- State that standalone expected-path MAT files are intentionally omitted.
+
+### `simulations/functions/build_movdot_simulation_inputs.m`
+- Drop `xySeqsPredicted` autodetection and predicted-specific condition handling.
+- Require `xySeqs` as the model source so simulation inputs follow the new observed-MAT contract.
+
+### `simulations/scripts/one-dot/PE_simulation_diff_1Dot_occlusion_v2.m`
+- Resolve only one compatible observed stimulus MAT.
+- Load sequence-matched `occluded_nondeviant` trials as the expected/predicted continuation and validate sequence identity alignment.
+- Record expected-source metadata in reproducibility output instead of predicted-file provenance.
+
+### `simulations/scripts/one-dot/plot_occlusion_paths_1Dot_v2.m`
+- Update resolver logic to select compatible MAT files by `xySeqs` presence rather than `_predicted` naming.
+
+Suggested commit message:
+`Use nondeviant paths as expected continuation`
+
 # 24 Jun 2026 18:24
 
 ## Ignore PowerPoint artifacts

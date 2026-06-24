@@ -404,11 +404,9 @@ iSub = round(double(iSub));
 occupied = false;
 
 observedFile = fullfile('input_files', sprintf('MovDot_Sub%02d_V30_rescueTraject.mat', iSub));
-predictedFile = fullfile('input_files', sprintf('MovDot_Sub%02d_V30_rescueTraject_predicted.mat', iSub));
 trialStructFile = fullfile('input_files', sprintf('Sub%02d_TrialStruct_v23_rescueTraject.mat', iSub));
 
-if exist(observedFile, 'file') == 2 || exist(predictedFile, 'file') == 2 || ...
-        exist(trialStructFile, 'file') == 2
+if exist(observedFile, 'file') == 2 || exist(trialStructFile, 'file') == 2
     occupied = true;
     return;
 end
