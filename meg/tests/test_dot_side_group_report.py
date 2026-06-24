@@ -142,6 +142,21 @@ def test_cluster_permutation_tolerates_nan_timepoint_gaps():
     ]
 
 
+def test_1d_smoothing_preserves_nan_gaps():
+    """Optional group smoothing must not leak signal across skipped windows."""
+    values = np.array([[0.5, 0.5, 0.8, np.nan, 0.5, 0.5, 0.5]], dtype=float)
+    smoothed = group_report.smooth_group_values_1d(values, sigma_samples=1.0)
+
+    assert np.isnan(smoothed[0, 3])
+    assert smoothed[0, 1] > values[0, 1]
+    assert smoothed[0, 4] == pytest.approx(values[0, 4])
+    np.testing.assert_allclose(
+        group_report.smooth_group_values_1d(values, sigma_samples=0.0),
+        values,
+        equal_nan=True,
+    )
+
+
 def _write_subject_output(
     root: Path,
     subject: str,

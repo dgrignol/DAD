@@ -42,6 +42,8 @@
 # - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 01..07.
 # - DAD_DOT_SIDE_METRIC: scores CSV metric column, default balanced accuracy.
 # - DAD_DOT_SIDE_INTERVAL: ci95 or sem; default ci95.
+# - DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES: optional Gaussian smoothing sigma in
+#   decoded time samples before group statistics; default 0 disables smoothing.
 # - DAD_CLUSTER_FORMING_P: pointwise p for cluster formation; default 0.05.
 # - DAD_CLUSTER_ALPHA: cluster-level significance alpha; default 0.05.
 # - DAD_CLUSTER_TAIL: greater or two-sided; default greater.
@@ -77,6 +79,7 @@ ANALYSES_CSV="${DAD_DOT_SIDE_ANALYSES:-all}"
 SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
 METRIC="${DAD_DOT_SIDE_METRIC:-accuracy_balanced_undersampled_sets}"
 INTERVAL="${DAD_DOT_SIDE_INTERVAL:-ci95}"
+SMOOTH_SIGMA_SAMPLES="${DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES:-0.0}"
 CLUSTER_FORMING_P="${DAD_CLUSTER_FORMING_P:-0.05}"
 CLUSTER_ALPHA="${DAD_CLUSTER_ALPHA:-0.05}"
 CLUSTER_TAIL="${DAD_CLUSTER_TAIL:-greater}"
@@ -162,6 +165,7 @@ COMMAND=(
     --group-subjects "${SUBJECTS[@]}"
     --metric "$METRIC"
     --interval "$INTERVAL"
+    --smooth-sigma-samples "$SMOOTH_SIGMA_SAMPLES"
     --cluster-forming-p "$CLUSTER_FORMING_P"
     --cluster-alpha "$CLUSTER_ALPHA"
     --tail "$CLUSTER_TAIL"
@@ -189,6 +193,7 @@ echo ">>> Analyses: ${ANALYSES[*]}"
 echo ">>> Subjects: ${SUBJECTS[*]}"
 echo ">>> Metric: $METRIC"
 echo ">>> Interval: $INTERVAL"
+echo ">>> Smooth sigma samples: $SMOOTH_SIGMA_SAMPLES"
 echo ">>> Cluster-forming p: $CLUSTER_FORMING_P"
 echo ">>> Cluster alpha: $CLUSTER_ALPHA"
 echo ">>> Tail: $CLUSTER_TAIL"

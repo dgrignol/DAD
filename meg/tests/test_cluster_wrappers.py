@@ -146,6 +146,8 @@ def test_dot_side_group_wrapper_exposes_cluster_controls():
     assert "DAD_DOT_SIDE_ANALYSES" in text
     assert "--analyses" in text
     assert "DAD_DOT_SIDE_INTERVAL" in text
+    assert "DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES" in text
+    assert "--smooth-sigma-samples" in text
     assert "DAD_CLUSTER_FORMING_P" in text
     assert "DAD_CLUSTER_ALPHA" in text
     assert "DAD_DOT_SIDE_GROUP_SUBJECTS" in text
@@ -166,6 +168,9 @@ def test_dot_side_time_generalization_wrappers_expose_cluster_controls():
 
     assert "04_dot_side_time_generalization_group_report.py" in group_text
     assert "DAD_DOT_SIDE_TG_METRIC" in group_text
+    assert "DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES" in group_text
+    assert "DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES" in group_text
+    assert "--smooth-sigma-samples" in group_text
     assert "DAD_CLUSTER_FORMING_P" in group_text
     assert "DAD_CLUSTER_ALPHA" in group_text
     assert "DAD_CLUSTER_TAIL" in group_text

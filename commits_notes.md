@@ -1,3 +1,41 @@
+# 24 Jun 2026 20:48
+
+## Add group smoothing for dot-side cluster reports
+
+### `meg/code/sanity_checks/02_dot_side_group_report.py`
+- Add `--smooth-sigma-samples` to optionally smooth each subject's finite 1D accuracy segments before group statistics and plotting.
+- Preserve skipped-window NaNs as hard boundaries by smoothing only within contiguous finite subject segments.
+- Record smoothing settings, raw subject values, and tested/plotted subject values in the group report payload and diagnostics.
+
+### `meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py`
+- Add `--smooth-sigma-samples` to optionally smooth each subject's train-time x test-time matrix before 2D cluster permutation and group plotting.
+- Smooth only within finite 4-neighbor connected components using normalized Gaussian convolution so skipped cells cannot be bridged by smoothing.
+- Record smoothing settings, raw matrices, and tested/plotted matrices in the group report payload and diagnostics.
+
+### `meg/cluster/submit_dot_side_group_report.sh`
+- Expose 1D group smoothing through `DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES` and pass it to the Python group-report script.
+
+### `meg/cluster/submit_dot_side_time_generalization_group_report.sh`
+- Expose matrix smoothing through `DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES`, falling back to `DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES` when the time-generalization-specific variable is unset.
+
+### `meg/cluster/README.md`
+- Document qsub commands for regenerating the 1D and 2D group reports with smoothed subject values.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Document the smoothing option, NaN-preserving policy, cluster-stat timing, and the default-grid interpretation of sigma in samples and milliseconds.
+
+### `meg/tests/test_dot_side_group_report.py`
+- Add a synthetic test that verifies 1D smoothing changes finite values without leaking across NaN gaps.
+
+### `meg/tests/test_dot_side_time_generalization.py`
+- Add a synthetic test that verifies 2D smoothing preserves NaN barriers and does not spread signal across disconnected matrix components.
+
+### `meg/tests/test_cluster_wrappers.py`
+- Extend wrapper tests to cover the new smoothing environment variables and `--smooth-sigma-samples` forwarding.
+
+Suggested commit message:
+`Add group smoothing for dot-side reports`
+
 # 24 Jun 2026 19:02
 
 ## Add dot-side time-generalization decoding

@@ -636,6 +636,15 @@ The group wrapper is:
 qsub meg/cluster/submit_dot_side_group_report.sh
 ```
 
+The 1D group report can optionally smooth each subject's finite accuracy
+segments before group statistics and plotting with `--smooth-sigma-samples`.
+The smoothing is Gaussian, is applied before the sign-flip cluster test, and is
+never allowed to cross NaN skipped-window gaps. At the default 120 Hz decoding
+grid, `--smooth-sigma-samples 1.0` corresponds to one decoded sample of
+Gaussian sigma, about 8.3 ms, with an approximate full-width at half maximum of
+2.355 samples or 19.6 ms. The cluster wrapper exposes the same setting through
+`DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES`.
+
 `sanity_checks/03_dot_side_time_generalization.py` is the matrix companion to
 the line-decoding sanity check. It preserves the same four analysis keys,
 trajectory-label rules, `--decode-window-samples` sliding-window definition,
@@ -675,6 +684,12 @@ train-time x test-time lattice using 4-neighbor adjacency; the default
 cluster-forming threshold is `p=0.05`, cluster alpha is `0.05`, and subjects
 01-07 use exact sign flips by default. Group plots show the valid-cell group
 mean matrix with significant 2D clusters shaded and outlined in red.
+Optional `--smooth-sigma-samples` applies isotropic Gaussian smoothing to each
+subject matrix before group statistics and plotting. Smoothing is constrained
+to finite connected train/test components, so skipped cells remain NaN and 2D
+clusters cannot bridge those gaps. The time-generalization group wrapper
+exposes `DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES`, falling back to the shared
+`DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES` when unset.
 
 Cluster wrappers are:
 

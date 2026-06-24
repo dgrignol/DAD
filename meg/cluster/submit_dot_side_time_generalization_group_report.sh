@@ -39,6 +39,9 @@
 #   DAD_DOT_SIDE_ANALYSES is accepted as a fallback.
 # - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 01..07.
 # - DAD_DOT_SIDE_TG_METRIC: matrix metric, default balanced accuracy.
+# - DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES: optional isotropic Gaussian smoothing
+#   sigma in train/test samples before group statistics. If unset, falls back
+#   to DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES; default 0 disables smoothing.
 # - DAD_CLUSTER_FORMING_P: pointwise p for 2D cluster formation; default 0.05.
 # - DAD_CLUSTER_ALPHA: cluster-level significance alpha; default 0.05.
 # - DAD_CLUSTER_TAIL: greater or two-sided; default greater.
@@ -73,6 +76,7 @@ ALLOW_MISSING="${DAD_ALLOW_MISSING:-0}"
 ANALYSES_CSV="${DAD_DOT_SIDE_TG_ANALYSES:-${DAD_DOT_SIDE_ANALYSES:-all}}"
 SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
 METRIC="${DAD_DOT_SIDE_TG_METRIC:-accuracy_balanced_undersampled_sets}"
+SMOOTH_SIGMA_SAMPLES="${DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES:-${DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES:-0.0}}"
 CLUSTER_FORMING_P="${DAD_CLUSTER_FORMING_P:-0.05}"
 CLUSTER_ALPHA="${DAD_CLUSTER_ALPHA:-0.05}"
 CLUSTER_TAIL="${DAD_CLUSTER_TAIL:-greater}"
@@ -159,6 +163,7 @@ COMMAND=(
     --analyses "${ANALYSES[@]}"
     --group-subjects "${SUBJECTS[@]}"
     --metric "$METRIC"
+    --smooth-sigma-samples "$SMOOTH_SIGMA_SAMPLES"
     --cluster-forming-p "$CLUSTER_FORMING_P"
     --cluster-alpha "$CLUSTER_ALPHA"
     --tail "$CLUSTER_TAIL"
@@ -185,6 +190,7 @@ fi
 echo ">>> Analyses: ${ANALYSES[*]}"
 echo ">>> Subjects: ${SUBJECTS[*]}"
 echo ">>> Metric: $METRIC"
+echo ">>> Smooth sigma samples: $SMOOTH_SIGMA_SAMPLES"
 echo ">>> 2D cluster-forming p: $CLUSTER_FORMING_P"
 echo ">>> Cluster alpha: $CLUSTER_ALPHA"
 echo ">>> Tail: $CLUSTER_TAIL"

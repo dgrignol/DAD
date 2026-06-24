@@ -23,7 +23,13 @@ Usage examples
      --analyses all --group-subjects 01 02 03 04 05 06 07 \
      --validate-only --print-summary
 
-3) Run against cluster paths from the deployed DAD directory:
+3) Smooth each participant matrix before group statistics:
+
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
+     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --smooth-sigma-samples 1.0 --overwrite
+
+4) Run against cluster paths from the deployed DAD directory:
 
    python meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
      --config meg/params/pipeline_default.yaml \
@@ -51,6 +57,10 @@ Statistical policy
   4-neighbor adjacency. The default test is directional greater-than-chance,
   cluster-forming p=0.05, cluster alpha=0.05, and exact sign flips for
   subjects 01-07.
+- Optional ``--smooth-sigma-samples`` applies isotropic Gaussian smoothing
+  separately inside each subject's finite connected train/test components
+  before group statistics and plotting. NaN cells remain NaN so clusters
+  cannot bridge skipped train/test cells.
 """
 
 from __future__ import annotations
@@ -69,7 +79,7 @@ from typing import Any, Iterable, Mapping
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap, TwoSlopeNorm
 import numpy as np
-from scipy import stats
+from scipy import ndimage, stats
 
 
 def _load_sibling_module(module_name: str, path: Path) -> Any:
@@ -137,6 +147,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Subjects to include, e.g. 01 02 sub-03.",
     )
     parser.add_argument("--metric", choices=SUPPORTED_METRICS, default=DEFAULT_METRIC)
+    parser.add_argument(
+        "--smooth-sigma-samples",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional isotropic Gaussian smoothing sigma in train/test samples, "
+            "applied per subject before group statistics. 0 disables smoothing."
+        ),
+    )
     parser.add_argument("--chance", type=float, default=0.5)
     parser.add_argument("--cluster-forming-p", type=float, default=0.05)
     parser.add_argument("--cluster-alpha", type=float, default=0.05)
@@ -166,6 +185,8 @@ def validate_cli_args(args: argparse.Namespace) -> None:
         raise SystemExit("--cluster-alpha must be between 0 and 1.")
     if args.n_permutations < 0:
         raise SystemExit("--n-permutations must be non-negative.")
+    if args.smooth_sigma_samples < 0:
+        raise SystemExit("--smooth-sigma-samples must be non-negative.")
 
 
 def combined_output_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
@@ -484,6 +505,73 @@ def connected_components_2d(mask: np.ndarray) -> list[np.ndarray]:
                     queue.append((nbr_row, nbr_col))
             components.append(np.asarray(cells, dtype=int))
     return components
+
+
+def smooth_subject_matrix_2d(matrix: np.ndarray, *, sigma_samples: float) -> np.ndarray:
+    """
+    Smooth one subject matrix without crossing NaN gaps.
+
+    Data flow
+    - Identify finite 4-neighbor connected components in the train/test matrix.
+    - Smooth each component inside its bounding box with normalized Gaussian
+      convolution so edge and hole boundaries do not pull in zeros.
+    - Restore the original NaN mask so skipped cells remain hard boundaries for
+      the group finite-cell mask and 2D cluster permutation.
+    """
+    matrix = np.asarray(matrix, dtype=float)
+    if matrix.ndim != 2:
+        raise ValueError("matrix must be train_time x test_time.")
+    if sigma_samples <= 0:
+        return np.array(matrix, dtype=float, copy=True)
+
+    smoothed = np.full(matrix.shape, np.nan, dtype=float)
+    finite_mask = np.isfinite(matrix)
+    for component in connected_components_2d(finite_mask):
+        rows = component[:, 0]
+        cols = component[:, 1]
+        row_min, row_max = int(rows.min()), int(rows.max())
+        col_min, col_max = int(cols.min()), int(cols.max())
+        sub_values = matrix[row_min : row_max + 1, col_min : col_max + 1]
+        sub_mask = np.zeros(sub_values.shape, dtype=bool)
+        sub_mask[rows - row_min, cols - col_min] = True
+        weighted_values = np.where(sub_mask, sub_values, 0.0)
+        numerator = ndimage.gaussian_filter(
+            weighted_values,
+            sigma=float(sigma_samples),
+            mode="constant",
+            cval=0.0,
+        )
+        denominator = ndimage.gaussian_filter(
+            sub_mask.astype(float),
+            sigma=float(sigma_samples),
+            mode="constant",
+            cval=0.0,
+        )
+        sub_smoothed = np.divide(
+            numerator,
+            denominator,
+            out=np.full(sub_values.shape, np.nan, dtype=float),
+            where=denominator > 0,
+        )
+        target = smoothed[row_min : row_max + 1, col_min : col_max + 1]
+        target[sub_mask] = sub_smoothed[sub_mask]
+    return smoothed
+
+
+def smooth_group_values_2d(values: np.ndarray, *, sigma_samples: float) -> np.ndarray:
+    """Apply NaN-preserving 2D Gaussian smoothing to every subject matrix."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 3:
+        raise ValueError("values must be subject x train_time x test_time.")
+    if sigma_samples <= 0:
+        return np.array(values, dtype=float, copy=True)
+    return np.stack(
+        [
+            smooth_subject_matrix_2d(matrix, sigma_samples=float(sigma_samples))
+            for matrix in values
+        ],
+        axis=0,
+    )
 
 
 def cluster_masses_2d(
@@ -898,9 +986,19 @@ def _subject_diagnostics_html(summary: Mapping[str, Any]) -> str:
 def _analysis_diagnostics_html(result: Mapping[str, Any]) -> str:
     """Summarize group cell validity and participant diagnostics."""
     records = list(result["participant_records"])
+    smoothing = result.get("smoothing", {})
+    sigma_samples = float(smoothing.get("sigma_samples", 0.0) or 0.0)
     group_rows = [
         ("Subjects included", ", ".join(result["subjects_included"])),
         ("Metric", result["metric"]),
+        (
+            "Smoothing",
+            (
+                "none"
+                if sigma_samples <= 0
+                else f"Gaussian sigma={sigma_samples:g} samples before group statistics"
+            ),
+        ),
         (
             "Group-valid cells",
             f"{result['n_group_valid_cells']} valid, {result['n_group_invalid_cells']} invalid",
@@ -1143,7 +1241,11 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             allow_missing=args.allow_missing,
         )
         times = records[0]["times"]
-        values = np.stack([record["matrix"] for record in records], axis=0)
+        raw_values = np.stack([record["matrix"] for record in records], axis=0)
+        values = smooth_group_values_2d(
+            raw_values,
+            sigma_samples=float(args.smooth_sigma_samples),
+        )
         valid_subjects = [record["subject"] for record in records]
         stats_result = cluster_permutation_2d(
             values,
@@ -1200,6 +1302,19 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
                 "group_valid_cell_mask": stats_result["valid_cell_mask"],
                 "n_group_valid_cells": int(stats_result["n_valid_cells"]),
                 "n_group_invalid_cells": int(stats_result["n_invalid_cells"]),
+                "smoothing": {
+                    "sigma_samples": float(args.smooth_sigma_samples),
+                    "applied_to": args.metric,
+                    "applied_before": "group_statistics_and_plotting",
+                    "nan_policy": "smooth finite connected subject components only",
+                },
+                "subject_values_raw": {
+                    record["subject"]: record["matrix"] for record in records
+                },
+                "subject_values": {
+                    record["subject"]: values[idx]
+                    for idx, record in enumerate(records)
+                },
                 "clusters": clusters_for_report,
                 "clusters_with_cells": stats_result["clusters"],
                 "cluster_forming_t_threshold": float(stats_result["t_threshold"]),
@@ -1254,6 +1369,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         f"Tail: {args.tail}",
         f"2D cluster-forming p: {args.cluster_forming_p:g}",
         f"Cluster alpha: {args.cluster_alpha:g}",
+        f"Smoothing sigma samples: {args.smooth_sigma_samples:g}",
         f"Machine report: {output_paths['report_json']}",
     ]
     report = {
@@ -1268,6 +1384,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         "tail": args.tail,
         "cluster_forming_p": float(args.cluster_forming_p),
         "cluster_alpha": float(args.cluster_alpha),
+        "smooth_sigma_samples": float(args.smooth_sigma_samples),
         "occlusion_timing": occlusion_timing,
         "analyses": {
             result["key"]: {

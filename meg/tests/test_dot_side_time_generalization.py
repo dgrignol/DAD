@@ -154,6 +154,23 @@ def test_2d_cluster_permutation_nan_gap_prevents_bridge():
     assert (2, 2, 4, 5) in bounds
 
 
+def test_2d_smoothing_preserves_nan_gap_barriers():
+    """Matrix smoothing must not leak across invalid train/test cells."""
+    values = np.zeros((1, 5, 5), dtype=float) + 0.5
+    values[0, 2, 1] = 0.9
+    values[0, :, 2] = np.nan
+    smoothed = tg_group.smooth_group_values_2d(values, sigma_samples=1.0)
+
+    assert np.all(np.isnan(smoothed[0, :, 2]))
+    assert smoothed[0, 2, 0] > values[0, 2, 0]
+    assert smoothed[0, 2, 3] == pytest.approx(values[0, 2, 3])
+    np.testing.assert_allclose(
+        tg_group.smooth_group_values_2d(values, sigma_samples=0.0),
+        values,
+        equal_nan=True,
+    )
+
+
 def _synthetic_tg_diagnostics(n_cells: int) -> dict[str, object]:
     """Return compact diagnostics for synthetic subject summaries."""
     return {

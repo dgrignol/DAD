@@ -597,6 +597,15 @@ qsub -v DAD_CLUSTER_FORMING_P=0.01,DAD_CLUSTER_TAIL=two-sided \
   meg/cluster/submit_dot_side_group_report.sh
 ```
 
+Smooth each subject's accuracy series before group statistics and plotting.
+The default `0.0` disables smoothing; `1.0` applies a light Gaussian smoothing
+kernel with sigma equal to one decoded sample:
+
+```bash
+qsub -v DAD_REBUILD=1,DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES=1.0 \
+  meg/cluster/submit_dot_side_group_report.sh
+```
+
 Validate group inputs before writing outputs:
 
 ```bash
@@ -711,6 +720,16 @@ Change the cluster-forming threshold or run a two-sided test:
 
 ```bash
 qsub -v DAD_CLUSTER_FORMING_P=0.01,DAD_CLUSTER_TAIL=two-sided \
+  meg/cluster/submit_dot_side_time_generalization_group_report.sh
+```
+
+Smooth each subject's matrix before group statistics and plotting. The
+time-generalization wrapper accepts `DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES` and
+falls back to the shared `DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES` if the
+time-generalization-specific variable is unset:
+
+```bash
+qsub -v DAD_REBUILD=1,DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES=1.0 \
   meg/cluster/submit_dot_side_time_generalization_group_report.sh
 ```
 

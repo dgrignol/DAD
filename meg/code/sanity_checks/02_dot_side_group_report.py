@@ -33,7 +33,13 @@ Usage examples
    python .../02_dot_side_group_report.py --analyses all \
      --group-subjects 01 02 03 04 05 06 07 --interval sem --overwrite
 
-4) Run against cluster paths from the deployed DAD directory:
+4) Smooth each participant's time series before group statistics:
+
+   python .../02_dot_side_group_report.py --analyses all \
+     --group-subjects 01 02 03 04 05 06 07 \
+     --smooth-sigma-samples 1.0 --overwrite
+
+5) Run against cluster paths from the deployed DAD directory:
 
    python meg/code/sanity_checks/02_dot_side_group_report.py \
      --config meg/params/pipeline_default.yaml \
@@ -63,6 +69,10 @@ Statistical policy
   equivalent t cutoff are annotated directly on the group plot.
 - The default display band is a 95% confidence interval. SEM is available with
   ``--interval sem``.
+- Optional ``--smooth-sigma-samples`` applies Gaussian smoothing separately
+  within each subject's finite contiguous time segments before group statistics
+  and plotting. NaN windows remain NaN so clusters cannot bridge skipped
+  windows.
 """
 
 from __future__ import annotations
@@ -79,7 +89,7 @@ from typing import Any, Iterable, Mapping
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy import stats
+from scipy import ndimage, stats
 
 
 PREPROCESSING_DIR = Path(__file__).resolve().parents[1] / "preprocessing_basic"
@@ -187,6 +197,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=SUPPORTED_METRICS,
         default=DEFAULT_METRIC,
         help="Scores CSV column to test at group level.",
+    )
+    parser.add_argument(
+        "--smooth-sigma-samples",
+        type=float,
+        default=0.0,
+        help=(
+            "Optional Gaussian smoothing sigma in decoded time samples, "
+            "applied per subject before group statistics. 0 disables smoothing."
+        ),
     )
     parser.add_argument(
         "--chance",
@@ -384,6 +403,8 @@ def validate_cli_args(args: argparse.Namespace) -> None:
         raise SystemExit("--cluster-alpha must be between 0 and 1.")
     if args.n_permutations < 0:
         raise SystemExit("--n-permutations must be non-negative.")
+    if args.smooth_sigma_samples < 0:
+        raise SystemExit("--smooth-sigma-samples must be non-negative.")
 
 
 # -----------------------------------------------------------------------------
@@ -701,6 +722,46 @@ def finite_group_time_mask(values: np.ndarray) -> np.ndarray:
     if values.ndim != 2:
         raise ValueError("values must be subject x time.")
     return np.all(np.isfinite(values), axis=0)
+
+
+def smooth_subject_series_1d(series: np.ndarray, *, sigma_samples: float) -> np.ndarray:
+    """
+    Smooth one subject's time series without crossing NaN gaps.
+
+    Data flow
+    - Identify finite contiguous regions in the subject series.
+    - Apply Gaussian smoothing separately inside each region.
+    - Restore the original NaN mask so skipped windows remain hard boundaries
+      for group statistics and temporal clusters.
+    """
+    series = np.asarray(series, dtype=float)
+    smoothed = np.full(series.shape, np.nan, dtype=float)
+    if sigma_samples <= 0:
+        return np.array(series, dtype=float, copy=True)
+    for start_idx, end_idx in contiguous_true_regions(np.isfinite(series)):
+        segment = series[start_idx : end_idx + 1]
+        smoothed[start_idx : end_idx + 1] = ndimage.gaussian_filter1d(
+            segment,
+            sigma=float(sigma_samples),
+            mode="nearest",
+        )
+    return smoothed
+
+
+def smooth_group_values_1d(values: np.ndarray, *, sigma_samples: float) -> np.ndarray:
+    """Apply NaN-preserving 1D Gaussian smoothing to every subject row."""
+    values = np.asarray(values, dtype=float)
+    if values.ndim != 2:
+        raise ValueError("values must be subject x time.")
+    if sigma_samples <= 0:
+        return np.array(values, dtype=float, copy=True)
+    return np.stack(
+        [
+            smooth_subject_series_1d(row, sigma_samples=float(sigma_samples))
+            for row in values
+        ],
+        axis=0,
+    )
 
 
 def _sign_matrix(
@@ -1309,6 +1370,8 @@ def _analysis_diagnostics_html(result: Mapping[str, Any]) -> str:
     classifier = first_diagnostics.get("classifier", {})
     cv = first_diagnostics.get("cross_validation", {})
     evaluation = first_diagnostics.get("evaluation", {})
+    smoothing = result.get("smoothing", {})
+    sigma_samples = float(smoothing.get("sigma_samples", 0.0) or 0.0)
     common_rows = [
         ("Classifier", classifier.get("name", "n/a")),
         ("Classifier details", classifier.get("details", "n/a")),
@@ -1317,6 +1380,14 @@ def _analysis_diagnostics_html(result: Mapping[str, Any]) -> str:
         ("Split unit", cv.get("split_unit", "n/a")),
         ("Balanced metric", evaluation.get("balanced_metric", "n/a")),
         ("Balancing strategy", evaluation.get("balancing_strategy", "n/a")),
+        (
+            "Smoothing",
+            (
+                "none"
+                if sigma_samples <= 0
+                else f"Gaussian sigma={sigma_samples:g} samples before group statistics"
+            ),
+        ),
         (
             "Group-valid time points",
             f"{result.get('n_group_valid_timepoints', 'n/a')} valid, "
@@ -1593,7 +1664,11 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             allow_missing=args.allow_missing,
         )
         times = records[0]["times"]
-        values = np.stack([record["values"] for record in records], axis=0)
+        raw_values = np.stack([record["values"] for record in records], axis=0)
+        values = smooth_group_values_1d(
+            raw_values,
+            sigma_samples=float(args.smooth_sigma_samples),
+        )
         valid_subjects = [record["subject"] for record in records]
 
         stats_result = cluster_permutation_1d(
@@ -1648,8 +1723,18 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
                 "group_valid_time_mask": valid_time_mask,
                 "n_group_valid_timepoints": int(stats_result["n_valid_timepoints"]),
                 "n_group_invalid_timepoints": int(stats_result["n_invalid_timepoints"]),
-                "subject_values": {
+                "smoothing": {
+                    "sigma_samples": float(args.smooth_sigma_samples),
+                    "applied_to": args.metric,
+                    "applied_before": "group_statistics_and_plotting",
+                    "nan_policy": "smooth finite contiguous subject segments only",
+                },
+                "subject_values_raw": {
                     record["subject"]: record["values"] for record in records
+                },
+                "subject_values": {
+                    record["subject"]: values[idx]
+                    for idx, record in enumerate(records)
                 },
                 "clusters": clusters_for_report,
                 "cluster_forming_t_threshold": float(stats_result["t_threshold"]),
@@ -1731,6 +1816,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         f"Tail: {args.tail}",
         f"Cluster-forming p: {args.cluster_forming_p:g}",
         f"Cluster alpha: {args.cluster_alpha:g}",
+        f"Smoothing sigma samples: {args.smooth_sigma_samples:g}",
         f"Display interval: {args.interval}",
         f"Machine report: {output_paths['report_json']}",
     ]
@@ -1747,6 +1833,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         "cluster_forming_p": float(args.cluster_forming_p),
         "cluster_alpha": float(args.cluster_alpha),
         "interval": str(args.interval),
+        "smooth_sigma_samples": float(args.smooth_sigma_samples),
         "occlusion_timing": occlusion_timing,
         "participant_trial_count_figures": participant_trial_count_figures,
         "analyses": {
