@@ -3,827 +3,587 @@
 06_export_neural_for_drsa.py
 
 Purpose
-Prepare epoched DAD MEG data for dRSA by exporting condition-specific neural
-tensors averaged by `trial_sequence_identity`.
+Export condition-specific DAD MEG tensors for dRSA from the configured step-04
+epochs. Epochs are averaged by subject-specific trajectory identity on a fixed
+repository-owned MEG channel axis, with bad or absent channels represented as
+NaN and documented in MAT and JSON metadata.
 
-High-level flow
-1) load the step-04 epoched FIF for one subject/session,
-2) read each surviving epoch's `trial_sequence_identity` from epochs metadata,
-3) crop epochs to the post-onset analysis window [0, 2.667] seconds,
-4) downsample to 120 Hz without applying an explicit low-pass filter,
-5) build/load a canonical MEG channel-label list shared across exports,
-6) average epochs within each condition by identity 1..20,
-7) write averages into the full canonical channel axis and leave bad/missing
-   channels as NaN,
-8) save one MAT file per condition containing both the neural tensor and
-   ordered channel labels, and
-9) write figures plus an MNE HTML report documenting counts, mapping checks,
-   downsampling traces, and final tensor shapes.
+Usage examples
+1) Export subject 01:
 
-Usage example
-python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/MEG/code/preprocessing_basic/06_export_neural_for_drsa.py
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/06_export_neural_for_drsa.py \
+     --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --source-manifest /Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives/reports/sub-01/ses-01/source_manifest.json
 
-Sandbox/testing example
-DAD_MEG_PROJECT_ROOT=/tmp/dad_drsa_sandbox python /tmp/dad_drsa_sandbox/code/preprocessing_basic/06_export_neural_for_drsa.py
+2) Validate the 40-identity and channel-axis contracts without loading data:
+
+   python .../06_export_neural_for_drsa.py --config .../pipeline_default.yaml \
+     --subject-config .../sub-04.yaml --source-manifest .../source_manifest.json \
+     --validate-only --print-summary
 
 Inputs
-- Epoched FIF from step 04:
-  derivatives/analysis/sub-01/ses-01/meg/sub-01_ses-01_task-Attention_run-all_epo.fif
-  This FIF must contain `epochs.metadata['trial_sequence_identity']`.
+- Step-04 epochs FIF with complete epoch metadata.
+- Step-04 machine-readable report.
+- Fixed canonical MEG channel-label file.
+- Exact observed trajectory MAT discovered from the configured external
+  subject ``input_files`` directory. The matching ``occluded_nondeviant``
+  condition supplies the expected continuation for occluded-deviant dRSA.
+- Source manifest with completed epoching lineage.
 
 Outputs
-- MAT tensors under:
-  derivatives/analysis/sub-01/ses-01/drsa/
-  Each MAT file contains:
-  - `neural`: shape 20 x n_canonical_meg_channels x n_timepoints
-  - `channel_labels`: MEG channel labels in the exact order used by
-    `neural` channel dimension.
-- Static figures under:
-  derivatives/preprocessing/sub-01/ses-01/figures/
-- HTML report:
-  derivatives/reports/sub-01/ses-01/06_export_neural_for_drsa_report.html
+- One MAT neural tensor and JSON sidecar per condition.
+- Aggregate JSON and HTML export reports.
+- An ``export_drsa`` derivative-lineage section in the source manifest.
 
-Key assumptions
-- The exported signal uses MEG channels only (magnetometers and gradiometers)
-  and excludes non-MEG channels such as STI/EOG.
-- Channels marked bad in `epochs.info['bads']` (or missing from the current
-  FIF but present in the canonical list) are kept in `channel_labels` and
-  exported as NaNs in `neural`.
-- Canonical channel labels are loaded from:
-  `code/preprocessing_basic/drsa_canonical_meg_channels.txt`.
-  If this file is absent, it is initialized from the first run's MEG channel
-  order and then reused for all later exports.
-- Identity mapping is owned by step 04 and is read from the saved epochs
-  metadata. Missing metadata is treated as a hard error so stale epoch files do
-  not silently fall back to older reconstruction logic.
-- Any missing, duplicate, or ambiguous epoch-to-identity mapping is treated as
-  a hard error before MAT export.
+Tensor contract
+- Shape: ``identity x canonical_meg_channel x time``.
+- Identity axis is 1..20 or 1..40 according to the subject profile.
+- No identities are synthesized or truncated. The default missing-data policy
+  is an explicit error if any required condition/identity cell has no epoch.
+- The canonical channel list is never initialized or modified by this stage.
+- MISC, EOG, STI, and all other non-MEG channels are excluded from the tensor
+  without modifying the source epochs or FIF files.
 """
 
-# %%
-# -------------------------------------------------------------------------
-# Imports
-# -------------------------------------------------------------------------
-import html
-import os
-import os.path as op
-from collections import Counter
+from __future__ import annotations
 
-import matplotlib.pyplot as plt
+import argparse
+import json
+from collections import Counter
+from pathlib import Path
+from typing import Any, Mapping
+
 import mne
 import numpy as np
 from scipy.io import savemat
 
-# %%
-# -------------------------------------------------------------------------
-# Subject/session defaults and analysis constants
-# -------------------------------------------------------------------------
-subj_str = "01"
-ses_str = "01"
-
-# Environment override is used only to keep sandbox tests from writing into the
-# real derivatives tree. Without this variable, the local project path is used.
-project_root = os.environ.get(
-    "DAD_MEG_PROJECT_ROOT",
-    "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/MEG",
+from downstream_stage_utils import discover_trajectory_models, identity_coverage
+from pipeline_config import load_and_resolve_config
+from preprocessing_stage_utils import (
+    ensure_output_directory,
+    guarded_path,
+    prepare_output_path,
+    update_source_manifest_stage,
+    utc_now,
+    write_json,
+    write_simple_html_report,
 )
 
-# Condition mapping inherited from step 04.
-event_id = {
-    "always_visible": 31,
-    "occluded_nondeviant": 41,
-    "occluded_deviant": 51,
-}
-code_to_condition = {code: name for name, code in event_id.items()}
 
-# dRSA export settings.
-identity_values = list(range(1, 21))
-export_tmin = 0.0
-export_tmax = 2.667
-export_sfreq = 120.0
-
-# %%
-# -------------------------------------------------------------------------
-# Paths and output layout
-# -------------------------------------------------------------------------
-preproc_dir = op.join(
-    project_root,
-    "derivatives",
-    "preprocessing",
-    f"sub-{subj_str}",
-    f"ses-{ses_str}",
-)
-
-analysis_meg_dir = op.join(
-    project_root,
-    "derivatives",
-    "analysis",
-    f"sub-{subj_str}",
-    f"ses-{ses_str}",
-    "meg",
-)
-epochs_fif = op.join(
-    analysis_meg_dir,
-    f"sub-{subj_str}_ses-{ses_str}_task-Attention_run-all_epo.fif",
-)
-drsa_output_dir = op.join(
-    project_root,
-    "derivatives",
-    "analysis",
-    f"sub-{subj_str}",
-    f"ses-{ses_str}",
-    "drsa",
-)
-figure_output_dir = op.join(preproc_dir, "figures")
-out_report = op.join(
-    project_root,
-    "derivatives",
-    "reports",
-    f"sub-{subj_str}",
-    f"ses-{ses_str}",
-    "06_export_neural_for_drsa_report.html",
-)
-canonical_channels_txt = op.join(
-    project_root,
-    "code",
-    "preprocessing_basic",
-    "drsa_canonical_meg_channels.txt",
-)
-
-os.makedirs(drsa_output_dir, exist_ok=True)
-os.makedirs(figure_output_dir, exist_ok=True)
-os.makedirs(op.dirname(out_report), exist_ok=True)
-
-# %%
-# -------------------------------------------------------------------------
-# Shared report/figure helpers
-# -------------------------------------------------------------------------
-report = mne.Report(title=f"sub-{subj_str} | 06 Export neural for dRSA")
+# -----------------------------------------------------------------------------
+# CLI and path helpers
+# -----------------------------------------------------------------------------
 
 
-def savefig_logged(fig, filename, **kwargs):
-    """
-    Save a matplotlib figure into the shared preprocessing figure folder.
-
-    Parameters
-    ----------
-    fig : matplotlib.figure.Figure
-        Figure to save.
-    filename : str
-        Figure filename relative to `figure_output_dir`.
-    kwargs : dict
-        Additional keyword arguments forwarded to `Figure.savefig`.
-
-    Returns
-    -------
-    out_path : str
-        Absolute output figure path.
-    """
-    out_path = op.join(figure_output_dir, filename)
-    fig.savefig(out_path, **kwargs)
-    print(f"Saved figure to: {out_path}")
-    return out_path
-
-
-def log_to_console_and_report(text, *, title, section, tags=("log", "qc")):
-    """
-    Print text to console and store the same content in the MNE report.
-
-    Parameters
-    ----------
-    text : str
-        Text block to log.
-    title : str
-        Report item title.
-    section : str
-        Report section label.
-    tags : tuple of str
-        MNE report tags.
-    """
-    print(text)
-    report.add_html(
-        f"<pre>{html.escape(text)}</pre>",
-        title=title,
-        section=section,
-        tags=tags,
+def build_arg_parser() -> argparse.ArgumentParser:
+    """Create the noninteractive dRSA export parser."""
+    parser = argparse.ArgumentParser(
+        description="Export identity-averaged DAD MEG tensors for dRSA."
     )
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--site-config", default=None)
+    parser.add_argument("--subject-config", default=None)
+    parser.add_argument("--tuning-config", default=None)
+    parser.add_argument("--source-manifest", required=True)
+    parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--print-summary", action="store_true")
+    return parser
 
 
-def save_report_before_error(message):
-    """
-    Save the report before raising a fatal mapping/export error.
-
-    Parameters
-    ----------
-    message : str
-        Fatal error message.
-    """
-    log_to_console_and_report(
-        message,
-        title="Fatal validation error",
-        section="Identity mapping",
-        tags=("error", "identity"),
+def export_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
+    """Return canonical epoch input, dRSA directory, and report paths."""
+    resolved = cfg["resolved_paths"]
+    subject = cfg["layout"]["subject_bids_id"]
+    session = cfg["layout"]["session_bids_id"]
+    analysis = Path(resolved["derivatives_analysis_dir"])
+    reports = Path(resolved["derivatives_reports_dir"])
+    project_root = Path(resolved["project_root"])
+    epoch_stem = f"{subject}_{session}_task-Attention_run-all"
+    canonical_value = Path(str(cfg["export"]["canonical_meg_channels_file"]))
+    canonical_path = (
+        canonical_value.resolve()
+        if canonical_value.is_absolute()
+        else (project_root / canonical_value).resolve()
     )
-    report.save(out_report, overwrite=True, open_browser=False)
-    print(f"Saved HTML report to: {out_report}")
-
-
-def load_or_initialize_canonical_meg_channels(*, canonical_path, current_meg_channels):
-    """
-    Load canonical MEG channel labels, or initialize them from current data.
-
-    Parameters
-    ----------
-    canonical_path : str
-        Absolute path to the canonical channel text file.
-    current_meg_channels : list of str
-        MEG channel labels observed in the current epochs file.
-
-    Returns
-    -------
-    canonical_channels : list of str
-        Canonical MEG channel labels in fixed export order.
-    file_created : bool
-        True if the canonical file was created in this run.
-    """
-    if op.exists(canonical_path):
-        with open(canonical_path, "r", encoding="utf-8") as handle:
-            canonical_channels = [
-                line.strip()
-                for line in handle
-                if line.strip() and not line.lstrip().startswith("#")
-            ]
-        if not canonical_channels:
-            raise RuntimeError(
-                "Canonical MEG channel file exists but has no channel labels.\n"
-                f"canonical_channels_txt={canonical_path}"
-            )
-        duplicate_channels = [
-            ch
-            for ch, count in Counter(canonical_channels).items()
-            if int(count) > 1
-        ]
-        if duplicate_channels:
-            raise RuntimeError(
-                "Canonical MEG channel file contains duplicates.\n"
-                f"canonical_channels_txt={canonical_path}\n"
-                f"duplicate_channels={sorted(duplicate_channels)}"
-            )
-        return canonical_channels, False
-
-    os.makedirs(op.dirname(canonical_path), exist_ok=True)
-    with open(canonical_path, "w", encoding="utf-8") as handle:
-        handle.write("# Canonical MEG channel labels for dRSA MAT exports\n")
-        handle.write("# One channel label per line. Order is export order.\n")
-        handle.write("# Auto-generated from the first successful run.\n")
-        for ch_name in current_meg_channels:
-            handle.write(f"{ch_name}\n")
-    return list(current_meg_channels), True
-
-
-# %%
-# -------------------------------------------------------------------------
-# Identity-metadata helper
-# -------------------------------------------------------------------------
-def identities_from_metadata(epochs):
-    """
-    Recover identities from `epochs.metadata` when available and complete.
-
-    Parameters
-    ----------
-    epochs : mne.Epochs
-        Step-04 epochs object.
-
-    Returns
-    -------
-    mapping_rows : list of dict or None
-        Mapping rows if metadata contains valid `trial_sequence_identity`;
-        otherwise None.
-    mapping_summary : dict
-        Mapping provenance summary.
-    mapping_problems : list of str
-        Fatal validation problems if metadata is present but invalid.
-    """
-    if epochs.metadata is None or "trial_sequence_identity" not in epochs.metadata:
-        return None, {"mapping_source": "metadata_absent"}, []
-
-    values = np.asarray(epochs.metadata["trial_sequence_identity"])
-    mapping_problems = []
-    if len(values) != len(epochs.events):
-        mapping_problems.append(
-            "metadata trial_sequence_identity length does not match epochs: "
-            f"metadata={len(values)}, epochs={len(epochs.events)}"
-        )
-
-    mapping_rows = []
-    for epoch_index, (value, event_row) in enumerate(zip(values, epochs.events)):
-        try:
-            identity = int(value)
-        except Exception:
-            mapping_problems.append(
-                f"epoch_index={epoch_index}: metadata identity is not an int: {value!r}"
-            )
-            continue
-        if identity not in identity_values:
-            mapping_problems.append(
-                f"epoch_index={epoch_index}: metadata identity outside 1..20: {identity}"
-            )
-            continue
-        code = int(event_row[2])
-        if code not in code_to_condition:
-            mapping_problems.append(
-                f"epoch_index={epoch_index}: unexpected event code {code}"
-            )
-            continue
-        mapping_rows.append(
-            {
-                "epoch_index": epoch_index,
-                "concat_sample": int(event_row[0]),
-                "condition_code": code,
-                "condition_name": code_to_condition[code],
-                "source_fif": "",
-                "raw_sample": None,
-                "identity": identity,
-                "identity_sample_raw": None,
-                "identity_source": "epochs_metadata",
-            }
-        )
-
-    mapping_summary = {
-        "mapping_source": "epochs_metadata",
-        "n_mapping_rows": len(mapping_rows),
-        "n_mapping_problems": len(mapping_problems),
+    return {
+        "epochs_fif": analysis / "meg" / f"{epoch_stem}_epo.fif",
+        "epoch_report_json": reports / "04_epoching_report.json",
+        "output_dir": analysis / "drsa",
+        "report_json": reports / "06_export_neural_for_drsa_report.json",
+        "report_html": reports / "06_export_neural_for_drsa_report.html",
+        "canonical_channels": canonical_path,
     }
-    return mapping_rows, mapping_summary, mapping_problems
 
 
-# %%
-# -------------------------------------------------------------------------
-# Load epochs and derive identity mapping
-# -------------------------------------------------------------------------
-if not op.exists(epochs_fif):
-    raise FileNotFoundError(f"Required epochs file not found: {epochs_fif}")
-
-epochs = mne.read_epochs(epochs_fif, preload=False, verbose=True)
-if epochs.event_id != event_id:
-    raise RuntimeError(
-        "Epoch event_id does not match expected dRSA conditions.\n"
-        f"Expected: {event_id}\nObserved: {epochs.event_id}"
-    )
-
-meg_picks_all = mne.pick_types(
-    epochs.info,
-    meg=True,
-    eeg=False,
-    eog=False,
-    stim=False,
-    misc=False,
-    exclude=[],
-)
-if len(meg_picks_all) == 0:
-    raise RuntimeError("No MEG channels found in epochs; cannot export neural tensors.")
-marked_bad_channels = list(dict.fromkeys(str(ch) for ch in epochs.info.get("bads", [])))
-meg_channel_names_all = [epochs.ch_names[idx] for idx in meg_picks_all]
-
-# Canonical channel labels are fixed across subjects/runs to guarantee stable
-# tensor shape. Channels unavailable or marked bad in a given file are exported
-# as NaN later during per-condition tensor assembly.
-canonical_meg_channel_names, canonical_file_created = (
-    load_or_initialize_canonical_meg_channels(
-        canonical_path=canonical_channels_txt,
-        current_meg_channels=meg_channel_names_all,
-    )
-)
-present_canonical_meg_channels = [
-    ch for ch in canonical_meg_channel_names if ch in meg_channel_names_all
-]
-missing_canonical_meg_channels = [
-    ch for ch in canonical_meg_channel_names if ch not in meg_channel_names_all
-]
-unexpected_meg_channels = [
-    ch for ch in meg_channel_names_all if ch not in canonical_meg_channel_names
-]
-bad_meg_channels_marked = [
-    ch for ch in canonical_meg_channel_names if ch in marked_bad_channels
-]
-good_meg_channels_present = [
-    ch for ch in present_canonical_meg_channels if ch not in marked_bad_channels
-]
-if len(present_canonical_meg_channels) == 0:
-    raise RuntimeError(
-        "No canonical MEG channels were found in this epochs file.\n"
-        f"canonical_channels_txt={canonical_channels_txt}\n"
-        f"n_canonical_meg_channels={len(canonical_meg_channel_names)}\n"
-        f"n_meg_channels_available={len(meg_channel_names_all)}"
-    )
-if len(good_meg_channels_present) == 0:
-    raise RuntimeError(
-        "All canonical MEG channels present in this file are marked bad.\n"
-        f"marked_bad_channels={marked_bad_channels}\n"
-        "Cannot compute identity averages without at least one valid MEG channel."
-    )
-
-meg_selected_indices = [epochs.ch_names.index(ch) for ch in present_canonical_meg_channels]
-channel_type_counts = Counter(mne.channel_type(epochs.info, idx) for idx in meg_selected_indices)
-
-log_to_console_and_report(
-    "dRSA export setup complete.\n"
-    f"project_root={project_root}\n"
-    f"subj_str={subj_str}\n"
-    f"ses_str={ses_str}\n"
-    f"epochs_fif={epochs_fif}\n"
-    f"event_id={event_id}\n"
-    f"input_epochs_sfreq={epochs.info['sfreq']}\n"
-    f"input_epoch_window=[{epochs.tmin}, {epochs.tmax}] sec\n"
-    f"export_window=[{export_tmin}, {export_tmax}] sec\n"
-    f"export_sfreq={export_sfreq}\n"
-    "explicit_low_pass_applied=False\n"
-    f"n_epochs={len(epochs)}\n"
-    f"n_channels_total={epochs.info['nchan']}\n"
-    f"n_meg_channels_available={len(meg_channel_names_all)}\n"
-    f"canonical_channels_txt={canonical_channels_txt}\n"
-    f"canonical_channel_file_created={canonical_file_created}\n"
-    f"n_canonical_meg_channels={len(canonical_meg_channel_names)}\n"
-    f"n_canonical_meg_channels_present_in_epochs={len(present_canonical_meg_channels)}\n"
-    f"n_canonical_meg_channels_missing_from_epochs={len(missing_canonical_meg_channels)}\n"
-    f"canonical_meg_channels_missing_from_epochs={missing_canonical_meg_channels}\n"
-    f"n_unexpected_meg_channels_not_in_canonical={len(unexpected_meg_channels)}\n"
-    f"unexpected_meg_channels_not_in_canonical={unexpected_meg_channels}\n"
-    f"n_good_meg_channels_present={len(good_meg_channels_present)}\n"
-    f"n_bad_meg_channels_marked={len(bad_meg_channels_marked)}\n"
-    f"bad_meg_channels_marked={bad_meg_channels_marked}\n"
-    f"meg_channel_type_counts={dict(sorted(channel_type_counts.items()))}\n"
-    f"n_marked_bad_channels={len(marked_bad_channels)}\n"
-    f"marked_bad_channels={marked_bad_channels}\n"
-    f"drsa_output_dir={drsa_output_dir}\n"
-    f"figure_output_dir={figure_output_dir}\n"
-    f"out_report={out_report}",
-    title="Setup summary",
-    section="Preparation",
-)
-
-mapping_rows, mapping_summary, mapping_problems = identities_from_metadata(epochs)
-if mapping_rows is None:
-    problem_text = (
-        "Epoch metadata is missing trial_sequence_identity; MAT export will not run.\n"
-        "Re-run 04_epoching.py to regenerate the epoched FIF with identity metadata."
-    )
-    save_report_before_error(problem_text)
-    raise RuntimeError(problem_text)
-
-if mapping_problems:
-    problem_text = (
-        "Identity mapping failed; MAT export will not run.\n"
-        f"n_mapping_problems={len(mapping_problems)}\n"
-        + "\n".join(f"  - {line}" for line in mapping_problems[:50])
-    )
-    if len(mapping_problems) > 50:
-        problem_text += f"\n  ... truncated {len(mapping_problems) - 50} additional problems"
-    save_report_before_error(problem_text)
-    raise RuntimeError(problem_text)
-
-if len(mapping_rows) != len(epochs.events):
-    message = (
-        "Identity mapping row count mismatch after validation.\n"
-        f"n_mapping_rows={len(mapping_rows)}\n"
-        f"n_epochs={len(epochs.events)}"
-    )
-    save_report_before_error(message)
-    raise RuntimeError(message)
-
-mapping_counts = {
-    condition_name: {
-        identity: int(
-            sum(
-                row["condition_name"] == condition_name
-                and int(row["identity"]) == identity
-                for row in mapping_rows
-            )
+def load_canonical_meg_channels(path: str | Path) -> list[str]:
+    """Load a non-empty, duplicate-free fixed channel axis."""
+    canonical_path = Path(path).expanduser().resolve()
+    if not canonical_path.is_file():
+        raise FileNotFoundError(
+            "Configured canonical MEG channel file does not exist: "
+            f"{canonical_path}"
         )
-        for identity in identity_values
-    }
-    for condition_name in event_id
-}
-
-log_to_console_and_report(
-    "Identity mapping completed successfully.\n"
-    f"mapping_source={mapping_summary['mapping_source']}\n"
-    f"n_mapping_rows={len(mapping_rows)}\n"
-    f"n_mapping_problems=0\n"
-    f"mapping_summary={mapping_summary}\n"
-    "missing_or_ambiguous_identity_mappings=None",
-    title="Identity mapping summary",
-    section="Identity mapping",
-    tags=("identity", "events", "qc"),
-)
-
-# %%
-# -------------------------------------------------------------------------
-# Identity count plots and report table
-# -------------------------------------------------------------------------
-html_rows = [
-    "<table>",
-    "<thead><tr><th>condition</th>"
-    + "".join(f"<th>{identity}</th>" for identity in identity_values)
-    + "<th>total</th></tr></thead>",
-    "<tbody>",
-]
-for condition_name in event_id:
-    counts = mapping_counts[condition_name]
-    total = sum(counts.values())
-    html_rows.append(
-        "<tr><td>{cond}</td>{cells}<td>{total}</td></tr>".format(
-            cond=html.escape(condition_name),
-            cells="".join(f"<td>{counts[identity]}</td>" for identity in identity_values),
-            total=total,
-        )
-    )
-html_rows.extend(["</tbody>", "</table>"])
-report.add_html(
-    "\n".join(html_rows),
-    title="Trial counts per identity",
-    section="Identity mapping",
-    tags=("identity", "counts"),
-)
-
-for condition_name in event_id:
-    counts = mapping_counts[condition_name]
-    fig_counts, ax = plt.subplots(figsize=(10, 4))
-    ax.bar(identity_values, [counts[identity] for identity in identity_values])
-    ax.set_xlabel("trial_sequence_identity")
-    ax.set_ylabel("surviving epochs")
-    ax.set_title(f"{condition_name}: trial counts per identity")
-    ax.set_xticks(identity_values)
-    ax.set_xlim(0.25, 20.75)
-    ax.grid(axis="y", alpha=0.25)
-    report.add_figure(
-        fig=fig_counts,
-        title=f"Counts by identity ({condition_name})",
-        section="Identity mapping",
-        tags=("identity", "counts", "qc"),
-    )
-    savefig_logged(
-        fig_counts,
-        f"06_export_neural_for_drsa_counts_{condition_name}.png",
-        dpi=150,
-        bbox_inches="tight",
-    )
-    plt.close(fig_counts)
-
-# %%
-# -------------------------------------------------------------------------
-# Before/after downsample example trace figure
-# -------------------------------------------------------------------------
-example_condition = next(name for name in event_id if len(epochs[name]) > 0)
-example_channels = good_meg_channels_present[: min(3, len(good_meg_channels_present))]
-example_epochs = epochs[example_condition][:1].copy()
-example_epochs.load_data()
-example_epochs.pick(example_channels)
-example_epochs.crop(tmin=export_tmin, tmax=export_tmax)
-example_before = example_epochs.get_data(copy=False)[0]
-example_times_before = example_epochs.times.copy()
-example_epochs_ds = example_epochs.copy().resample(export_sfreq, npad="auto")
-example_after = example_epochs_ds.get_data(copy=False)[0]
-example_times_after = example_epochs_ds.times.copy()
-
-fig_ds, axes = plt.subplots(
-    len(example_channels),
-    1,
-    figsize=(10, 2.2 * len(example_channels)),
-    sharex=True,
-)
-if len(example_channels) == 1:
-    axes = [axes]
-for ch_idx, (axis, ch_name) in enumerate(zip(axes, example_channels)):
-    axis.plot(
-        example_times_before,
-        example_before[ch_idx],
-        color="0.65",
-        linewidth=0.8,
-        label=f"before ({epochs.info['sfreq']:.0f} Hz)",
-    )
-    axis.plot(
-        example_times_after,
-        example_after[ch_idx],
-        color="tab:blue",
-        linewidth=1.0,
-        label=f"after ({export_sfreq:.0f} Hz)",
-    )
-    axis.set_ylabel(ch_name)
-    axis.grid(axis="x", alpha=0.2)
-axes[-1].set_xlabel("time from condition onset (s)")
-axes[0].legend(loc="upper right")
-fig_ds.suptitle(
-    f"Before/after downsample example: {example_condition}, first surviving epoch"
-)
-fig_ds.tight_layout()
-
-report.add_figure(
-    fig=fig_ds,
-    title="Before/after downsample example traces",
-    caption=(
-        f"Condition={example_condition}; channels={example_channels}; "
-        f"explicit_low_pass_applied=False."
-    ),
-    section="Signal checks",
-    tags=("resample", "trace", "qc"),
-)
-savefig_logged(
-    fig_ds,
-    "06_export_neural_for_drsa_downsample_example.png",
-    dpi=150,
-    bbox_inches="tight",
-)
-plt.close(fig_ds)
-
-log_to_console_and_report(
-    "Generated downsampling trace example.\n"
-    f"example_condition={example_condition}\n"
-    f"example_channels={example_channels}\n"
-    f"before_sfreq={epochs.info['sfreq']}\n"
-    f"before_n_times={len(example_times_before)}\n"
-    f"after_sfreq={example_epochs_ds.info['sfreq']}\n"
-    f"after_n_times={len(example_times_after)}",
-    title="Downsample example summary",
-    section="Signal checks",
-    tags=("resample", "trace", "qc"),
-)
-
-# %%
-# -------------------------------------------------------------------------
-# Per-condition export: crop, downsample, average by identity, save MAT
-# -------------------------------------------------------------------------
-export_summaries = []
-for condition_name, condition_code in event_id.items():
-    condition_rows = [
-        row for row in mapping_rows if row["condition_name"] == condition_name
+    channels = [
+        line.strip()
+        for line in canonical_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
     ]
-    condition_epochs = epochs[condition_name].copy()
-
-    observed_samples = [int(sample) for sample in condition_epochs.events[:, 0]]
-    expected_samples = [int(row["concat_sample"]) for row in condition_rows]
-    if observed_samples != expected_samples:
-        message = (
-            "Condition epoch order mismatch before export.\n"
-            f"condition={condition_name}\n"
-            f"observed_first={observed_samples[:10]}\n"
-            f"expected_first={expected_samples[:10]}"
-        )
-        save_report_before_error(message)
-        raise RuntimeError(message)
-
-    identity_by_epoch = np.asarray(
-        [int(row["identity"]) for row in condition_rows],
-        dtype=int,
+    duplicates = sorted(
+        name for name, count in Counter(channels).items() if count > 1
     )
-    missing_identities = [
-        identity
-        for identity in identity_values
-        if int(np.sum(identity_by_epoch == identity)) == 0
-    ]
-    if missing_identities:
-        message = (
-            "Cannot export exactly 20 identity averages because some identities "
-            "have no surviving epochs.\n"
-            f"condition={condition_name}\n"
-            f"missing_identities={missing_identities}"
-        )
-        save_report_before_error(message)
-        raise RuntimeError(message)
-
-    # Load only this condition, then restrict to currently available canonical
-    # channels and crop before downsampling. No explicit `filter` call is made
-    # in this export step.
-    condition_epochs.load_data()
-    condition_epochs.pick(present_canonical_meg_channels)
-    # Guardrail: after picking, in-file channel order must match canonical
-    # order restricted to channels physically present in this FIF.
-    if list(condition_epochs.ch_names) != list(present_canonical_meg_channels):
+    if not channels or duplicates:
         raise RuntimeError(
-            "Condition-specific channel order mismatch before export.\n"
-            f"condition={condition_name}\n"
-            f"expected_first10={present_canonical_meg_channels[:10]}\n"
-            f"observed_first10={condition_epochs.ch_names[:10]}"
+            "Canonical MEG channel axis must be non-empty and unique: "
+            f"n_channels={len(channels)}, duplicates={duplicates}"
         )
-    condition_epochs.crop(tmin=export_tmin, tmax=export_tmax)
-    condition_epochs.resample(export_sfreq, npad="auto")
-    data = condition_epochs.get_data(copy=False)
+    if any(not name.startswith("MEG") for name in channels):
+        raise RuntimeError(
+            "Canonical dRSA channel axis may contain MEG channels only."
+        )
+    return channels
 
-    # Build per-identity averages for channels with available samples.
-    tensor_present = np.empty((len(identity_values), data.shape[1], data.shape[2]), dtype=float)
-    counts_by_identity = {}
-    for identity in identity_values:
-        epoch_indices = np.flatnonzero(identity_by_epoch == identity)
-        counts_by_identity[identity] = int(len(epoch_indices))
-        tensor_present[identity - 1, :, :] = data[epoch_indices, :, :].mean(axis=0)
 
-    # Expand to canonical channel axis and keep bad/missing channels as NaN.
-    tensor = np.full(
-        (len(identity_values), len(canonical_meg_channel_names), data.shape[2]),
-        np.nan,
-        dtype=float,
+def _mat_string_column(values: list[str]) -> np.ndarray:
+    """Create a MATLAB-friendly string column with stable ordering."""
+    return np.asarray(values, dtype=object).reshape(-1, 1)
+
+
+def _condition_output_paths(
+    cfg: Mapping[str, Any],
+    output_dir: Path,
+    condition: str,
+) -> tuple[Path, Path]:
+    """Build one condition's MAT and JSON sidecar paths."""
+    subject = cfg["layout"]["subject_bids_id"]
+    session = cfg["layout"]["session_bids_id"]
+    stem = (
+        f"{subject}_{session}_task-Attention_condition-{condition}_"
+        "desc-identityAveraged_neural"
     )
-    present_idx_by_name = {name: idx for idx, name in enumerate(condition_epochs.ch_names)}
-    n_channels_with_signal = 0
-    nan_channels_this_condition = []
-    filled_channels_this_condition = []
-    for canonical_idx, ch_name in enumerate(canonical_meg_channel_names):
-        in_data = ch_name in present_idx_by_name
-        marked_bad = ch_name in marked_bad_channels
-        if in_data and not marked_bad:
-            tensor[:, canonical_idx, :] = tensor_present[:, present_idx_by_name[ch_name], :]
-            n_channels_with_signal += 1
-            filled_channels_this_condition.append(ch_name)
-        else:
-            nan_channels_this_condition.append(ch_name)
+    return output_dir / f"{stem}.mat", output_dir / f"{stem}.json"
 
-    mat_path = op.join(
-        drsa_output_dir,
-        (
-            f"sub-{subj_str}_ses-{ses_str}_task-Attention_"
-            f"condition-{condition_name}_desc-identityAveraged_neural.mat"
+
+# -----------------------------------------------------------------------------
+# Export workflow
+# -----------------------------------------------------------------------------
+
+
+def run_export(
+    cfg: Mapping[str, Any],
+    *,
+    source_manifest: str | Path,
+    overwrite: bool,
+    validate_only: bool = False,
+    print_summary: bool = False,
+) -> dict[str, Any]:
+    """
+    Validate the epoch contract and write one identity tensor per condition.
+
+    Returns a complete aggregate report suitable for source-manifest QC
+    references and downstream reproducibility checks.
+    """
+    raw_root = cfg["resolved_paths"]["data_root"]
+    export_cfg = cfg["export"]
+    paths = export_paths(cfg)
+    canonical_channels = load_canonical_meg_channels(paths["canonical_channels"])
+    trajectory_models = discover_trajectory_models(cfg)
+    identity_min, identity_max = cfg["subject_profile"]["identity_range"]
+    identities = list(range(int(identity_min), int(identity_max) + 1))
+    event_id = {
+        str(name): int(code)
+        for name, code in cfg["epoching"]["event_id_map"].items()
+    }
+
+    if not paths["epochs_fif"].is_file():
+        raise FileNotFoundError(f"Step-04 epochs FIF not found: {paths['epochs_fif']}")
+    if not paths["epoch_report_json"].is_file():
+        raise FileNotFoundError(
+            f"Step-04 machine report not found: {paths['epoch_report_json']}"
+        )
+    epoch_report = json.loads(
+        paths["epoch_report_json"].read_text(encoding="utf-8")
+    )
+    if epoch_report.get("status") != "completed":
+        raise RuntimeError("Step-04 report does not have status='completed'.")
+
+    manifest_path = Path(source_manifest).expanduser().resolve()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    epoch_lineage = (
+        manifest.get("derivative_lineage", {})
+        .get("stages", {})
+        .get("epoching")
+    )
+    if not isinstance(epoch_lineage, Mapping) or epoch_lineage.get("status") != "completed":
+        raise RuntimeError(
+            "Source manifest must contain completed epoching lineage before export."
+        )
+
+    for key in ("output_dir", "report_json", "report_html"):
+        guarded_path(paths[key], raw_root)
+    condition_paths = {
+        condition: _condition_output_paths(cfg, paths["output_dir"], condition)
+        for condition in event_id
+    }
+    for mat_path, json_path in condition_paths.values():
+        guarded_path(mat_path, raw_root)
+        guarded_path(json_path, raw_root)
+
+    setup = {
+        "stage": "export_drsa",
+        "status": "validated" if validate_only else "running",
+        "generated_utc": utc_now(),
+        "subject_bids_id": cfg["layout"]["subject_bids_id"],
+        "session_bids_id": cfg["layout"]["session_bids_id"],
+        "identity_values": identities,
+        "identity_count": len(identities),
+        "event_id_map": event_id,
+        "trajectory_models": trajectory_models,
+        "epoch_input": str(paths["epochs_fif"]),
+        "epoch_report": str(paths["epoch_report_json"]),
+        "source_manifest": str(manifest_path),
+        "canonical_meg_channels_file": str(paths["canonical_channels"]),
+        "n_canonical_meg_channels": len(canonical_channels),
+        "export_window_sec": [
+            float(export_cfg["tmin_sec"]),
+            float(export_cfg["tmax_sec"]),
+        ],
+        "sampling_rate_hz": float(export_cfg["sampling_rate_hz"]),
+        "missing_identity_policy": str(export_cfg["missing_identity_policy"]),
+        "bad_or_missing_channel_policy": str(
+            export_cfg["bad_or_missing_channel_policy"]
         ),
-    )
-    channel_labels = np.asarray(canonical_meg_channel_names, dtype=object).reshape(-1, 1)
-    savemat(
-        mat_path,
-        {"neural": tensor, "channel_labels": channel_labels},
-        do_compression=True,
-    )
-    print(f"Saved dRSA MAT tensor to: {mat_path}")
+        "inclusion_policy": {
+            "epoch_stage_trial_exclusion": epoch_report["trial_exclusion_policy"],
+            "epoch_stage_annotation_rejection": epoch_report["annotation_policy"],
+            "export": (
+                "All surviving epochs are averaged within condition and "
+                "trial_sequence_identity. No additional trial rejection occurs."
+            ),
+        },
+        "condition_outputs": {
+            condition: {"mat": str(values[0]), "json": str(values[1])}
+            for condition, values in condition_paths.items()
+        },
+    }
+    if print_summary:
+        print(json.dumps(setup, indent=2, sort_keys=True))
+    if validate_only:
+        return setup
 
-    export_summaries.append(
-        {
-            "condition": condition_name,
-            "condition_code": condition_code,
-            "mat_path": mat_path,
-            "tensor_shape": tuple(int(value) for value in tensor.shape),
-            "n_input_epochs": int(len(condition_epochs)),
-            "counts_by_identity": counts_by_identity,
-            "sfreq": float(condition_epochs.info["sfreq"]),
-            "n_times": int(len(condition_epochs.times)),
-            "time_start": float(condition_epochs.times[0]),
-            "time_end": float(condition_epochs.times[-1]),
-            "n_meg_channels": int(len(canonical_meg_channel_names)),
-            "n_meg_channels_present_in_epochs": int(len(condition_epochs.ch_names)),
-            "n_meg_channels_with_signal": int(n_channels_with_signal),
-            "n_meg_channels_nan": int(len(nan_channels_this_condition)),
-            "first_channels_with_signal": filled_channels_this_condition[:10],
-            "first_channels_nan": nan_channels_this_condition[:10],
-            "mat_variables": ["neural", "channel_labels"],
+    ensure_output_directory(paths["output_dir"], raw_root)
+    ensure_output_directory(paths["report_json"].parent, raw_root)
+    prepare_output_path(
+        paths["report_json"],
+        raw_root=raw_root,
+        overwrite=overwrite,
+    )
+    prepare_output_path(
+        paths["report_html"],
+        raw_root=raw_root,
+        overwrite=overwrite,
+    )
+    for mat_path, json_path in condition_paths.values():
+        prepare_output_path(mat_path, raw_root=raw_root, overwrite=overwrite)
+        prepare_output_path(json_path, raw_root=raw_root, overwrite=overwrite)
+
+    epochs = mne.read_epochs(paths["epochs_fif"], preload=False, verbose=False)
+    if epochs.metadata is None:
+        raise RuntimeError("Epochs file has no metadata.")
+    required_metadata = {
+        "trial_sequence_identity",
+        "condition_name",
+        "source_fif",
+        "acquisition_run",
+        "raw_sample_frame",
+        "exclusion_reasons",
+        "is_replay_trial",
+    }
+    missing_metadata = required_metadata.difference(epochs.metadata.columns)
+    if missing_metadata:
+        raise RuntimeError(
+            "Epoch metadata is missing export contract columns: "
+            f"{sorted(missing_metadata)}"
+        )
+    if {
+        name: int(code) for name, code in epochs.event_id.items()
+    } != event_id:
+        raise RuntimeError(
+            f"Epoch event map mismatch: expected={event_id}, observed={epochs.event_id}"
+        )
+    if float(export_cfg["tmin_sec"]) < float(epochs.tmin) or float(
+        export_cfg["tmax_sec"]
+    ) > float(epochs.tmax):
+        raise RuntimeError(
+            "Configured export window lies outside epoch boundaries: "
+            f"export={[export_cfg['tmin_sec'], export_cfg['tmax_sec']]}, "
+            f"epochs={[epochs.tmin, epochs.tmax]}"
+        )
+
+    meg_picks = mne.pick_types(
+        epochs.info,
+        meg=True,
+        eeg=False,
+        eog=False,
+        stim=False,
+        misc=False,
+        exclude=[],
+    )
+    available_meg = [epochs.ch_names[index] for index in meg_picks]
+    unexpected_meg = sorted(set(available_meg).difference(canonical_channels))
+    if unexpected_meg:
+        raise RuntimeError(
+            "Epochs contain MEG channels absent from the fixed canonical axis: "
+            f"{unexpected_meg}"
+        )
+    present_canonical = [
+        channel for channel in canonical_channels if channel in available_meg
+    ]
+    missing_canonical = [
+        channel for channel in canonical_channels if channel not in available_meg
+    ]
+    marked_bad = [
+        channel
+        for channel in canonical_channels
+        if channel in epochs.info.get("bads", [])
+    ]
+    signal_channels = [
+        channel for channel in present_canonical if channel not in marked_bad
+    ]
+    if not signal_channels:
+        raise RuntimeError("No usable canonical MEG channels remain for export.")
+
+    condition_reports: list[dict[str, Any]] = []
+    for condition, condition_code in event_id.items():
+        condition_epochs = epochs[condition].copy()
+        identities_by_epoch = condition_epochs.metadata[
+            "trial_sequence_identity"
+        ].to_numpy(dtype=int)
+        try:
+            counts, missing_identities = identity_coverage(
+                identities_by_epoch,
+                identities,
+                missing_policy=str(export_cfg["missing_identity_policy"]),
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(f"Condition {condition}: {exc}") from exc
+
+        condition_epochs.load_data()
+        condition_epochs.pick(present_canonical)
+        condition_epochs.reorder_channels(present_canonical)
+        condition_epochs.crop(
+            tmin=float(export_cfg["tmin_sec"]),
+            tmax=float(export_cfg["tmax_sec"]),
+        )
+        condition_epochs.resample(
+            float(export_cfg["sampling_rate_hz"]),
+            npad="auto",
+        )
+        data = condition_epochs.get_data(copy=False)
+        tensor = np.full(
+            (
+                len(identities),
+                len(canonical_channels),
+                data.shape[2],
+            ),
+            np.nan,
+            dtype=np.float64,
+        )
+        present_index = {
+            name: index for index, name in enumerate(condition_epochs.ch_names)
         }
+        canonical_index = {
+            name: index for index, name in enumerate(canonical_channels)
+        }
+        for identity_axis, identity in enumerate(identities):
+            epoch_indices = np.flatnonzero(identities_by_epoch == identity)
+            if len(epoch_indices) == 0:
+                continue
+            identity_mean = data[epoch_indices].mean(axis=0)
+            for channel in signal_channels:
+                tensor[
+                    identity_axis,
+                    canonical_index[channel],
+                    :,
+                ] = identity_mean[present_index[channel], :]
+
+        mat_path, sidecar_path = condition_paths[condition]
+        condition_report = {
+            "condition_name": condition,
+            "condition_code": condition_code,
+            "identity_values": identities,
+            "counts_by_identity": counts,
+            "missing_identities": missing_identities,
+            "tensor_shape": [int(value) for value in tensor.shape],
+            "ordered_channel_labels": canonical_channels,
+            "time_axis_sec": [float(value) for value in condition_epochs.times],
+            "sampling_rate_hz": float(condition_epochs.info["sfreq"]),
+            "marked_bad_channels": marked_bad,
+            "missing_canonical_channels": missing_canonical,
+            "nan_channel_labels": sorted(set(marked_bad + missing_canonical)),
+            "bad_or_missing_channel_policy": export_cfg[
+                "bad_or_missing_channel_policy"
+            ],
+            "excluded_non_meg_channel_types": ["misc", "eog", "stim", "ecg", "eeg"],
+            "trajectory_models": trajectory_models,
+            "event_id_map": event_id,
+            "source_lineage": {
+                "epochs_fif": str(paths["epochs_fif"]),
+                "epoch_report": str(paths["epoch_report_json"]),
+                "source_manifest": str(manifest_path),
+            },
+            "inclusion_policy": setup["inclusion_policy"],
+            "mat_path": str(mat_path),
+            "json_path": str(sidecar_path),
+        }
+        savemat(
+            mat_path,
+            {
+                "neural": tensor,
+                "channel_labels": _mat_string_column(canonical_channels),
+                "time_axis_sec": np.asarray(condition_epochs.times, dtype=float),
+                "sampling_rate_hz": np.asarray(
+                    [[condition_epochs.info["sfreq"]]],
+                    dtype=float,
+                ),
+                "identity_values": np.asarray(identities, dtype=int).reshape(-1, 1),
+                "condition_name": np.asarray([[condition]], dtype=object),
+                "condition_code": np.asarray([[condition_code]], dtype=int),
+                "bad_channel_labels": _mat_string_column(marked_bad),
+                "missing_channel_labels": _mat_string_column(missing_canonical),
+                "bad_or_missing_channel_policy": np.asarray(
+                    [[export_cfg["bad_or_missing_channel_policy"]]],
+                    dtype=object,
+                ),
+                "observed_model_path": np.asarray(
+                    [[trajectory_models["observed"]]],
+                    dtype=object,
+                ),
+                "expected_model_source_condition": np.asarray(
+                    [[trajectory_models["expected_source_condition"]]],
+                    dtype=object,
+                ),
+            },
+            do_compression=True,
+        )
+        write_json(
+            sidecar_path,
+            condition_report,
+            raw_root=raw_root,
+            overwrite=True,
+        )
+        condition_reports.append(condition_report)
+
+    report = {
+        **setup,
+        "status": "completed",
+        "finished_utc": utc_now(),
+        "channel_axis": {
+            "ordered_channel_labels": canonical_channels,
+            "n_channels": len(canonical_channels),
+            "present_channels": present_canonical,
+            "missing_channels": missing_canonical,
+            "marked_bad_channels": marked_bad,
+            "signal_channels": signal_channels,
+            "non_meg_channels_omitted_without_source_modification": True,
+        },
+        "conditions": condition_reports,
+    }
+    write_json(paths["report_json"], report, raw_root=raw_root, overwrite=True)
+    write_simple_html_report(
+        paths["report_html"],
+        title=f"{cfg['layout']['subject_bids_id']} | 06 dRSA Export",
+        summary_lines=[
+            "Stage status: completed",
+            f"Identity count: {len(identities)}",
+            f"Canonical MEG channels: {len(canonical_channels)}",
+            f"Marked bad channels exported as NaN: {marked_bad}",
+            f"Missing channels exported as NaN: {missing_canonical}",
+            f"Conditions: {list(event_id)}",
+            f"Machine report: {paths['report_json']}",
+        ],
+        image_paths=[],
+        raw_root=raw_root,
     )
-
-    del condition_epochs
-    del data
-    del tensor_present
-    del tensor
-
-# %%
-# -------------------------------------------------------------------------
-# Final output summaries and report save
-# -------------------------------------------------------------------------
-summary_lines = ["dRSA neural export completed successfully."]
-summary_lines.append(
-    "Export channel set: MEG only (canonical fixed list); "
-    f"n_meg_channels={len(canonical_meg_channel_names)}; "
-    f"channel_type_counts={dict(sorted(channel_type_counts.items()))}"
-)
-summary_lines.append(f"Marked bad channels (epochs): {marked_bad_channels}")
-summary_lines.append(f"Canonical channel file: {canonical_channels_txt}")
-summary_lines.append(f"Canonical channels missing from this epochs file: {missing_canonical_meg_channels}")
-summary_lines.append(f"Unexpected MEG channels not present in canonical list: {unexpected_meg_channels}")
-summary_lines.append(
-    "Bad/missing channels are preserved in channel_labels and exported as NaN in neural."
-)
-for item in export_summaries:
-    summary_lines.extend(
-        [
-            "",
-            f"Condition: {item['condition']} ({item['condition_code']})",
-            f"  mat_path={item['mat_path']}",
-            f"  mat_variables={item['mat_variables']}",
-            f"  tensor_shape={item['tensor_shape']}",
-            f"  n_input_epochs={item['n_input_epochs']}",
-            f"  counts_by_identity={item['counts_by_identity']}",
-            f"  sfreq={item['sfreq']}",
-            f"  n_times={item['n_times']}",
-            f"  time_range=[{item['time_start']}, {item['time_end']}] sec",
-            f"  n_meg_channels={item['n_meg_channels']}",
-            f"  n_meg_channels_present_in_epochs={item['n_meg_channels_present_in_epochs']}",
-            f"  n_meg_channels_with_signal={item['n_meg_channels_with_signal']}",
-            f"  n_meg_channels_nan={item['n_meg_channels_nan']}",
-            f"  first_channels_with_signal={item['first_channels_with_signal']}",
-            f"  first_channels_nan={item['first_channels_nan']}",
-        ]
+    manifest_status = update_source_manifest_stage(
+        manifest_path=manifest_path,
+        raw_root=raw_root,
+        stage_name="export_drsa",
+        processing_pass="apply",
+        records=[
+            {
+                "input_path": str(paths["epochs_fif"]),
+                "output_path": item["mat_path"],
+                "status": "completed",
+                "condition_name": item["condition_name"],
+                "condition_code": item["condition_code"],
+                "tensor_shape": item["tensor_shape"],
+            }
+            for item in condition_reports
+        ],
+        status="completed",
+        qc={
+            "report_json": str(paths["report_json"]),
+            "report_html": str(paths["report_html"]),
+            "identity_count": len(identities),
+            "canonical_meg_channels_file": str(paths["canonical_channels"]),
+            "bad_or_missing_channel_policy": export_cfg[
+                "bad_or_missing_channel_policy"
+            ],
+        },
     )
+    report["source_manifest_update"] = manifest_status
+    write_json(paths["report_json"], report, raw_root=raw_root, overwrite=True)
+    if print_summary:
+        print(
+            json.dumps(
+                {
+                    "identity_count": len(identities),
+                    "conditions": [
+                        {
+                            "name": item["condition_name"],
+                            "tensor_shape": item["tensor_shape"],
+                            "missing_identities": item["missing_identities"],
+                        }
+                        for item in condition_reports
+                    ],
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+    return report
 
-log_to_console_and_report(
-    "\n".join(summary_lines),
-    title="Final export summary",
-    section="Outputs",
-    tags=("outputs", "drsa"),
-)
 
-report.save(out_report, overwrite=True, open_browser=False)
-print(f"Saved HTML report to: {out_report}")
+def main() -> int:
+    """Resolve configuration and execute the dRSA export stage."""
+    args = build_arg_parser().parse_args()
+    if args.resume and args.overwrite:
+        raise SystemExit("--resume and --overwrite are mutually exclusive.")
+    cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
+        args.config,
+        args.subject_config,
+        args.tuning_config,
+        site_config_path=args.site_config,
+        required_sections=("epoching", "export"),
+    )
+    if warnings and args.print_summary:
+        print(json.dumps({"configuration_warnings": warnings}, indent=2))
+    paths = export_paths(cfg)
+    if args.resume and paths["report_json"].is_file():
+        print(f"Resumed existing dRSA export report: {paths['report_json']}")
+        return 0
+    run_export(
+        cfg,
+        source_manifest=args.source_manifest,
+        overwrite=bool(args.overwrite or cfg["runtime"]["overwrite_existing"]),
+        validate_only=args.validate_only,
+        print_summary=args.print_summary,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

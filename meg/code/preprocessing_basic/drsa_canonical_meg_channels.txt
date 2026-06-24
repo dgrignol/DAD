@@ -1,6 +1,6 @@
 # Canonical MEG channel labels for dRSA MAT exports
 # One channel label per line. Order is export order.
-# Auto-generated from the first successful run.
+# Repository-owned fixed Neuromag channel axis; export never modifies this file.
 MEG0111
 MEG0112
 MEG0113
