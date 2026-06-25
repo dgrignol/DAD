@@ -1100,14 +1100,23 @@ def _include_plot_entry_in_report(entry: Mapping[str, Any]) -> bool:
 
     Data flow:
     all generated plot metadata -> report-facing subset. Real-neural interval
-    lag reports are kept focused on plots that overlay more than one condition,
-    while simulations remain unchanged because their comparison structure does
-    not always map onto the three real-neural conditions.
+    lag reports are kept focused on plots that overlay more than one condition.
+    Prediction-error models are also retained even though they are inherently
+    single-condition occluded-deviant summaries. Simulations remain unchanged
+    because their comparison structure does not always map onto the three
+    real-neural conditions.
     """
     if entry.get("plot_type") != "interval_lag_curve":
         return True
     analysis_family = str(entry.get("analysis_family", ""))
     if analysis_family.startswith("simulations"):
+        return True
+    model_sources = {
+        str(source)
+        for source in entry.get("model_sources", ())
+        if str(source).strip()
+    }
+    if "prediction_error" in model_sources:
         return True
     conditions = {
         str(condition)
@@ -1201,8 +1210,9 @@ def _write_report(
             "</ul></nav>",
             (
                 "<p><strong>Report filter:</strong> non-simulation interval lag "
-                "curves with only one condition are omitted from this report; "
-                "simulation interval lag curves are unchanged. "
+                "curves with only one condition are omitted unless they are "
+                "prediction-error summaries; simulation interval lag curves are "
+                "unchanged. "
                 f"Omitted generated figures: {omitted_entries}.</p>"
             ),
             skipped_block,
