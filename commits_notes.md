@@ -1,3 +1,19 @@
+# 26 Jun 2026 19:09
+
+## Add SAMBA poster results reasoning note
+
+### `paper/samba_poster_results_reasoning.md`
+- Add a decision document for the SAMBA poster that argues for a cautious framing around dynamic updating of moving-object position representations after occlusion.
+- Summarize the current pilot evidence from occipital dRSA lag summaries, dot-side decoding, and time-generalization sanity checks, emphasizing actual-trajectory information after reappearance over a strong prediction-error claim.
+- Record the local methods, pipeline, report, result-presentation, and literature sources used to ground the poster reasoning.
+- Define poster-ready framing elements: title directions, intro logic, research question, working hypotheses, result-panel priorities, discussion language, and a claim hierarchy.
+- Identify current limitations, including small `N=7`, pilot-stack heterogeneity, display-only smoothing, descriptive dRSA interpretation, and the need for subject-level contrasts.
+- Add ready-to-run follow-up prompts for direct dRSA contrasts, group ERF reappearance contrasts, direction/curvature dRSA, actual-vs-predicted dot-side decoding contrasts, prediction-error model comparison, and robustness/confound checks.
+- End with a poster-safe bottom-line claim that dynamic position coding appears to align rapidly with the actually reappearing trajectory while direct prediction-error evidence remains to be quantified.
+
+Suggested commit message:
+`Add SAMBA poster results reasoning note`
+
 # 26 Jun 2026 19:08
 
 ## Add dRSA sliding lag surface summaries
