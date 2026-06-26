@@ -14,6 +14,8 @@ The automatic MEGNet branch is deprecated and is never submitted.
 - `submit_preprocessing_apply.sh`: Stage-03 apply array job.
 - `submit_epoch_export.sh`: Stage-04 epoching then Stage-06 export array job.
 - `submit_drsa_analysis.sh`: optional Stage-07 MATLAB dRSA array job.
+- `submit_drsa_group_average.sh`: optional Stage-07 numeric group-average report job.
+- `submit_drsa_line_summaries.sh`: optional Stage-08 dRSA line-summary report job.
 - `submit_dot_side_decoding.sh`: optional dot-side sanity-check array job.
 - `submit_dot_side_group_report.sh`: optional dot-side group report job.
 - `submit_dot_side_time_generalization.sh`: optional dot-side matrix decoding array job.
@@ -450,13 +452,24 @@ qsub -v DAD_DRSA_ANALYSES=alt,DAD_DRSA_CONDITIONS=occluded_deviant,DAD_DRSA_SENS
 Build the numeric group-average report once after all subject jobs finish:
 
 ```bash
-python meg/code/preprocessing_basic/07_run_matlab_drsa.py \
-  --config meg/params/pipeline_default.yaml \
-  --site-config meg/params/pipeline_cluster.yaml \
-  --subject-config meg/params/sub-01.yaml \
-  --group-average-only \
-  --group-subjects 01 02 03 04 05 06 07 \
-  --smoothing-plots
+qsub -hold_jid <stage07_job_id> meg/cluster/submit_drsa_group_average.sh
+```
+
+The group-average wrapper always runs `--group-average-only` and
+`--print-summary`. It defaults to subjects `01..07`, the standard cluster
+configuration files, and smoothed group figures. Override the useful knobs with
+environment variables when needed:
+
+```bash
+export DAD_DRSA_GROUP_CONFIG=/path/to/pipeline_default.yaml
+export DAD_DRSA_GROUP_SITE_CONFIG=/path/to/pipeline_cluster.yaml
+export DAD_DRSA_GROUP_SUBJECT_CONFIG=/path/to/sub-01.yaml
+export DAD_DRSA_GROUP_SUBJECTS=01,02,03,04,05,06,07
+export DAD_DRSA_GROUP_SMOOTHING_PLOTS=1
+export DAD_DRSA_GROUP_PLOT_SMOOTHING_WINDOW=9
+
+qsub -v DAD_DRSA_GROUP_CONFIG,DAD_DRSA_GROUP_SITE_CONFIG,DAD_DRSA_GROUP_SUBJECT_CONFIG,DAD_DRSA_GROUP_SUBJECTS,DAD_DRSA_GROUP_SMOOTHING_PLOTS,DAD_DRSA_GROUP_PLOT_SMOOTHING_WINDOW \
+  -hold_jid <stage07_job_id> meg/cluster/submit_drsa_group_average.sh
 ```
 
 The group report is written to:
@@ -723,6 +736,16 @@ train-time x test-time lattice. A group cell is included only when every
 included subject has a finite value, so clusters cannot bridge NaN cells from
 skipped participant train/test windows. Significant 2D clusters are shaded and
 outlined in red on the group mean matrix.
+
+The detailed 2D cluster table is omitted from the HTML report by default so
+the group report stays compact. Regenerate with the explicit opt-in variable
+when the per-cluster train/test ranges, masses, and p-values should be shown
+inline:
+
+```bash
+qsub -v DAD_REBUILD=1,DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE=1 \
+  meg/cluster/submit_dot_side_time_generalization_group_report.sh
+```
 
 Change the cluster-forming threshold or run a two-sided test:
 

@@ -1,3 +1,46 @@
+# 26 Jun 2026 19:07
+
+## Add cluster report controls and dRSA group-average wrapper
+
+### `meg/cluster/README.md`
+- Register `submit_drsa_group_average.sh` in the cluster script list as the optional Stage-07 numeric group-average report job.
+- Replace the manual group-average Python command with a `qsub -hold_jid` workflow for running the report after Stage-07 subject jobs finish.
+- Document the group-average wrapper's config, site-config, representative subject-config, subject-list, smoothing, and smoothing-window environment overrides.
+- Add the explicit opt-in command for including detailed 2D dot-side time-generalization cluster tables in the HTML report.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+- Include `meg/cluster/submit_drsa_group_average.sh` in the minimal cluster deployment payload so group-average aggregation is available after upload.
+
+### `meg/cluster/submit_dot_side_time_generalization_group_report.sh`
+- Add `DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE` as a validated `0`/`1` wrapper control.
+- Forward `--include-cluster-table` to the Python group-report script only when the opt-in variable is enabled.
+- Update submission examples, environment-variable documentation, and runtime logging to show whether detailed 2D cluster tables are included.
+
+### `meg/cluster/submit_drsa_group_average.sh`
+- Add a one-task SGE wrapper that builds the optional Stage-07 numeric group-average dRSA report from existing subject-level MATLAB result MAT files.
+- Activate the shared micromamba environment, configure headless plotting/cache paths, validate required configs and Python helpers, and print MAT-reader versions before aggregation.
+- Run `07_run_matlab_drsa.py --group-average-only --group-subjects ... --print-summary`, with documented controls for subject selection, smoothed group figures, and plot smoothing window.
+
+### `meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py`
+- Add `--include-cluster-table` to keep the detailed per-cluster HTML table opt-in while preserving cluster overlays and JSON metadata by default.
+- Record `include_cluster_table` in validate-only and completed machine reports.
+- Include a summary line that states whether the cluster table was included or omitted in the generated HTML.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Document that detailed 2D cluster tables are omitted from HTML reports by default and can be restored with the script flag or cluster wrapper environment variable.
+
+### `meg/tests/test_cluster_wrappers.py`
+- Add the new group-average wrapper to shell syntax coverage and deployment-payload checks.
+- Verify the dot-side time-generalization group wrapper exposes the cluster-table opt-in control.
+- Add coverage that the Stage-07 group-average wrapper exposes config, subject, smoothing, `--group-average-only`, `--group-subjects`, and `--print-summary` controls.
+
+### `meg/tests/test_dot_side_time_generalization.py`
+- Update the group-report HTML test to assert detailed 2D cluster tables are omitted by default.
+- Add an explicit `--include-cluster-table` run that verifies the machine-report flag and embedded HTML table heading are present when requested.
+
+Suggested commit message:
+`Add cluster report controls and dRSA group-average wrapper`
+
 # 26 Jun 2026 19:06
 
 ## Preserve undefined dRSA smoothing support

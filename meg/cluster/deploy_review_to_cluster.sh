@@ -94,6 +94,7 @@ FILES=(
     "meg/cluster/submit_preprocessing_apply.sh"
     "meg/cluster/submit_epoch_export.sh"
     "meg/cluster/submit_drsa_analysis.sh"
+    "meg/cluster/submit_drsa_group_average.sh"
     "meg/cluster/submit_drsa_line_summaries.sh"
     "meg/cluster/submit_dot_side_decoding.sh"
     "meg/cluster/submit_dot_side_group_report.sh"

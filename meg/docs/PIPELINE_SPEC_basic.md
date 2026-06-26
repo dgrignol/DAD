@@ -687,6 +687,10 @@ train-time x test-time lattice using 4-neighbor adjacency; the default
 cluster-forming threshold is `p=0.05`, cluster alpha is `0.05`, and subjects
 01-07 use exact sign flips by default. Group plots show the valid-cell group
 mean matrix with significant 2D clusters shaded and outlined in red.
+Detailed 2D cluster tables are omitted from HTML reports by default; add
+`--include-cluster-table` to the group-report script, or set
+`DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE=1` in the cluster wrapper, when the
+per-cluster train/test ranges, masses, and p-values should be shown inline.
 Optional `--smooth-sigma-samples` applies isotropic Gaussian smoothing to each
 subject matrix before group statistics and plotting. Smoothing is constrained
 to finite connected train/test components, so skipped cells remain NaN and 2D

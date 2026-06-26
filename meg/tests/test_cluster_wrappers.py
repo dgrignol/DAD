@@ -23,6 +23,7 @@ import subprocess
 REPO_ROOT = Path(__file__).resolve().parents[2]
 APPLY_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_preprocessing_apply.sh"
 DRSA_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_drsa_analysis.sh"
+DRSA_GROUP_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_drsa_group_average.sh"
 DRSA_LINE_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_drsa_line_summaries.sh"
 DOT_SIDE_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_dot_side_decoding.sh"
 DOT_SIDE_GROUP_WRAPPER = REPO_ROOT / "meg" / "cluster" / "submit_dot_side_group_report.sh"
@@ -89,6 +90,7 @@ def test_drsa_and_deploy_wrappers_have_valid_bash_syntax():
     """Cluster submission/deployment shell scripts must parse before upload."""
     for script in (
         DRSA_WRAPPER,
+        DRSA_GROUP_WRAPPER,
         DRSA_LINE_WRAPPER,
         DOT_SIDE_WRAPPER,
         DOT_SIDE_GROUP_WRAPPER,
@@ -113,6 +115,7 @@ def test_deploy_payload_includes_matlab_analysis_layer():
     assert '"meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py"' in text
     assert '"meg/code/preprocessing_basic/drsa_result_utils.py"' in text
     assert '"meg/cluster/submit_drsa_analysis.sh"' in text
+    assert '"meg/cluster/submit_drsa_group_average.sh"' in text
     assert '"meg/cluster/submit_drsa_line_summaries.sh"' in text
     assert '"simulations/functions/"' in text
 
@@ -171,6 +174,8 @@ def test_dot_side_time_generalization_wrappers_expose_cluster_controls():
     assert "DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES" in group_text
     assert "DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES" in group_text
     assert "--smooth-sigma-samples" in group_text
+    assert "DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE" in group_text
+    assert "--include-cluster-table" in group_text
     assert "DAD_CLUSTER_FORMING_P" in group_text
     assert "DAD_CLUSTER_ALPHA" in group_text
     assert "DAD_CLUSTER_TAIL" in group_text
@@ -190,6 +195,21 @@ def test_drsa_line_summary_wrapper_exposes_stage08_controls():
     assert "--shading" in text
     assert "--interval-lag-mode" in text
     assert "08_plot_drsa_line_summaries.py" in text
+
+
+def test_drsa_group_average_wrapper_exposes_stage07_controls():
+    """The Stage-07 group-average wrapper should expose useful cluster controls."""
+    text = DRSA_GROUP_WRAPPER.read_text(encoding="utf-8")
+    assert "DAD_DRSA_GROUP_CONFIG" in text
+    assert "DAD_DRSA_GROUP_SITE_CONFIG" in text
+    assert "DAD_DRSA_GROUP_SUBJECT_CONFIG" in text
+    assert "DAD_DRSA_GROUP_SUBJECTS" in text
+    assert "DAD_DRSA_GROUP_SMOOTHING_PLOTS" in text
+    assert "DAD_DRSA_GROUP_PLOT_SMOOTHING_WINDOW" in text
+    assert "--group-average-only" in text
+    assert "--group-subjects" in text
+    assert "--print-summary" in text
+    assert "07_run_matlab_drsa.py" in text
 
 
 def test_drsa_wrapper_exposes_model_source_controls():

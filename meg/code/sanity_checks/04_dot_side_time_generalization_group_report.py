@@ -29,7 +29,13 @@ Usage examples
      --analyses all --group-subjects 01 02 03 04 05 06 07 \
      --smooth-sigma-samples 1.0 --overwrite
 
-4) Run against cluster paths from the deployed DAD directory:
+4) Include the detailed 2D cluster table in the HTML report:
+
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
+     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --include-cluster-table --overwrite
+
+5) Run against cluster paths from the deployed DAD directory:
 
    python meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
      --config meg/params/pipeline_default.yaml \
@@ -61,6 +67,10 @@ Statistical policy
   separately inside each subject's finite connected train/test components
   before group statistics and plotting. NaN cells remain NaN so clusters
   cannot bridge skipped train/test cells.
+- The detailed HTML table listing every 2D cluster is omitted by default to
+  keep the report compact. Use ``--include-cluster-table`` when exact cluster
+  ranges, masses, and p-values should be shown inline; JSON outputs always
+  retain the cluster metadata.
 """
 
 from __future__ import annotations
@@ -167,6 +177,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="0 uses exact sign flips when feasible and otherwise 5000 random flips.",
     )
     parser.add_argument("--random-seed", type=int, default=42)
+    parser.add_argument(
+        "--include-cluster-table",
+        action="store_true",
+        help=(
+            "Include the detailed 2D cluster table in each group-analysis "
+            "HTML section. Cluster metadata is always retained in JSON."
+        ),
+    )
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--print-summary", action="store_true")
@@ -1056,6 +1074,7 @@ def write_combined_html_report(
     analysis_results: list[Mapping[str, Any]],
     raw_root: Path,
     embed_images: bool,
+    include_cluster_table: bool,
 ) -> Path:
     """Write one report with all group matrices before participant sections."""
     report_path = LINE_GROUP.guarded_path(path, raw_root)
@@ -1072,6 +1091,13 @@ def write_combined_html_report(
 
     group_sections: list[str] = []
     for result in analysis_results:
+        cluster_table_html = ""
+        if include_cluster_table:
+            # The cluster table can be long for full train/test matrices, so it
+            # is opt-in while the plotted overlays and JSON metadata stay on.
+            cluster_table_html = (
+                "<h4>2D clusters</h4>" + _cluster_table_html(result["clusters"])
+            )
         group_sections.append(
             "".join(
                 [
@@ -1087,8 +1113,7 @@ def write_combined_html_report(
                         ),
                         embed=embed_images,
                     ),
-                    "<h4>2D clusters</h4>",
-                    _cluster_table_html(result["clusters"]),
+                    cluster_table_html,
                     "<h4>Diagnostics</h4>",
                     _analysis_diagnostics_html(result),
                     _skipped_inputs_html(result["skipped_inputs"]),
@@ -1343,6 +1368,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             "status": "validated",
             "analysis_keys": [result["key"] for result in analysis_results],
             "metric": args.metric,
+            "include_cluster_table": bool(args.include_cluster_table),
             "analyses": {
                 result["key"]: {
                     "subjects_requested": result["subjects_requested"],
@@ -1370,6 +1396,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         f"2D cluster-forming p: {args.cluster_forming_p:g}",
         f"Cluster alpha: {args.cluster_alpha:g}",
         f"Smoothing sigma samples: {args.smooth_sigma_samples:g}",
+        f"Cluster table in HTML: {'included' if args.include_cluster_table else 'omitted'}",
         f"Machine report: {output_paths['report_json']}",
     ]
     report = {
@@ -1385,6 +1412,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         "cluster_forming_p": float(args.cluster_forming_p),
         "cluster_alpha": float(args.cluster_alpha),
         "smooth_sigma_samples": float(args.smooth_sigma_samples),
+        "include_cluster_table": bool(args.include_cluster_table),
         "occlusion_timing": occlusion_timing,
         "analyses": {
             result["key"]: {
@@ -1417,6 +1445,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         analysis_results=analysis_results,
         raw_root=raw_root,
         embed_images=False,
+        include_cluster_table=bool(args.include_cluster_table),
     )
     write_combined_html_report(
         output_paths["report_embedded_html"],
@@ -1426,6 +1455,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         analysis_results=analysis_results,
         raw_root=raw_root,
         embed_images=True,
+        include_cluster_table=bool(args.include_cluster_table),
     )
     return report
 

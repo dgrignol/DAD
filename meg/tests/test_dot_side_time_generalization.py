@@ -312,6 +312,7 @@ def test_group_report_builds_matrix_report_and_group_first_html(tmp_path):
     report = tg_group.build_group_report(cfg, args)
 
     assert report["status"] == "completed"
+    assert report["include_cluster_table"] is False
     analysis = report["analyses"]["always_visible_observed"]
     assert Path(analysis["group_figure"]).is_file()
     assert Path(analysis["group_matrix_npz"]).is_file()
@@ -320,5 +321,25 @@ def test_group_report_builds_matrix_report_and_group_first_html(tmp_path):
     assert html_text.index('id="group-analyses"') < html_text.index(
         'id="participants"'
     )
-    assert "2D clusters" in html_text
+    assert "<h4>2D clusters</h4>" not in html_text
     assert "Participant-specific matrices" in html_text
+
+    table_args = tg_group.build_arg_parser().parse_args(
+        [
+            "--analyses",
+            "always_visible_observed",
+            "--group-subjects",
+            "01",
+            "02",
+            "--n-permutations",
+            "8",
+            "--include-cluster-table",
+            "--overwrite",
+        ]
+    )
+    table_report = tg_group.build_group_report(cfg, table_args)
+    assert table_report["include_cluster_table"] is True
+    table_html = Path(table_report["report_files"]["embedded_html"]).read_text(
+        encoding="utf-8"
+    )
+    assert "<h4>2D clusters</h4>" in table_html
