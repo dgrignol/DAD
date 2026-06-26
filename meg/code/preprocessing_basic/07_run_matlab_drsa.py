@@ -106,6 +106,7 @@ from drsa_result_utils import (
     analysis_family_from_path,
     model_source_from_path,
     model_time_axis_label,
+    smooth_matrix_for_plot as shared_smooth_matrix_for_plot,
     stimulus_model_label,
 )
 from pipeline_config import (
@@ -1247,23 +1248,13 @@ def _read_drsa_result_matrices(path: Path) -> tuple[dict[str, Any], Any | None]:
 
 
 def _smooth_matrix_for_plot_python(matrix_2d: Any, window_samples: int):
-    """Apply NaN-aware Gaussian smoothing to one 2-D display matrix."""
-    import numpy as np
-    from scipy.ndimage import gaussian_filter
+    """
+    Apply the shared display smoother used by Stage 08 line summaries.
 
-    matrix = np.asarray(matrix_2d, dtype=float)
-    if window_samples <= 1:
-        return matrix.copy()
-    sigma = max(float(window_samples) / 6.0, 0.5)
-    finite = np.isfinite(matrix)
-    values = np.where(finite, matrix, 0.0)
-    weights = finite.astype(float)
-    smooth_values = gaussian_filter(values, sigma=sigma, mode="nearest")
-    smooth_weights = gaussian_filter(weights, sigma=sigma, mode="nearest")
-    with np.errstate(invalid="ignore", divide="ignore"):
-        smoothed = smooth_values / smooth_weights
-    smoothed[smooth_weights <= 1e-12] = np.nan
-    return smoothed
+    Keeping this thin wrapper lets the Stage-07 group-average plotting path
+    preserve the same undefined matrix support as the exploratory summaries.
+    """
+    return shared_smooth_matrix_for_plot(matrix_2d, window_samples)
 
 
 def _smooth_array_for_plot(matrix: Any, window_samples: int):

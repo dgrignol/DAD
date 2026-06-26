@@ -34,6 +34,7 @@ from drsa_result_utils import (  # noqa: E402
     model_source_for_matrix_slice,
     occlusion_timing_from_config,
     read_drsa_result_file,
+    smooth_matrix_for_plot,
 )
 
 
@@ -294,6 +295,36 @@ def test_nan_values_are_handled_safely():
     )
     np.testing.assert_allclose(sem[0], 1.0)
     assert np.isnan(sem[1])
+
+
+def test_smoothed_prediction_error_mask_does_not_create_pre_occlusion_curve():
+    """
+    Display smoothing must not turn undefined PE rows into lag-curve samples.
+
+    Prediction-error model matrices are undefined before the paths diverge. The
+    regression here mirrors that support: model-time rows before 1.0 s are NaN,
+    rows from 1.0 s onward are finite. The smoothed-display variant may smooth
+    inside the finite block, but the pre-occlusion lag curve must stay empty.
+    """
+    time_axis = np.arange(20, dtype=float) / 10.0
+    pre_occlusion_mask = time_axis < 1.0
+    matrix = np.full((20, 20), np.nan)
+    for model_idx in range(10, 20):
+        for neural_idx in range(20):
+            matrix[model_idx, neural_idx] = float(model_idx + neural_idx)
+
+    smoothed = smooth_matrix_for_plot(matrix, 9)
+    lag_samples = np.arange(-5, 6)
+    curve = STAGE08.compute_interval_lag_curve(
+        smoothed,
+        lag_samples,
+        pre_occlusion_mask,
+        interval_lag_mode="model-anchored",
+    )
+
+    assert not np.isfinite(smoothed[pre_occlusion_mask, :]).any()
+    assert np.isfinite(smoothed[~pre_occlusion_mask, :]).any()
+    assert np.isnan(curve).all()
 
 
 def test_occlusion_frame_to_second_conversion_is_one_based():

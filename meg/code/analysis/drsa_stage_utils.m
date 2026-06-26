@@ -360,16 +360,20 @@ classdef drsa_stage_utils
 
         function smoothed_matrix = smooth_matrix_for_plot(matrix_2d, window_samples)
             % Smooth one dRSA matrix for display-only PNG export.
+            % Undefined cells mark analysis support, so restore that mask after
+            % smoothing to avoid displaying or summarizing impossible regions.
             if nargin < 2 || isempty(window_samples)
                 window_samples = 9;
             end
             window_samples = max(1, round(double(window_samples)));
             smoothed_matrix = double(matrix_2d);
+            finite_mask = isfinite(smoothed_matrix);
             if window_samples <= 1
                 return;
             end
             smoothed_matrix = smoothdata(smoothed_matrix, 1, 'gaussian', window_samples);
             smoothed_matrix = smoothdata(smoothed_matrix, 2, 'gaussian', window_samples);
+            smoothed_matrix(~finite_mask) = NaN;
         end
 
         function label = stimulus_model_label(condition_name, model_source, feature_name)

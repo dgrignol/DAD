@@ -6,8 +6,9 @@ Purpose
 Shared Python helpers for lightweight post-processing of Stage-07 dRSA result
 MAT files. The helpers read MATLAB v7 and v7.3 result files, normalize dRSA
 matrix arrays, infer metadata from the Stage-07 folder layout, smooth matrices
-for display-only summaries, convert occlusion frames to seconds, and create
-self-contained embedded HTML copies of static reports.
+for display-only summaries while preserving undefined matrix support, convert
+occlusion frames to seconds, and create self-contained embedded HTML copies of
+static reports.
 
 Usage examples
 1) Read all dRSA matrices from one Stage-07 result file:
@@ -395,7 +396,9 @@ def smooth_matrix_for_plot(matrix_2d: Any, window_samples: int):
     Apply NaN-aware Gaussian smoothing to one 2-D display matrix.
 
     This is display-only smoothing for exploratory summaries. It does not
-    require or write smoothed MAT files.
+    require or write smoothed MAT files. Cells that are non-finite before
+    smoothing remain NaN afterward, so masks such as undefined prediction-error
+    rows cannot leak into interval summaries or display-only group averages.
     """
     import numpy as np
     from scipy.ndimage import gaussian_filter
@@ -412,6 +415,7 @@ def smooth_matrix_for_plot(matrix_2d: Any, window_samples: int):
     with np.errstate(invalid="ignore", divide="ignore"):
         smoothed = smooth_values / smooth_weights
     smoothed[smooth_weights <= 1e-12] = np.nan
+    smoothed[~finite] = np.nan
     return smoothed
 
 

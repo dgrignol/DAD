@@ -1,3 +1,33 @@
+# 26 Jun 2026 19:06
+
+## Preserve undefined dRSA smoothing support
+
+### `meg/code/analysis/drsa_stage_utils.m`
+- Keep a finite-support mask before MATLAB display smoothing and restore original non-finite cells to `NaN` afterward.
+- Document that undefined cells define analysis support, so smoothing must not make impossible model/neural regions visible in exported matrices.
+
+### `meg/code/preprocessing_basic/07_run_matlab_drsa.py`
+- Replace the local Python group-display smoothing implementation with the shared `drsa_result_utils.smooth_matrix_for_plot` helper.
+- Keep the Stage-07 wrapper function so group-average plotting continues to use the same call site while inheriting the shared NaN-support policy.
+
+### `meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py`
+- Clarify in the script header that `--include-smoothed` is display-only and cannot create values outside a matrix's originally valid support.
+
+### `meg/code/preprocessing_basic/drsa_result_utils.py`
+- Extend the shared smoothing helper so cells that were non-finite before smoothing remain `NaN` after normalized Gaussian smoothing.
+- Update the module and function docs to state that prediction-error masks and other undefined supports are preserved for display summaries and group averages.
+
+### `meg/tests/test_drsa_line_summaries.py`
+- Add a regression test for prediction-error matrices whose pre-occlusion model-time rows are undefined.
+- Verify that smoothing preserves the empty pre-occlusion support and that a model-anchored lag curve over that interval remains all `NaN`.
+
+### `meg/tests/test_matlab_drsa_stage.py`
+- Add a Stage-07 regression test that exercises the Python group-display smoother on a matrix with undefined top rows.
+- Assert that smoothed group-display matrices keep the original undefined rows non-finite while retaining finite values in valid rows.
+
+Suggested commit message:
+`Preserve undefined dRSA support during smoothing`
+
 # 24 Jun 2026 20:48
 
 ## Add group smoothing for dot-side cluster reports

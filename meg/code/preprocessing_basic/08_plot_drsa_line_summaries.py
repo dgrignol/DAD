@@ -75,7 +75,9 @@ Safety and assumptions
   plots x = neural time and y = model time, so this script indexes each matrix
   as matrix[model_time_index, neural_time_index].
 - ``--include-smoothed`` smooths matrices in Python only for display summaries;
-  it does not require or create smoothed MAT files.
+  it does not require or create smoothed MAT files, and originally undefined
+  cells remain NaN so display smoothing cannot create values outside a model's
+  valid analysis support.
 - ``--shading`` is optional and applies only to interval lag-curve plots. The
   default ``none`` preserves the original unshaded behavior and filenames.
 - ``--interval-lag-mode`` controls the support for interval lag curves. The

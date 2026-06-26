@@ -190,6 +190,26 @@ def test_expected_output_paths_cover_real_alt_and_simulations(tmp_path):
     assert "A_dRSA_alt/always_visible/predicted" not in occluded_text
 
 
+def test_python_group_smoothing_preserves_undefined_matrix_support():
+    """
+    Stage-07 group-display smoothing must not fill analysis-masked regions.
+
+    Prediction-error matrices can be undefined before occlusion. The Python
+    group-average plotting path should smooth only inside the originally finite
+    support so downstream Stage-08 summaries cannot see artificial values.
+    """
+    matrix = np.full((8, 8), np.nan)
+    matrix[4:, :] = np.arange(32, dtype=float).reshape(4, 8)
+
+    smoothed = STAGE07._smooth_matrix_for_plot_python(  # pylint: disable=protected-access
+        matrix,
+        5,
+    )
+
+    assert not np.isfinite(smoothed[:4, :]).any()
+    assert np.isfinite(smoothed[4:, :]).any()
+
+
 def test_matlab_batch_uses_handoff_and_selected_script(tmp_path):
     """MATLAB commands pass the handoff explicitly instead of rebuilding paths."""
     cfg = _fake_cfg(tmp_path)
