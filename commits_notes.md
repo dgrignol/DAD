@@ -1,3 +1,28 @@
+# 26 Jun 2026 19:08
+
+## Add dRSA sliding lag surface summaries
+
+### `meg/code/preprocessing_basic/09_plot_drsa_sliding_lag_surfaces.py`
+- Add an optional Stage-09 post-processing script that reads existing Stage-07 dRSA result MAT files without rerunning MATLAB or recomputing dRSA.
+- Compute lag-by-model-time surfaces with the Stage-08 convention `lag = neural time - model time`, using model-anchored windows that restrict model-time rows while allowing neural-time samples anywhere inside matrix bounds.
+- Target the initial occipital `A_dRSA_alt` position summaries for actual visible, actual nondeviant, actual deviant, expected/predicted deviant, and prediction-error deviant models.
+- Write static heatmaps, standalone/in-report Plotly 3-D waterfall HTML, and two peak-timecourse comparison figures with shared report value limits.
+- Support subject and group scopes, explicit subject lists, lag/window/step controls, minimum finite sample counts, shared value-limit modes, peak-latency masking, `--resume`, `--overwrite`, and `--print-summary`.
+- Guard output paths against raw-tree writes and generate linked plus embedded HTML reports with occlusion markers, skipped-input diagnostics, and interpretation-risk notes.
+
+### `meg/docs/DRSA_SLIDING_LAG_SURFACES.md`
+- Add an interpretation guide for the exploratory Stage-09 lag surfaces, including the matrix convention, five initial target summaries, heatmap/waterfall outputs, and peak-timecourse extraction.
+- Document descriptive-use caveats around overlapping windows, temporal autocorrelation, edge support, prediction-error undefined support, model-anchored sampling, and peak-lag instability.
+
+### `meg/tests/test_drsa_sliding_lag_surfaces.py`
+- Add unit coverage that verifies model-anchored windows average diagonal lag samples while permitting neural columns outside the local model-time window.
+- Test peak magnitude/lag extraction and relative peak-latency threshold calculation on synthetic surfaces with missing rows.
+- Verify target selection returns exactly the five intended occipital position summaries.
+- Add an end-to-end CLI test with synthetic Stage-07-like MAT files that builds a group report, five heatmaps, five Plotly waterfalls, two peak-timecourse PNGs, and embedded HTML images.
+
+Suggested commit message:
+`Add dRSA sliding lag surface summaries`
+
 # 26 Jun 2026 19:07
 
 ## Add cluster report controls and dRSA group-average wrapper
