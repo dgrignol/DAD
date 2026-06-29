@@ -4,7 +4,8 @@
 #
 # Purpose
 # Deploy the files required to run DAD preprocessing review/apply, downstream
-# epoching/export, MATLAB dRSA, and optional sanity checks on the CIMeC
+# epoching/export, MATLAB dRSA, optional dRSA post-processing, and optional
+# sanity checks on the CIMeC
 # cluster. This script runs on the
 # local computer, creates the remote DAD directory outside the raw tree, and
 # preserves the required ``meg/...`` layout with rsync.
@@ -19,7 +20,8 @@
 #     meg/cluster/deploy_review_to_cluster.sh
 #
 # Inputs
-# - Production/infrastructure Python files through dRSA export and MATLAB dRSA.
+# - Production/infrastructure Python files through dRSA export, MATLAB dRSA,
+#   and dRSA post-processing.
 # - Optional sanity-check Python files.
 # - Shared and subject parameter YAMLs.
 # - Review/apply cluster submission, documentation, and environment files.
@@ -69,6 +71,8 @@ FILES=(
     "meg/code/preprocessing_basic/06_export_neural_for_drsa.py"
     "meg/code/preprocessing_basic/07_run_matlab_drsa.py"
     "meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py"
+    "meg/code/preprocessing_basic/09_plot_drsa_sliding_lag_surfaces.py"
+    "meg/code/preprocessing_basic/10_drsa_stats.py"
     "meg/code/preprocessing_basic/dataset_inventory.py"
     "meg/code/preprocessing_basic/downstream_stage_utils.py"
     "meg/code/preprocessing_basic/drsa_canonical_meg_channels.txt"
@@ -96,11 +100,15 @@ FILES=(
     "meg/cluster/submit_drsa_analysis.sh"
     "meg/cluster/submit_drsa_group_average.sh"
     "meg/cluster/submit_drsa_line_summaries.sh"
+    "meg/cluster/submit_drsa_stats.sh"
     "meg/cluster/submit_dot_side_decoding.sh"
     "meg/cluster/submit_dot_side_group_report.sh"
     "meg/cluster/submit_dot_side_time_generalization.sh"
     "meg/cluster/submit_dot_side_time_generalization_group_report.sh"
     "meg/cluster/deploy_review_to_cluster.sh"
+    "meg/docs/DRSA_SLIDING_LAG_SURFACES.md"
+    "meg/tests/test_drsa_sliding_lag_surfaces.py"
+    "meg/tests/test_drsa_stats.py"
     "meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
     "meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"
     "simulations/functions/"

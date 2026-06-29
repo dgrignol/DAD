@@ -1,3 +1,41 @@
+# 29 Jun 2026 12:08
+
+## Add Stage-10 dRSA group statistics workflow
+
+### `meg/code/preprocessing_basic/10_drsa_stats.py`
+- Add an optional Stage-10 group statistics CLI that reads existing Stage-07 dRSA result MAT files without rerunning MATLAB, epoching, export, or preprocessing.
+- Assemble matched subject stacks for 2-D matrix tests and Stage-08-compatible 1-D lag-summary tests, preserving the convention `lag = neural time - model time`.
+- Add raw and explicitly labeled `smoothed_display` input variants, with default model selection focused on position-like and prediction-error matrices from `A_dRSA` and `A_dRSA_alt`.
+- Implement one-sample sign-flip cluster permutation tests with an automatic MNE backend for fully finite arrays and a NumPy/SciPy fallback for NaN-containing support.
+- Add the default paired actual-position contrast `occluded_deviant - occluded_nondeviant`, first differencing matrices within subject before matrix or lag-summary aggregation.
+- Write guarded statistical outputs below the group derivative tree, including NPZ arrays, per-test JSON, cluster tables, summary JSON/CSV, linked HTML, and embedded HTML reports.
+- Include report organization by input variant, condition/contrast, target, sensor group, model source, and analysis family, with significant-only cluster tables by default.
+
+### `meg/tests/test_drsa_stats.py`
+- Add synthetic unit coverage for positive 2-D and 1-D cluster detection with the NumPy backend.
+- Verify paired matrix preparation drops subjects missing one side of the deviant/nondeviant contrast.
+- Verify paired line summaries are computed from the within-subject difference matrix before lag averaging, preserving asymmetric NaN support.
+- Cover MNE cluster-mask normalization, automatic fallback to NumPy for zero-variance features, CLI defaults, significant-only report tables, and safe handling of NaNs.
+- Add an end-to-end CLI test on a fake derivative tree that writes stats outputs, linked report HTML, and embedded report images without MATLAB.
+
+### `meg/cluster/submit_drsa_stats.sh`
+- Add a one-task SGE wrapper for the Stage-10 dRSA stats report using existing Stage-07 result MAT files.
+- Expose cluster controls for subjects, conditions, model selectors, model sources, sensor groups, analysis families, matrix/line targets, line intervals, lag window, lag mode, smoothed-display inclusion, permutation count, cluster thresholds, tail, backend, paired contrasts, and cluster-table display.
+- Activate the shared micromamba environment, configure headless plotting/cache paths, validate required deployment files, print core dependency availability, and run the Stage-10 Python script in resume or rebuild mode.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+- Extend the deployment payload to include the Stage-09 lag-surface script, the new Stage-10 stats script, the Stage-10 wrapper, related docs, and dRSA post-processing tests.
+- Update the script header to describe optional dRSA post-processing as part of the cluster payload.
+
+### `meg/cluster/README.md`
+- Register `submit_drsa_stats.sh` in the available cluster wrapper list.
+- Clarify that deployment now includes optional dRSA post-processing code in addition to sanity-check code.
+- Add a runbook section for optional Stage-08 line summaries, Stage-09 lag-surface reports, and Stage-10 matrix/line-summary statistics.
+- Document Stage-10 defaults, focused qsub overrides, simulation-family opt-in, paired-contrast disabling, cluster-table verbosity, and expected report/output locations.
+
+Suggested commit message:
+`Add Stage-10 dRSA group statistics workflow`
+
 # 26 Jun 2026 19:09
 
 ## Add SAMBA poster results reasoning note

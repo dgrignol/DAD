@@ -16,6 +16,7 @@ The automatic MEGNet branch is deprecated and is never submitted.
 - `submit_drsa_analysis.sh`: optional Stage-07 MATLAB dRSA array job.
 - `submit_drsa_group_average.sh`: optional Stage-07 numeric group-average report job.
 - `submit_drsa_line_summaries.sh`: optional Stage-08 dRSA line-summary report job.
+- `submit_drsa_stats.sh`: optional Stage-10 dRSA matrix and line-summary stats job.
 - `submit_dot_side_decoding.sh`: optional dot-side sanity-check array job.
 - `submit_dot_side_group_report.sh`: optional dot-side group report job.
 - `submit_dot_side_time_generalization.sh`: optional dot-side matrix decoding array job.
@@ -30,7 +31,7 @@ The repository currently lives on the laptop, while compute nodes see
 `/mnt/storage/tier2/morwur`. Only a small review-pass payload is required:
 
 - production Python files from `meg/code/preprocessing_basic` through export;
-- optional sanity-check files from `meg/code/sanity_checks`;
+- optional dRSA post-processing and sanity-check files;
 - `meg/params/pipeline_default.yaml`, `pipeline_cluster.yaml`, and the seven
   subject selectors;
 - `meg/cluster`;
@@ -341,12 +342,13 @@ python meg/code/preprocessing_basic/render_stage03_mne_reports.py \
 
 ## Run Stage 04 Then Stage 06
 
-Resync the cluster after changing epoching/export/MATLAB dRSA/sanity-check
-code. The
+Resync the cluster after changing epoching/export/MATLAB dRSA/dRSA
+post-processing/sanity-check code. The
 deployment helper includes `04_epoching.py`, `06_export_neural_for_drsa.py`,
-`07_run_matlab_drsa.py`, `meg/code/analysis`, `meg/code/sanity_checks`,
-`simulations/functions`, `downstream_stage_utils.py`, the fixed channel list,
-current configuration, and the downstream submission wrappers:
+`07_run_matlab_drsa.py`, the dRSA post-processing scripts, `meg/code/analysis`,
+`meg/code/sanity_checks`, `simulations/functions`, `downstream_stage_utils.py`,
+the fixed channel list, current configuration, and the downstream submission
+wrappers:
 
 ```bash
 cd /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD
@@ -485,6 +487,91 @@ The group report is written to:
 The raw and smoothed HTML reports both start with group-average figures and
 then collect participant figures under subject sections with condition
 subsections.
+
+## Run Optional dRSA Line, Surface, And Stats Reports
+
+These are optional post-processing jobs. They consume completed Stage-07 MAT
+files and do not rerun MATLAB, dRSA export, epoching, or preprocessing.
+
+Build Stage-08 group line summaries:
+
+```bash
+qsub -hold_jid <stage07_job_id> meg/cluster/submit_drsa_line_summaries.sh
+```
+
+The Stage-09 sliding lag-surface script is report-oriented and can be run
+directly on the cluster after deployment:
+
+```bash
+python meg/code/preprocessing_basic/09_plot_drsa_sliding_lag_surfaces.py \
+  --config meg/params/pipeline_default.yaml \
+  --site-config meg/params/pipeline_cluster.yaml \
+  --subjects 01 02 03 04 05 06 07 \
+  --group-only --resume --print-summary
+```
+
+Build Stage-10 dRSA stats as a single group job:
+
+```bash
+qsub meg/cluster/submit_drsa_stats.sh
+```
+
+The Stage-10 wrapper defaults to subjects `01..07`, both matrix and line-summary
+targets, position plus prediction-error model selectors, all available
+conditions and sensor groups, analysis families `A_dRSA,A_dRSA_alt`, the actual
+observed-position paired contrast `occluded_deviant - occluded_nondeviant`,
+significant-only cluster tables in the HTML report, `1024` sign-flip
+permutations, cluster-forming `p=0.05`, cluster p significance `0.05`, and a
+two-sided test. Simulation families remain opt-in. Use rebuild mode only when
+intentionally replacing existing stats outputs:
+
+```bash
+qsub -v DAD_REBUILD=1 meg/cluster/submit_drsa_stats.sh
+```
+
+Restrict the stats job when inspecting a focused family or sensor group:
+
+```bash
+qsub -v DAD_DRSA_STATS_TARGETS=line-summaries,DAD_DRSA_STATS_ANALYSIS_FAMILIES=A_dRSA_alt,DAD_DRSA_STATS_SENSOR_GROUPS=occipital \
+  meg/cluster/submit_drsa_stats.sh
+```
+
+Opt in to simulation stats only when that model-only control is specifically
+needed:
+
+```bash
+qsub -v DAD_DRSA_STATS_ANALYSIS_FAMILIES=A_dRSA,A_dRSA_alt,simulations_model_vs_model \
+  meg/cluster/submit_drsa_stats.sh
+```
+
+Disable the default deviant-minus-nondeviant paired sensitivity analysis:
+
+```bash
+qsub -v DAD_DRSA_STATS_PAIRED_CONTRASTS=none \
+  meg/cluster/submit_drsa_stats.sh
+```
+
+Show every suprathreshold cluster in the HTML tables instead of only
+significant clusters:
+
+```bash
+qsub -v DAD_DRSA_STATS_REPORT_CLUSTER_TABLES=all \
+  meg/cluster/submit_drsa_stats.sh
+```
+
+Outputs are written below:
+
+```text
+.../derivatives/analysis/group/ses-01/drsa/stats/
+.../derivatives/reports/group/ses-01/10_drsa_stats_report.html
+.../derivatives/reports/group/ses-01/10_drsa_stats_report_embedded.html
+```
+
+When the MORWUR volume is mounted locally, inspect the report at:
+
+```text
+/Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives/reports/group/ses-01/10_drsa_stats_report.html
+```
 
 ## Run Optional Dot-Side Decoding Sanity Check
 
