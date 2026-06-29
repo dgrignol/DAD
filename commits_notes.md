@@ -1,3 +1,21 @@
+# 29 Jun 2026 12:09
+
+## Add dot ERF sanity-check analysis
+
+### `meg/code/sanity_checks/05_dot_erf_analysis.py`
+- Add a WORK_IN_PROGRESS dot-condition ERF sanity-check workflow that consumes completed Stage-04 epoch FIF files and source manifests without modifying decoding or dRSA outputs.
+- Support read-only validation and full report generation for requested group subjects, one MEG sensor type per run, and one or more Stage-07 MEGIN sensor groups filtered to common good channels.
+- Apply baseline correction inside the script, crop/resample the analysis window, compute per-subject condition ERFs, and construct `occluded_combined` as an equal-weight average of nondeviant and deviant ERFs rather than a pooled trial average.
+- Resolve guarded subject and group output paths for ERF arrays, trial-count diagnostics, imbalance diagnostics, cluster-stat arrays/JSON, linked HTML reports, embedded HTML reports, and diagnostic figures.
+- Add paired ERF contrasts for `occluded_deviant - occluded_nondeviant` and `occluded_combined - always_visible`.
+- Run MNE spatio-temporal one-sample cluster tests over subject-level channel x time contrasts, plus a signed channel-average 1-D temporal cluster test for each contrast.
+- Add optional trial-count equalized sensitivity analyses when within-subject source-count imbalance exceeds the configured threshold.
+- Generate group-first figures for selected sensor layout, condition butterfly/topomap plots, source-condition RMS/GFP overlays, trial counts, contrast butterflies, cluster heatmaps, and channel-average cluster highlights.
+- Write report-ready metadata that records units, scaling, baseline, occlusion timing, sensor-selection policy, cluster parameters, topomap latencies, imbalance policy, skipped inputs, and the WIP interpretation warning.
+
+Suggested commit message:
+`Add dot ERF sanity-check analysis`
+
 # 29 Jun 2026 12:08
 
 ## Add Stage-10 dRSA group statistics workflow
