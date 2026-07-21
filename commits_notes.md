@@ -2735,3 +2735,23 @@ Suggested commit message:
 
 Suggested commit message:
 `Add sensor-group dot-side decoding`
+# 21 Jul 2026 11:19
+
+## Improve dot ERF cluster execution
+
+### `meg/cluster/submit_dot_erf_analysis.sh`
+- Add a fully documented SGE array wrapper that runs the group dot-condition ERF workflow once per requested Stage-07 sensor group, with default tasks for occipital, parietal, frontal, and temporal magnetometers.
+- Expose subject selection, sensor type/groups, baseline, time window, analysis sampling rate, topomap times, group uncertainty band, cluster thresholds, permutation count, random seed, cluster-table verbosity, local epoch cache, missing-subject handling, validation, rebuild, and resume controls through environment variables.
+- Accept colon-separated multi-value qsub overrides as well as comma-separated shell defaults so SGE environment assignment parsing does not split subject, sensor-group, baseline, or topomap lists incorrectly.
+- Validate task-to-group mapping and scalar choices before activating the shared micromamba environment, configure isolated headless plotting/cache directories, verify required deployment files, and print the resolved command and scientific settings before execution.
+- Forward one selected group to `05_dot_erf_analysis.py` per array task and report the canonical group ERF and HTML output roots on completion.
+
+### `meg/code/sanity_checks/05_dot_erf_analysis.py`
+- Change the default ERF baseline to -0.300..-0.100 seconds and the direct CLI analysis start to -1.0 seconds; the cluster wrapper retains -0.5 seconds for compatibility with existing Stage-04 epoch derivatives.
+- Add `--local-epoch-cache-dir` for manually copied same-named Stage-04 FIF files when large reads from SMB or other network volumes are unreliable.
+- Keep source-manifest validation and recorded input lineage anchored to the canonical derivative while routing only MNE reads through the optional local cache path.
+- Validate that the cache directory and per-subject cached FIF files exist, propagate the chosen MNE read path through scanned subject headers, and record it separately in subject summaries.
+- Preload each subject's epoch FIF once before condition slicing to avoid repeated lazy seeks through externally backed files and the associated low-level read failures.
+
+Suggested commit message:
+`Improve dot ERF cluster execution`

@@ -29,7 +29,7 @@ Usage examples
      --config /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/params/pipeline_default.yaml \
      --group-subjects 01 02 03 04 05 06 07 \
      --sensor-type mag --sensor-groups wholebrain occipital \
-     --baseline -0.1 0.0 --tmin -0.1 --tmax 2.667 \
+     --baseline -0.300 -0.100 --tmin -1 --tmax 2.667 \
      --analysis-sfreq 200 --overwrite
 
 3) Run the same workflow on planar gradiometers:
@@ -54,6 +54,17 @@ Usage examples
      --config meg/params/pipeline_default.yaml \
      --site-config meg/params/pipeline_cluster.yaml \
      --group-subjects 01 02 03 04 05 06 07 --overwrite
+
+6) Read Stage-04 epoch FIFs from a local manual cache while still writing
+   outputs to the configured derivatives tree. Copy the seven
+   ``sub-XX_ses-01_task-Attention_run-all_epo.fif`` files into the cache
+   directory first:
+
+   python .../05_dot_erf_analysis.py --config .../pipeline_default.yaml \
+     --group-subjects 01 02 03 04 05 06 07 \
+     --sensor-type mag --sensor-groups wholebrain occipital \
+     --local-epoch-cache-dir /Users/damiano/MEG_epoch_cache/dot_erf_stage04 \
+     --overwrite
 
 Inputs
 - Completed Stage-04 epochs FIF files:
@@ -340,11 +351,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--baseline",
         nargs=2,
         type=float,
-        default=[-0.1, 0.0],
+        default=[-0.300, -0.100],
         metavar=("TMIN", "TMAX"),
         help="Baseline interval in seconds, applied inside this script.",
     )
-    parser.add_argument("--tmin", type=float, default=-0.1)
+    parser.add_argument("--tmin", type=float, default=-1.0)
     parser.add_argument("--tmax", type=float, default=2.667)
     parser.add_argument(
         "--analysis-sfreq",
@@ -403,6 +414,17 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=100,
         help="Repeated fixed-seed random subsampling draws for sensitivity analyses.",
     )
+    parser.add_argument(
+        "--local-epoch-cache-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Optional local directory containing manually copied Stage-04 epoch "
+            "FIF files. Filenames must match the configured derivatives, e.g. "
+            "sub-03_ses-01_task-Attention_run-all_epo.fif. Use this when the "
+            "SMB/network derivatives volume is unreliable for large MNE reads."
+        ),
+    )
     parser.add_argument("--allow-missing", action="store_true")
     parser.add_argument(
         "--include-cluster-table",
@@ -424,6 +446,13 @@ def validate_cli_args(args: argparse.Namespace) -> None:
         raise SystemExit(str(exc)) from exc
     if args.resume and args.overwrite:
         raise SystemExit("--resume and --overwrite are mutually exclusive.")
+    if args.local_epoch_cache_dir is not None:
+        args.local_epoch_cache_dir = Path(args.local_epoch_cache_dir).expanduser()
+        if not args.local_epoch_cache_dir.is_dir():
+            raise SystemExit(
+                "--local-epoch-cache-dir must be an existing directory: "
+                f"{args.local_epoch_cache_dir}"
+            )
     if args.tmax <= args.tmin:
         raise SystemExit("--tmax must be greater than --tmin.")
     baseline_start, baseline_end = [float(value) for value in args.baseline]
@@ -655,6 +684,43 @@ def subject_input_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
     }
 
 
+def epoch_fif_for_mne_reading(args: argparse.Namespace, epochs_fif: Path) -> Path:
+    """
+    Return the FIF path MNE should open for large epoch reads.
+
+    Parameters
+    ----------
+    args
+        Parsed command-line arguments. When ``--local-epoch-cache-dir`` is set,
+        this directory must contain a same-named local copy of ``epochs_fif``.
+    epochs_fif
+        Canonical Stage-04 epoch derivative path from the pipeline config.
+
+    Returns
+    -------
+    pathlib.Path
+        Either the canonical derivative path or the local cache path.
+
+    Notes
+    -----
+    The local cache is a manual workaround for intermittent SMB/network-volume
+    failures during large MNE FIF reads. It does not change source lineage or
+    output destinations; summaries continue to report the canonical derivative
+    as the consumed Stage-04 epoch file.
+    """
+    cache_dir = getattr(args, "local_epoch_cache_dir", None)
+    if cache_dir is None:
+        return epochs_fif
+    local_path = Path(cache_dir).expanduser() / epochs_fif.name
+    if not local_path.is_file():
+        raise FileNotFoundError(
+            "Local epoch cache file not found. Copy the Stage-04 epoch FIF to:\n"
+            f"  {local_path}\n"
+            f"Original derivative path:\n  {epochs_fif}"
+        )
+    return local_path
+
+
 def subject_output_paths(
     cfg: Mapping[str, Any],
     sensor_type: str,
@@ -865,13 +931,14 @@ def scan_subject_header(
         raise FileNotFoundError(f"Epochs FIF not found: {epochs_fif}")
     if not source_manifest.exists():
         raise FileNotFoundError(f"Source manifest not found: {source_manifest}")
+    mne_epochs_fif = epoch_fif_for_mne_reading(args, epochs_fif)
 
     stage04 = validate_stage04_epoching_contract(
         source_manifest=source_manifest,
         epochs_fif=epochs_fif,
         cfg=cfg,
     )
-    epochs = mne.read_epochs(epochs_fif, preload=False, verbose="ERROR")
+    epochs = mne.read_epochs(mne_epochs_fif, preload=False, verbose="ERROR")
 
     baseline_start, baseline_end = [float(value) for value in args.baseline]
     if baseline_start < float(epochs.tmin) or baseline_end > float(epochs.tmax):
@@ -939,6 +1006,7 @@ def scan_subject_header(
         "cfg": cfg,
         "warnings": warnings,
         "epochs_fif": epochs_fif,
+        "mne_epochs_fif": mne_epochs_fif,
         "source_manifest": source_manifest,
         "stage04_validation": stage04,
         "event_id": dict(epochs.event_id),
@@ -1007,7 +1075,7 @@ def common_good_channels(subject_headers: list[Mapping[str, Any]]) -> list[str]:
 
 def make_reference_info(header: Mapping[str, Any], channel_names: list[str]) -> mne.Info:
     """Create picked reference Info with the ERF analysis sampling frequency."""
-    epochs = mne.read_epochs(header["epochs_fif"], preload=False, verbose="ERROR")
+    epochs = mne.read_epochs(header["mne_epochs_fif"], preload=False, verbose="ERROR")
     picks = mne.pick_channels(epochs.ch_names, include=channel_names, ordered=True)
     info = mne.pick_info(epochs.info, picks, copy=True)
     info["bads"] = []
@@ -1199,7 +1267,7 @@ def compute_subject_erfs(
     Compute all condition ERFs for one subject on the common-good channel set.
 
     Data flow
-    - Read the Stage-04 epoch FIF.
+    - Read and preload the Stage-04 epoch FIF once for the subject.
     - Process each source condition independently to limit peak memory use.
     - Average retained trials per source condition.
     - Construct ``occluded_combined`` as an equal-weight mean of the two
@@ -1209,7 +1277,10 @@ def compute_subject_erfs(
     """
     baseline = (float(args.baseline[0]), float(args.baseline[1]))
     load_tmin = min(float(args.tmin), baseline[0])
-    epochs_all = mne.read_epochs(header["epochs_fif"], preload=False, verbose="ERROR")
+    # Preload once per subject before condition slicing. Lazy condition reads can
+    # repeatedly seek through raw-backed FIF handles on external volumes and
+    # fail with low-level OSError 22 on some MNE/filesystem combinations.
+    epochs_all = mne.read_epochs(header["mne_epochs_fif"], preload=True, verbose="ERROR")
     condition_erfs: dict[str, np.ndarray] = {}
     condition_trial_data: dict[str, np.ndarray] = {}
     times: np.ndarray | None = None
@@ -1266,6 +1337,7 @@ def compute_subject_erfs(
         "subject": header["subject"],
         "session": header["session"],
         "epochs_fif": str(header["epochs_fif"]),
+        "mne_epochs_fif_read_path": str(header["mne_epochs_fif"]),
         "source_manifest": str(header["source_manifest"]),
         "stage04_validation": header["stage04_validation"],
         "conditions": list(CONDITION_ORDER),
