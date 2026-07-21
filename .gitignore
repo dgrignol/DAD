@@ -67,6 +67,10 @@ triggers_check/__pycache__/
 *.html
 *.fif
 
+# Generated paper and poster derivatives
+/paper/poster/
+/paper/dot_erf_*.svg
+
 # Practice and trigger-check artifact trees
 experiment/practice/input_files/
 experiment/practice/output_files/

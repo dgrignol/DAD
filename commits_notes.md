@@ -2755,3 +2755,14 @@ Suggested commit message:
 
 Suggested commit message:
 `Improve dot ERF cluster execution`
+# 21 Jul 2026 11:20
+
+## Ignore generated paper and poster derivatives
+
+### `.gitignore`
+- Ignore the complete `paper/poster/` artifact tree, including generated SVG/PDF exports and the PNG/PPTX files already covered by global binary-artifact rules.
+- Ignore top-level `paper/dot_erf_*.svg` exports so alternate ERF render locations do not reappear as untracked files.
+- Keep authored Markdown and MATLAB files elsewhere under `paper/` eligible for version control.
+
+Suggested commit message:
+`Ignore generated paper and poster derivatives`
