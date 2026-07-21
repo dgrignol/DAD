@@ -192,6 +192,7 @@ def test_drsa_line_summary_wrapper_exposes_stage08_controls():
     assert "DAD_DRSA_LINE_INTERVAL_LAG_MODE" in text
     assert "DAD_DRSA_LINE_MODEL_TIME_WINDOW_SAMPLES" not in text
     assert "--model-time-window-samples" not in text
+    assert 'SHADING="${DAD_DRSA_LINE_SHADING:-across-subject-sem}"' in text
     assert "--shading" in text
     assert "--interval-lag-mode" in text
     assert "08_plot_drsa_line_summaries.py" in text
@@ -217,6 +218,7 @@ def test_drsa_wrapper_exposes_model_source_controls():
     text = DRSA_WRAPPER.read_text(encoding="utf-8")
     assert "DAD_DRSA_MODEL_SOURCES" in text
     assert "DAD_DRSA_CONDITIONS" in text
+    assert "pe_prior_constrained_50" in text
 
 
 def test_drsa_wrapper_uses_validated_cimec_matlab_resources():

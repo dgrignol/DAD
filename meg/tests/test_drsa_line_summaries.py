@@ -31,10 +31,12 @@ from drsa_result_utils import (  # noqa: E402
     frame_to_seconds,
     iter_matrix_slices,
     model_feature_label,
+    model_source_from_path,
     model_source_for_matrix_slice,
     occlusion_timing_from_config,
     read_drsa_result_file,
     smooth_matrix_for_plot,
+    stimulus_model_label,
 )
 
 
@@ -164,6 +166,13 @@ def test_interval_lag_mode_default_is_model_anchored():
     assert not hasattr(args, "model_time_window_samples")
 
 
+def test_shading_default_is_across_subject_sem():
+    """Group line summaries default to SEM shading unless explicitly disabled."""
+    args = STAGE08.build_arg_parser().parse_args(["--config", "fake.yaml"])
+
+    assert args.shading == "across-subject-sem"
+
+
 def test_model_time_window_cli_option_is_removed():
     """The removed peak-lag model-time window option is no longer accepted."""
     with pytest.raises(SystemExit):
@@ -173,7 +182,7 @@ def test_model_time_window_cli_option_is_removed():
 
 
 def test_none_shading_preserves_existing_interval_curve_behavior():
-    """Default none mode returns the existing curve and no band."""
+    """Explicit none mode returns the existing curve and no band."""
     matrix = np.full((5, 5), np.nan)
     matrix[1, 1] = 1.0
     matrix[2, 2] = 3.0
@@ -398,6 +407,30 @@ def test_stage07_model_names_replace_model_index_slice_labels(tmp_path):
     )
 
 
+def test_explicit_pe_model_source_from_path_gets_self_describing_label():
+    """A_dRSA_alt pe_* folders carry stable PE source and label metadata."""
+    relative = (
+        Path("matlab_real_neural")
+        / "A_dRSA_alt"
+        / "occluded_deviant"
+        / "pe_prior_constrained_50"
+        / "corr"
+        / "results"
+        / "A_dRSA_alt_occluded_deviant_pe_prior_constrained_50_corr_occipital.mat"
+    )
+
+    source = model_source_from_path(relative)
+    label = stimulus_model_label(
+        "occluded_deviant",
+        source,
+        "dRSA_neural_position",
+        analysis_family="A_dRSA_alt",
+    )
+
+    assert source == "pe_prior_constrained_50"
+    assert label == "50/50 constrained-prior PE position"
+
+
 def _write_fake_site_config(tmp_path: Path) -> Path:
     """Write a site override that points the pipeline at a fake derivative tree."""
     data_root = tmp_path / "data"
@@ -581,6 +614,9 @@ def test_cli_runs_on_tiny_fake_derivative_tree_and_embeds_report_images(tmp_path
     assert "Interval lag-curve mode: model-anchored" in report.read_text(
         encoding="utf-8"
     )
+    assert "Interval lag-curve shading mode: across-subject-sem" in report.read_text(
+        encoding="utf-8"
+    )
     assert "actual visible position" in report.read_text(encoding="utf-8")
     assert "peak_lag_over_model_time" not in report.read_text(encoding="utf-8")
     assert "Peak-lag" not in report.read_text(encoding="utf-8")
@@ -595,7 +631,13 @@ def test_cli_runs_on_tiny_fake_derivative_tree_and_embeds_report_images(tmp_path
         / "line_summaries"
     )
     assert line_dir.is_dir()
-    assert sorted((line_dir / "interval_lag_curves").glob("*.png"))
+    assert sorted(
+        (
+            line_dir
+            / "interval_lag_curves"
+            / "shading-across-subject-sem"
+        ).glob("*.png")
+    )
     assert not (line_dir / "peak_lag_over_model_time").exists()
     assert not sorted(line_dir.rglob("*.csv"))
 

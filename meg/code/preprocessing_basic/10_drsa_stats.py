@@ -71,9 +71,9 @@ Safety and assumptions
   labels those tests as ``smoothed_display``. Smoothed-display tests are not
   independent of raw tests.
 - The default model filter keeps position-like matrices plus prediction-error
-  matrices from A_dRSA and A_dRSA_alt. Simulations are excluded unless
-  requested with ``--analysis-families``. Use ``--models`` and/or
-  ``--model-sources`` to override model selection.
+  and explicit PE-variant matrices from A_dRSA and A_dRSA_alt. Simulations are
+  excluded unless requested with ``--analysis-families``. Use ``--models``
+  and/or ``--model-sources`` to override model selection.
 - Cluster tests use one-sample sign-flip permutations. The default paired
   contrast tests actual observed position for occluded deviant minus occluded
   nondeviant. Paired contrasts are first differenced within subject, then
@@ -254,14 +254,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Optional model/feature selector, e.g. position direction "
-            "prediction_error. Defaults to position plus prediction_error."
+            "prediction_error pe_prior_constrained_50. Defaults to position "
+            "plus prediction_error."
         ),
     )
     parser.add_argument(
         "--model-sources",
         nargs="+",
         default=None,
-        help="Optional model-source filter, e.g. observed predicted prediction_error.",
+        help=(
+            "Optional model-source filter, e.g. observed predicted "
+            "prediction_error pe_prior_constrained_50."
+        ),
     )
     parser.add_argument(
         "--sensor-groups",
@@ -2401,7 +2405,8 @@ def run_group_scope(
         f"Analysis families: {', '.join(args.analysis_families or [])}",
         f"Paired contrasts: {', '.join(args.paired_contrasts or [])}",
         f"HTML cluster tables: {args.report_cluster_tables}",
-        f"Variants: {', '.join(variants)} (raw plus smoothed_display only when requested)",
+        f"Variants: {', '.join(variants)} (raw = Stage-07 MAT matrices, "
+        "possibly MATLAB-neural-smoothed; smoothed_display only when requested)",
         "Matrix interpretation: x = neural time, y = model time, indexed matrix[model_time, neural_time]",
         "Lag convention: lag = neural time - model time",
         f"Line interval lag mode: {args.line_interval_lag_mode}",

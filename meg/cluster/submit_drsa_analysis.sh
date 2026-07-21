@@ -22,7 +22,7 @@
 # Optional analysis selection can be exported before qsub when needed:
 #   export DAD_DRSA_ANALYSES=real
 #   export DAD_DRSA_SENSOR_GROUPS=wholeBrain
-#   export DAD_DRSA_MODEL_SOURCES=observed,predicted,prediction_error
+#   export DAD_DRSA_MODEL_SOURCES=observed,predicted,prediction_error,pe_prior_constrained_50
 #   qsub -v DAD_MATLAB_BIN,DAD_DRSA_ANALYSES,DAD_DRSA_SENSOR_GROUPS,DAD_DRSA_MODEL_SOURCES \
 #     -t 1-7 meg/cluster/submit_drsa_analysis.sh
 #
@@ -30,7 +30,8 @@
 # - Completed Stage-06 export_drsa lineage in source_manifest.json.
 # - Stage-06 condition MAT/JSON neural exports.
 # - Subject-specific observed trajectory MAT. Matching occluded_nondeviant
-#   trials provide the expected continuation for occluded_deviant.
+#   trials provide the expected continuation for occluded_deviant and the
+#   baseline for prediction_error / pe_* alt model sources.
 # - meg/code/analysis MATLAB scripts and simulations/functions dRSA helpers.
 #
 # Outputs

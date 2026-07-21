@@ -30,14 +30,15 @@ Usage examples
      --subject-config .../sub-04.yaml --source-manifest .../source_manifest.json \
      --analyses alt --sensor-groups occipital --smoothing-plots --resume
 
-4) Run observed, expected/predicted, and prediction-error occluded-deviant
-   alt stimulus models:
+4) Run observed, expected/predicted, and PE occluded-deviant alt stimulus
+   models:
 
    python .../07_run_matlab_drsa.py --config .../pipeline_default.yaml \
      --subject-config .../sub-04.yaml --source-manifest .../source_manifest.json \
      --analyses alt --conditions occluded_deviant \
      --sensor-groups occipital \
-     --model-sources observed predicted prediction_error --overwrite
+     --model-sources observed predicted prediction_error pe_prior_constrained_50 \
+     --overwrite
 
 5) Build a numeric group-average figure report after subject dRSA has run:
 
@@ -59,7 +60,7 @@ Inputs
 - One subject-specific observed trajectory MAT discovered from the resolved
   subject input_files directory. Its matching ``occluded_nondeviant`` trials
   provide the expected continuation for ``occluded_deviant`` and the baseline
-  for ``prediction_error`` model-source runs.
+  for ``prediction_error`` and explicit ``pe_*`` model-source runs.
 - MATLAB scripts in meg/code/analysis plus dRSA helper functions in
   simulations/functions.
 
@@ -123,7 +124,16 @@ from preprocessing_stage_utils import (
 
 CONDITIONS = ("always_visible", "occluded_nondeviant", "occluded_deviant")
 SUPPORTED_ANALYSES = ("real", "alt", "simulations")
-MODEL_SOURCES = ("observed", "predicted", "prediction_error")
+PE_MODEL_SOURCES = (
+    "prediction_error",
+    "pe_prior_unconstrained_50",
+    "pe_prior_constrained_50",
+    "pe_precision_weighted",
+    "pe_kalman_innovation",
+    "pe_latent_curvature",
+    "pe_belief_update",
+)
+MODEL_SOURCES = ("observed", "predicted", *PE_MODEL_SOURCES)
 DRSA_MATRIX_VARIABLES = (
     "dRSA_neural_position",
     "dRSA_neural_correlation",
@@ -194,8 +204,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Run multiple stimulus model sources. Predicted and "
-            "prediction_error are valid only for occluded_deviant. "
-            "prediction_error is implemented for alt outputs; simulations "
+            "PE model sources are valid only for occluded_deviant. "
+            "PE model sources are implemented for alt outputs; simulations "
             "continue to use observed/predicted sources."
         ),
     )
@@ -400,7 +410,8 @@ def _normalize_model_sources(values: Iterable[str]) -> list[str]:
             source = "prediction_error"
         if source not in MODEL_SOURCES:
             raise ValueError(
-                "model source must be observed, predicted, or prediction_error, "
+                "model source must be observed, predicted, prediction_error, "
+                "or a registered pe_* variant, "
                 f"got {value!r}."
             )
         if source not in normalized:
@@ -445,13 +456,13 @@ def _conditions_for_model_source(
     """
     Return the scientifically valid conditions for one model source.
 
-    The expected and prediction-error models are defined for the
+    The expected and PE models are defined for the
     occluded-deviant question by using matching occluded-nondeviant trials.
     Running them for other conditions would create misleading duplicated
     outputs, so we exclude those here.
     """
     selected = [str(condition) for condition in conditions]
-    if model_source in {"predicted", "prediction_error"}:
+    if model_source == "predicted" or model_source in PE_MODEL_SOURCES:
         return [condition for condition in selected if condition == "occluded_deviant"]
     return selected
 
@@ -463,13 +474,13 @@ def _model_sources_for_analysis(
     """
     Return model sources supported by one MATLAB analysis family.
 
-    A_dRSA_alt can construct the single-model prediction-error position tensor.
+    A_dRSA_alt can construct the single-model PE tensors.
     dRSA_simulations still delegates model selection to drsa_stage_utils, which
     only returns observed or expected/predicted trajectory trials.
     """
     selected = list(model_sources)
     if analysis == "simulations":
-        return [source for source in selected if source != "prediction_error"]
+        return [source for source in selected if source not in PE_MODEL_SOURCES]
     return selected
 
 
@@ -2150,10 +2161,9 @@ def run_stage(
         if not batches:
             raise RuntimeError(
                 "No MATLAB dRSA batches were generated. Predicted and "
-                "prediction-error model paths are only valid for "
-                "occluded_deviant, and prediction-error is available for "
-                "alt outputs only; include observed or add occluded_deviant "
-                "to --conditions."
+                "PE model paths are only valid for occluded_deviant, and "
+                "PE variants are available for alt outputs only; include "
+                "observed or add occluded_deviant to --conditions."
             )
         matlab_records = run_matlab_batches(
             batches,

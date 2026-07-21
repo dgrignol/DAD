@@ -154,8 +154,8 @@ def test_peak_timecourse_extracts_argmax_lag_and_relative_threshold():
     assert STAGE09._peak_latency_threshold([surface], args=args) == 1.0
 
 
-def test_target_selection_returns_the_requested_five_summaries():
-    """The first Stage-09 scope is exactly the five occipital position targets."""
+def test_target_selection_returns_the_requested_summaries():
+    """The Stage-09 scope includes core position targets and explicit PE variants."""
     records = [
         _make_record(condition="always_visible", label="actual visible position"),
         _make_record(condition="occluded_nondeviant", label="actual nondeviant position"),
@@ -170,6 +170,36 @@ def test_target_selection_returns_the_requested_five_summaries():
             label="prediction error position",
             model_source="prediction_error",
         ),
+        _make_record(
+            condition="occluded_deviant",
+            label="50/50 unconstrained-prior PE position",
+            model_source="pe_prior_unconstrained_50",
+        ),
+        _make_record(
+            condition="occluded_deviant",
+            label="50/50 constrained-prior PE position",
+            model_source="pe_prior_constrained_50",
+        ),
+        _make_record(
+            condition="occluded_deviant",
+            label="precision-weighted PE position",
+            model_source="pe_precision_weighted",
+        ),
+        _make_record(
+            condition="occluded_deviant",
+            label="Kalman innovation PE position",
+            model_source="pe_kalman_innovation",
+        ),
+        _make_record(
+            condition="occluded_deviant",
+            label="latent curvature PE",
+            model_source="pe_latent_curvature",
+        ),
+        _make_record(
+            condition="occluded_deviant",
+            label="belief-update PE",
+            model_source="pe_belief_update",
+        ),
         _make_record(condition="always_visible", label="actual visible direction"),
     ]
 
@@ -181,6 +211,12 @@ def test_target_selection_returns_the_requested_five_summaries():
         "actual-deviant-position",
         "expected-predicted-position",
         "prediction-error-position",
+        "pe-prior-unconstrained-50-position",
+        "pe-prior-constrained-50-position",
+        "pe-precision-weighted-position",
+        "pe-kalman-innovation-position",
+        "pe-latent-curvature",
+        "pe-belief-update",
     ]
     assert not [item for item in skipped if item.get("reason") == "target matrix not found"]
 
@@ -253,13 +289,19 @@ def _write_fake_result_mat(
 
 
 def _write_fake_target_set(tmp_path: Path, subject: str, value_offset: float) -> None:
-    """Write all five Stage-09 target matrices for one fake subject."""
+    """Write all Stage-09 target matrices for one fake subject."""
     targets = [
         ("always_visible", None),
         ("occluded_nondeviant", None),
         ("occluded_deviant", "observed"),
         ("occluded_deviant", "predicted"),
         ("occluded_deviant", "prediction_error"),
+        ("occluded_deviant", "pe_prior_unconstrained_50"),
+        ("occluded_deviant", "pe_prior_constrained_50"),
+        ("occluded_deviant", "pe_precision_weighted"),
+        ("occluded_deviant", "pe_kalman_innovation"),
+        ("occluded_deviant", "pe_latent_curvature"),
+        ("occluded_deviant", "pe_belief_update"),
     ]
     for index, (condition, model_source) in enumerate(targets):
         _write_fake_result_mat(
@@ -320,13 +362,15 @@ def test_cli_builds_group_report_with_all_three_plot_types(tmp_path):
     assert embedded.is_file()
     report_text = report.read_text(encoding="utf-8")
     embedded_text = embedded.read_text(encoding="utf-8")
-    assert "Target summaries found: 5 of 5" in report_text
+    target_count = len(STAGE09.TARGET_SUMMARIES)
+    comparison_count = len(STAGE09.PEAK_TIMECOURSE_COMPARISONS)
+    assert f"Target summaries found: {target_count} of {target_count}" in report_text
     assert "Lag convention: lag = neural time - model time" in report_text
     assert "Peak-latency mask mode: relative" in report_text
     assert "sliding_window_peak_timecourse" in report_text
     assert "Overlapping windows share model-time rows" in report_text
-    assert report_text.count("Plotly.newPlot") == 5
-    assert embedded_text.count("data:image/png;base64,") == 7
+    assert report_text.count("Plotly.newPlot") == target_count
+    assert embedded_text.count("data:image/png;base64,") == target_count + comparison_count
 
     surface_dir = (
         tmp_path
@@ -337,6 +381,6 @@ def test_cli_builds_group_report_with_all_three_plot_types(tmp_path):
         / "drsa"
         / "sliding_lag_surfaces"
     )
-    assert len(sorted((surface_dir / "heatmaps").glob("*.png"))) == 5
-    assert len(sorted((surface_dir / "plotly_waterfalls").glob("*.html"))) == 5
-    assert len(sorted((surface_dir / "peak_timecourses").glob("*.png"))) == 2
+    assert len(sorted((surface_dir / "heatmaps").glob("*.png"))) == target_count
+    assert len(sorted((surface_dir / "plotly_waterfalls").glob("*.html"))) == target_count
+    assert len(sorted((surface_dir / "peak_timecourses").glob("*.png"))) == comparison_count

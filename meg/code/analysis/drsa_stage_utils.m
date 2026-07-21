@@ -390,6 +390,20 @@ classdef drsa_stage_utils
                 prefix = 'expected/predicted';
             elseif strcmp(model_source, 'prediction_error') || strcmp(model_source, 'pe')
                 prefix = 'prediction error';
+            elseif strcmp(model_source, 'pe_prior_unconstrained_50')
+                prefix = '50/50 unconstrained-prior PE';
+            elseif strcmp(model_source, 'pe_prior_constrained_50')
+                prefix = '50/50 constrained-prior PE';
+            elseif strcmp(model_source, 'pe_precision_weighted')
+                prefix = 'precision-weighted PE';
+            elseif strcmp(model_source, 'pe_kalman_innovation')
+                prefix = 'Kalman innovation PE';
+            elseif strcmp(model_source, 'pe_latent_curvature')
+                label = 'latent curvature PE';
+                return;
+            elseif strcmp(model_source, 'pe_belief_update')
+                label = 'belief-update PE';
+                return;
             elseif strcmp(model_source, 'neural')
                 label = 'neural signal';
                 return;

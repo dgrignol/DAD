@@ -189,6 +189,19 @@ def test_expected_output_paths_cover_real_alt_and_simulations(tmp_path):
     assert "simulations/model_vs_model/occluded_deviant/predicted/corr" in occluded_text
     assert "A_dRSA_alt/always_visible/predicted" not in occluded_text
 
+    pe_outputs = STAGE07.expected_outputs_for_analysis(
+        cfg,
+        ["alt", "simulations"],
+        ["always_visible", "occluded_deviant"],
+        ["occipital"],
+        "corr",
+        ["pe_prior_constrained_50"],
+    )
+    pe_text = "\n".join(str(path) for path in pe_outputs)
+    assert "A_dRSA_alt/occluded_deviant/pe_prior_constrained_50/corr" in pe_text
+    assert "A_dRSA_alt/always_visible/pe_prior_constrained_50" not in pe_text
+    assert "simulations/model_vs_model/occluded_deviant/pe_prior_constrained_50" not in pe_text
+
 
 def test_python_group_smoothing_preserves_undefined_matrix_support():
     """
@@ -283,6 +296,26 @@ def test_alt_batches_run_observed_and_predicted_occluded_deviant(tmp_path):
     assert "path_type='observed'" in batches[0][1]
     assert "conditions_to_run={'occluded_deviant'}" in batches[1][1]
     assert "path_type='predicted'" in batches[1][1]
+
+
+def test_alt_batches_run_explicit_pe_variant_only_for_occluded_deviant(tmp_path):
+    """Explicit PE variants are Stage-07 alt-only occluded-deviant sources."""
+    cfg = _fake_cfg(tmp_path)
+    batches = STAGE07._build_matlab_batches(  # pylint: disable=protected-access
+        cfg,
+        handoff_path=tmp_path / "handoff.json",
+        analyses=["alt", "simulations"],
+        drsa_type="corr",
+        conditions=["always_visible", "occluded_deviant"],
+        sensor_groups=["occipital"],
+        model_source=["pe_prior_constrained_50"],
+    )
+
+    assert [analysis for analysis, _source in batches] == [
+        "alt:pe_prior_constrained_50"
+    ]
+    assert "conditions_to_run={'occluded_deviant'}" in batches[0][1]
+    assert "path_type='pe_prior_constrained_50'" in batches[0][1]
 
 
 def test_group_average_report_averages_result_mats(tmp_path):

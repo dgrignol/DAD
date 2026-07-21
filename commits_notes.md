@@ -2619,3 +2619,81 @@ Suggested commit message:
 - Add a per-frame `needsVideoSync` flag that is set only when a trigger pulse is queued, tying `RegWrVideoSync` to actual trigger activity.
 - Gate all `Datapixx('RegWrVideoSync')` calls on `Conf.MEG && needsVideoSync` to avoid extra sync writes on frames without scheduled triggers.
 - Clarify the trigger scheduling data flow with inline comments so MEG sync behavior stays aligned with trigger emission.
+# 21 Jul 2026 11:17
+
+## Expand dRSA PE models and group reporting
+
+### `meg/cluster/submit_drsa_analysis.sh`
+- Extend the documented Stage-07 model-source override to include explicit `pe_*` prediction-error variants alongside observed, predicted, and legacy prediction-error sources.
+- Clarify that matching occluded-nondeviant trajectories provide both the expected continuation and the baseline used to construct prediction-error models.
+
+### `meg/cluster/submit_drsa_line_summaries.sh`
+- Change the Stage-08 interval lag-curve default from no shading to across-subject SEM shading while preserving explicit controls for unshaded and within-subject diagonal-SD displays.
+- Update wrapper examples and environment-variable documentation so cluster runs state the new poster-readable group-band default.
+
+### `meg/code/analysis/A_dRSA_alt.m`
+- Register six explicit prediction-error variants: 50/50 unconstrained-prior, 50/50 constrained-prior, precision-weighted, Kalman-innovation, latent-curvature, and belief-update models.
+- Refactor alternate-model construction into local helpers that preserve the legacy observed, predicted, and raw signed prediction-error behavior while assigning each new variant a distinct source folder, feature label, provenance string, and MAT metadata field.
+- Build deterministic PE tensors from actual-minus-expected trajectories using mixture responsibility, leave-one-out constrained priors, timewise precision scaling, online innovation updates, curvature differences, or latent-cause evidence as appropriate.
+- Add guarded spatial-scale, motion-area, leave-one-out, curvature, and feature-scale helpers so malformed or sparse configuration values retain conservative finite fallbacks.
+
+### `meg/code/analysis/drsa_stage_utils.m`
+- Add human-readable stimulus-model labels for every registered PE source, including feature-specific labels for latent curvature and belief updates.
+- Keep legacy prediction-error and neural/model label behavior unchanged for existing outputs.
+
+### `meg/code/preprocessing_basic/07_run_matlab_drsa.py`
+- Register the explicit PE model-source names in the Stage-07 CLI and configuration flow, including the existing `pe` alias for legacy `prediction_error`.
+- Restrict all PE models to occluded-deviant `A_dRSA_alt` batches and exclude them from simulation batches, preventing unsupported or misleading duplicated outputs.
+- Update examples, validation messages, batch-empty errors, and expected-output planning to describe the expanded model-source contract.
+
+### `meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py`
+- Make across-subject SEM the default interval lag-curve shading mode and retain `none` and within-subject diagonal-SD as explicit alternatives.
+- Include explicit `pe_*` records in report plot selection so new prediction-error models are not filtered from group summaries.
+- Clarify that raw Stage-07 matrices may already contain MATLAB neural smoothing and that Python `smoothed_display` is an additional display-only transform.
+
+### `meg/code/preprocessing_basic/09_plot_drsa_sliding_lag_surfaces.py`
+- Expand the default Stage-09 target registry from the five core position summaries to include all six explicit PE variants.
+- Add the new variants to the occluded-deviant peak-timecourse comparison while preserving stable target ordering and shared report scaling.
+- Generalize documentation and selection descriptions so reports adapt to whichever registered PE outputs are present.
+
+### `meg/code/preprocessing_basic/10_drsa_stats.py`
+- Document explicit PE variants as supported model and model-source selectors for Stage-10 statistical reports.
+- Clarify in report metadata that raw inputs are Stage-07 MAT matrices and may already reflect configured MATLAB neural smoothing.
+
+### `meg/code/preprocessing_basic/drsa_result_utils.py`
+- Detect arbitrary `pe_*` model sources directly from result-directory components before applying legacy observed/predicted inference.
+- Map each registered PE source to a stable report label so Stage-08, Stage-09, and Stage-10 consumers display self-describing model names.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+- Accept all registered explicit PE sources in `matlab_drsa.model_source` and `matlab_drsa.model_sources` validation.
+- Expand validation errors to distinguish the legacy prediction-error source from registered `pe_*` variants.
+
+### `meg/docs/DRSA_SLIDING_LAG_SURFACES.md`
+- Document the six additional occluded-deviant PE targets and their inclusion in the model-comparison peak timecourse.
+- Generalize interpretation guidance from a fixed five-target report to a variable target set with shared color scaling.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+- Extend the Stage-07 alternate-analysis specification with explicit `pe_*` sources, separate output folders, and preserved legacy actual-minus-expected prediction-error semantics.
+
+### `meg/tests/test_cluster_wrappers.py`
+- Verify the Stage-08 cluster wrapper defaults to across-subject SEM shading.
+- Verify the Stage-07 wrapper exposes an explicit constrained-prior PE source in its documented model-source controls.
+
+### `meg/tests/test_drsa_line_summaries.py`
+- Add coverage for the new SEM shading default and corresponding output/report layout.
+- Verify `pe_*` result paths produce stable source metadata and self-describing stimulus-model labels.
+- Update the end-to-end fake-derivative report expectations for the new default shading directory and summary text.
+
+### `meg/tests/test_drsa_sliding_lag_surfaces.py`
+- Expand target-selection fixtures and assertions to cover every explicit PE variant.
+- Generate synthetic Stage-07 results for the enlarged target registry and derive expected image/Plotly counts from the configured target and comparison collections.
+
+### `meg/tests/test_matlab_drsa_stage.py`
+- Verify expected-output planning includes explicit PE folders only for occluded-deviant alternate analyses.
+- Verify MATLAB batch construction excludes PE sources from simulations and nondeviant conditions while passing the selected source into `A_dRSA_alt.m`.
+
+### `meg/tests/test_pipeline_config.py`
+- Add a complete MATLAB dRSA configuration fixture demonstrating that legacy and explicit PE model-source selections pass shared configuration validation.
+
+Suggested commit message:
+`Expand dRSA PE models and group reporting`

@@ -37,8 +37,8 @@ Usage examples
      --subjects 01 02 03 04 05 06 07 --group-only \
      --sensor-groups occipital --lag-window-sec 0.5 --overwrite
 
-5) Add descriptive within-subject diagonal-SD shading to group interval lag
-   curves:
+5) Override the default across-subject SEM shading with descriptive
+   within-subject diagonal-SD shading for group interval lag curves:
 
    python .../08_plot_drsa_line_summaries.py --config .../pipeline_default.yaml \
      --subjects 01 02 03 04 05 06 07 --group-only \
@@ -78,8 +78,9 @@ Safety and assumptions
   it does not require or create smoothed MAT files, and originally undefined
   cells remain NaN so display smoothing cannot create values outside a model's
   valid analysis support.
-- ``--shading`` is optional and applies only to interval lag-curve plots. The
-  default ``none`` preserves the original unshaded behavior and filenames.
+- ``--shading`` applies only to interval lag-curve plots. The default
+  ``across-subject-sem`` adds group +/- SEM bands; pass ``--shading none`` to
+  preserve the original unshaded behavior and filenames.
 - ``--interval-lag-mode`` controls the support for interval lag curves. The
   default ``model-anchored`` preserves the previous behavior: the interval mask
   restricts model-time rows, while neural-time columns may fall anywhere inside
@@ -216,10 +217,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--shading",
         choices=SHADING_MODES,
-        default="none",
+        default="across-subject-sem",
         help=(
-            "Optional interval lag-curve shaded band: none, descriptive "
-            "within-subject diagonal SD, or across-subject SEM."
+            "Interval lag-curve shaded band. Defaults to across-subject SEM; "
+            "use none for unshaded curves or within-subject-diagonal-sd for "
+            "descriptive within-subject diagonal SD bands."
         ),
     )
     parser.add_argument(
@@ -1118,7 +1120,9 @@ def _include_plot_entry_in_report(entry: Mapping[str, Any]) -> bool:
         for source in entry.get("model_sources", ())
         if str(source).strip()
     }
-    if "prediction_error" in model_sources:
+    if "prediction_error" in model_sources or any(
+        source.startswith("pe_") for source in model_sources
+    ):
         return True
     conditions = {
         str(condition)
@@ -1320,8 +1324,9 @@ def _plot_records(
     summary_lines.append(
         "Variants: "
         + ", ".join(variants)
-        + " (raw = unsmoothed Stage-07 matrices; smoothed_display = "
-        "display-only Python smoothing when requested)"
+        + " (raw = Stage-07 MAT matrices, which may already use MATLAB "
+        "neural smoothing per matlab_drsa.smooth_neural; smoothed_display = "
+        "additional display-only Python smoothing when requested)"
     )
     model_labels = sorted({record.stimulus_model_label for record in records})
     summary_lines.append(f"Stimulus/comparison model labels: {', '.join(model_labels)}")

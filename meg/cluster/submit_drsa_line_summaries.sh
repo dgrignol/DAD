@@ -16,8 +16,13 @@
 # Rebuild existing Stage-08 group line-summary outputs:
 #   qsub -v DAD_REBUILD=1 meg/cluster/submit_drsa_line_summaries.sh
 #
-# Rebuild with descriptive within-subject diagonal-SD shading:
+# Rebuild with descriptive within-subject diagonal-SD shading instead of the
+# default across-subject SEM shading:
 #   qsub -v DAD_REBUILD=1,DAD_DRSA_LINE_SHADING=within-subject-diagonal-sd \
+#     meg/cluster/submit_drsa_line_summaries.sh
+#
+# Rebuild with no interval lag-curve shading:
+#   qsub -v DAD_REBUILD=1,DAD_DRSA_LINE_SHADING=none \
 #     meg/cluster/submit_drsa_line_summaries.sh
 #
 # Rebuild with strict same-interval square support for interval lag curves:
@@ -47,7 +52,8 @@
 # - DAD_DRSA_LINE_LAG_WINDOW_SEC: lag search half-window, default 1.0.
 # - DAD_DRSA_LINE_INCLUDE_SMOOTHED: 1 also writes display-smoothed summaries.
 # - DAD_DRSA_LINE_PLOT_SMOOTHING_WINDOW: optional smoothing window in samples.
-# - DAD_DRSA_LINE_SHADING: interval lag-curve band mode, default none.
+# - DAD_DRSA_LINE_SHADING: interval lag-curve band mode,
+#   default across-subject-sem.
 # - DAD_DRSA_LINE_INTERVAL_LAG_MODE: model-anchored or same-interval-square.
 # - DAD_REBUILD: 1 overwrites existing outputs; 0 resumes existing outputs.
 
@@ -76,7 +82,7 @@ SENSOR_GROUPS_CSV="${DAD_DRSA_LINE_SENSOR_GROUPS:-}"
 LAG_WINDOW_SEC="${DAD_DRSA_LINE_LAG_WINDOW_SEC:-1.0}"
 INCLUDE_SMOOTHED="${DAD_DRSA_LINE_INCLUDE_SMOOTHED:-1}"
 PLOT_SMOOTHING_WINDOW="${DAD_DRSA_LINE_PLOT_SMOOTHING_WINDOW:-}"
-SHADING="${DAD_DRSA_LINE_SHADING:-none}"
+SHADING="${DAD_DRSA_LINE_SHADING:-across-subject-sem}"
 INTERVAL_LAG_MODE="${DAD_DRSA_LINE_INTERVAL_LAG_MODE:-model-anchored}"
 
 if [[ "$REBUILD" != "0" && "$REBUILD" != "1" ]]; then

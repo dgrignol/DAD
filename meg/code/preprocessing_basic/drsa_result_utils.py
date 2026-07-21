@@ -520,8 +520,11 @@ def drsa_type_from_path(path: Path) -> str:
 
 
 def model_source_from_path(path: Path) -> str:
-    """Infer observed/predicted/prediction-error source metadata from a path."""
+    """Infer observed/predicted/PE source metadata from a result path."""
     parts = [part.lower() for part in path.parts]
+    for part in parts:
+        if part.startswith("pe_"):
+            return part
     if "prediction_error" in parts:
         return "prediction_error"
     if "predicted" in parts:
@@ -551,8 +554,8 @@ def model_source_for_matrix_slice(
 
     Main A_dRSA outputs store multiple model slices in one MAT file. For those
     files, the slice index is the only place where observed, predicted, and
-    prediction-error models differ. Single-model A_dRSA_alt outputs instead
-    encode observed/predicted in the folder path.
+    legacy prediction-error models differ. Single-model A_dRSA_alt outputs
+    instead encode observed/predicted/PE variants in the folder path.
     """
     family = str(analysis_family).lower()
     variable_name = str(variable)
@@ -638,6 +641,18 @@ def stimulus_model_label(
         prefix = "expected/predicted"
     elif source == "prediction_error":
         prefix = "prediction error"
+    elif source == "pe_prior_unconstrained_50":
+        prefix = "50/50 unconstrained-prior PE"
+    elif source == "pe_prior_constrained_50":
+        prefix = "50/50 constrained-prior PE"
+    elif source == "pe_precision_weighted":
+        prefix = "precision-weighted PE"
+    elif source == "pe_kalman_innovation":
+        prefix = "Kalman innovation PE"
+    elif source == "pe_latent_curvature":
+        return "latent curvature PE"
+    elif source == "pe_belief_update":
+        return "belief-update PE"
     elif source == "neural":
         return "neural signal"
     elif source == "model":

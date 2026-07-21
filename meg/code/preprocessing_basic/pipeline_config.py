@@ -908,11 +908,21 @@ def validate_config(
                 errors.append(
                     "`matlab_drsa.sensor_groups_to_run` must contain non-empty strings."
                 )
-            valid_model_sources = ("observed", "predicted", "prediction_error")
+            valid_model_sources = (
+                "observed",
+                "predicted",
+                "prediction_error",
+                "pe_prior_unconstrained_50",
+                "pe_prior_constrained_50",
+                "pe_precision_weighted",
+                "pe_kalman_innovation",
+                "pe_latent_curvature",
+                "pe_belief_update",
+            )
             if matlab_drsa["model_source"] not in valid_model_sources:
                 errors.append(
                     "`matlab_drsa.model_source` must be 'observed', 'predicted', "
-                    "or 'prediction_error'."
+                    "'prediction_error', or a registered 'pe_*' variant."
                 )
             model_sources = matlab_drsa.get("model_sources")
             if model_sources is not None:
@@ -927,7 +937,8 @@ def validate_config(
                 ):
                     errors.append(
                         "`matlab_drsa.model_sources` must contain one or more of "
-                        "'observed', 'predicted', or 'prediction_error'."
+                        "'observed', 'predicted', 'prediction_error', or a "
+                        "registered 'pe_*' variant."
                     )
             _expect_type(
                 matlab_drsa["pcr_strategy"],

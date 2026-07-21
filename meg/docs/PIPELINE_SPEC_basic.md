@@ -425,8 +425,10 @@ Registered optional analysis families are:
   `analysis/sub-XX/ses-01/drsa/matlab_real_neural/07_dRSA/`.
 - `alt`: `A_dRSA_alt.m`, single-model/sensor-group exploratory dRSA. For
   `occluded_deviant`, `--model-sources` can request `observed`, `predicted`,
-  and `prediction_error`; the prediction-error model is actual deviant
-  position minus expected/predicted nondeviant position.
+  `prediction_error`, and explicit `pe_*` variants. The legacy
+  `prediction_error` model is actual deviant position minus
+  expected/predicted nondeviant position. The `pe_*` variants keep that
+  source unchanged and write separate output folders.
 - `simulations`: `dRSA_simulations.m`, model-vs-model and neural-vs-neural
   simulation-style checks.
 

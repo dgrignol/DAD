@@ -169,6 +169,41 @@ def test_stage_validation_requires_only_requested_sections(tmp_path):
     assert errors == ["`trigger_parser` must be a mapping."]
 
 
+def test_matlab_drsa_validation_accepts_explicit_pe_model_sources(tmp_path):
+    """Shared config validation accepts registered PE model-source names."""
+    cfg = _minimal_config(tmp_path)
+    cfg["matlab_drsa"] = {
+        "enabled": True,
+        "matlab_bin": "/Applications/MATLAB_R2020a.app/bin/matlab",
+        "use_arch_x86_64": False,
+        "analyses": ["alt"],
+        "drsa_type": "corr",
+        "conditions_to_run": ["occluded_deviant"],
+        "sensor_groups_to_run": ["occipital"],
+        "model_source": "pe_prior_constrained_50",
+        "model_sources": [
+            "prediction_error",
+            "pe_prior_constrained_50",
+            "pe_belief_update",
+        ],
+        "pcr_strategy": "baseline_pcr_border",
+        "smooth_neural": True,
+        "smooth_window_samples": 15,
+        "smoothing_plots": False,
+        "plot_smoothing_window": 9,
+        "group_average_subjects": ["01"],
+        "occlusion_timing": {
+            "frame_frequency_hz": 120.0,
+            "first_complete_occlusion_frame": 130,
+            "reappearance_frame": 191,
+        },
+    }
+
+    errors, _warnings = pipeline_config.validate_config(cfg)
+
+    assert errors == []
+
+
 def test_site_config_precedes_subject_and_tuning_layers(tmp_path):
     """Cluster paths merge separately while tuning retains final precedence."""
     cfg = _minimal_config(tmp_path)

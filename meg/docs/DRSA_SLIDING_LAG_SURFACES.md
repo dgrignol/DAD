@@ -18,13 +18,19 @@ Stage-07 matrices are interpreted as `matrix[model_time, neural_time]`.
 
 ## Initial Scope
 
-The first version targets occipital `A_dRSA_alt` position summaries:
+The default target list starts with occipital `A_dRSA_alt` position summaries:
 
 - always_visible | actual visible position
 - occluded_nondeviant | actual nondeviant position
 - occluded_deviant | actual deviant position
 - occluded_deviant | expected/predicted position
 - occluded_deviant | prediction error position
+- occluded_deviant | 50/50 unconstrained-prior PE position
+- occluded_deviant | 50/50 constrained-prior PE position
+- occluded_deviant | precision-weighted PE position
+- occluded_deviant | Kalman innovation PE position
+- occluded_deviant | latent curvature PE
+- occluded_deviant | belief-update PE
 
 Each target summary receives:
 
@@ -35,7 +41,8 @@ The stage also writes two peak-timecourse comparison figures:
 
 - actual-position comparison: actual visible, actual nondeviant, actual deviant
 - occluded-deviant model comparison: actual deviant, expected/predicted,
-  prediction error
+  legacy prediction error, and any explicit PE variants found in Stage-07
+  outputs
 
 ## Peak Timecourses
 
@@ -78,8 +85,8 @@ time-resolved statistical tests without additional subject-level inference.
 
 ## Practical Reading
 
-Use the heatmap as the primary comparison view because all five targets share
-one color range within a report. Use the 3-D waterfall as an inspection tool for
+Use the heatmap as the primary comparison view because all targets share one
+color range within a report. Use the 3-D waterfall as an inspection tool for
 rotating the same surface and checking whether apparent ridges are broad,
 stable, or driven by a few windows. Use the peak-timecourse comparisons when
 the main question is whether deviant and nondeviant conditions differ in peak
