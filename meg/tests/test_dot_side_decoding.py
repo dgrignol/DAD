@@ -181,6 +181,26 @@ def test_trials_per_average_parser_accepts_integer_or_all_mode():
         parser.parse_args(["--trials-per-average", "0"])
 
 
+def test_stage07_sensor_group_selection_filters_requested_sensor_type():
+    """Stage-07 groups keep only requested channel types in MNE channel order."""
+    info = dot_side.mne.create_info(
+        ["MEG1641", "MEG1642", "MEG1643", "MEG0111"],
+        sfreq=100.0,
+        ch_types=["mag", "grad", "grad", "mag"],
+    )
+
+    selected, metadata = dot_side.select_stage07_decoder_channels(
+        info,
+        sensor_group="occipital",
+        decoder_sensor_type="grad",
+    )
+
+    assert selected == ["MEG1642", "MEG1643"]
+    assert metadata["sensor_group"] == "occipital"
+    assert metadata["decoder_sensor_type"] == "grad"
+    assert metadata["n_selected_channels"] == 2
+
+
 def test_trial_averaging_records_identity_with_no_complete_group():
     """An underfilled identity is dropped without aborting other identities."""
     data = np.arange(5 * 2 * 3, dtype=float).reshape(5, 2, 3)

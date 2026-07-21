@@ -3,18 +3,19 @@
 # submit_dot_side_group_report.sh
 #
 # Purpose
-# Build the combined group-level dot-side decoding sanity-check report on the
+# Build combined group-level dot-side decoding sanity-check reports on the
 # CIMeC cluster after the per-subject dot-side array jobs have completed. This
-# is a one-task aggregation job; it does not rerun participant decoding. The
-# report places all group analyses before participant-specific figures.
+# is a one-task aggregation job that loops over the requested decoder sensor
+# groups; it does not rerun participant decoding. Each report places all group
+# analyses before participant-specific figures.
 #
 # Submission examples (run from the cluster head node)
 #   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
 #   mkdir -p cluster_logs
 #   qsub meg/cluster/submit_dot_side_group_report.sh
 #
-# Use SEM instead of the default 95% CI display band:
-#   qsub -v DAD_DOT_SIDE_INTERVAL=sem \
+# Build only selected Stage-07 groups:
+#   qsub -v DAD_DOT_SIDE_SENSOR_GROUPS=occipital,temporal \
 #     meg/cluster/submit_dot_side_group_report.sh
 #
 # Validate inputs without writing outputs:
@@ -27,7 +28,7 @@
 #
 # Outputs
 # - One group PNG per analysis under derivatives/sanity_checks/group/ses-01/
-#   dot_side_decoding/<condition>/<model-source>.
+#   dot_side_decoding/<sensor-group>/<condition>/<model-source>.
 # - One three-condition trial-count PNG per participant in the combined report
 #   directory, using source counts by identity before pseudo-trial averaging.
 # - Combined JSON, linked HTML, and embedded HTML under derivatives/reports/
@@ -39,9 +40,11 @@
 # - DAD_DOT_SIDE_ANALYSES: comma-separated analysis keys, default all. Valid
 #   keys are always_visible_observed, occluded_nondeviant_observed,
 #   occluded_deviant_observed, and occluded_deviant_predicted.
+# - DAD_DOT_SIDE_SENSOR_GROUPS: comma-separated groups, default
+#   occipital,parietal,frontal,temporal. Add wholebrain explicitly if needed.
 # - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 01..07.
 # - DAD_DOT_SIDE_METRIC: scores CSV metric column, default balanced accuracy.
-# - DAD_DOT_SIDE_INTERVAL: ci95 or sem; default ci95.
+# - DAD_DOT_SIDE_INTERVAL: ci95 or sem; default sem for poster-readable bands.
 # - DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES: optional Gaussian smoothing sigma in
 #   decoded time samples before group statistics; default 0 disables smoothing.
 # - DAD_CLUSTER_FORMING_P: pointwise p for cluster formation; default 0.05.
@@ -77,8 +80,9 @@ VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 ALLOW_MISSING="${DAD_ALLOW_MISSING:-0}"
 ANALYSES_CSV="${DAD_DOT_SIDE_ANALYSES:-all}"
 SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
+SENSOR_GROUPS_CSV="${DAD_DOT_SIDE_SENSOR_GROUPS:-occipital,parietal,frontal,temporal}"
 METRIC="${DAD_DOT_SIDE_METRIC:-accuracy_balanced_undersampled_sets}"
-INTERVAL="${DAD_DOT_SIDE_INTERVAL:-ci95}"
+INTERVAL="${DAD_DOT_SIDE_INTERVAL:-sem}"
 SMOOTH_SIGMA_SAMPLES="${DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES:-0.0}"
 CLUSTER_FORMING_P="${DAD_CLUSTER_FORMING_P:-0.05}"
 CLUSTER_ALPHA="${DAD_CLUSTER_ALPHA:-0.05}"
@@ -105,6 +109,22 @@ SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/sub-01.yaml"
 SCRIPT="$PROJECT_ROOT/meg/code/sanity_checks/02_dot_side_group_report.py"
 IFS=',' read -r -a SUBJECTS <<< "$SUBJECTS_CSV"
 IFS=',' read -r -a ANALYSES <<< "$ANALYSES_CSV"
+IFS=',' read -r -a SENSOR_GROUPS <<< "$SENSOR_GROUPS_CSV"
+if (( ${#SENSOR_GROUPS[@]} == 0 )); then
+    echo "ERROR: no dot-side sensor groups were selected." >&2
+    exit 2
+fi
+for sensor_group in "${SENSOR_GROUPS[@]}"; do
+    case "$sensor_group" in
+        posterior|wholebrain|occipital|parietal|pariatel|frontal|temporal)
+            ;;
+        *)
+            echo "ERROR: unsupported dot-side sensor group: $sensor_group" >&2
+            echo "Expected posterior, wholebrain, occipital, parietal, frontal, or temporal." >&2
+            exit 2
+            ;;
+    esac
+done
 
 
 # -----------------------------------------------------------------------------
@@ -155,42 +175,9 @@ for required_path in \
     fi
 done
 
-COMMAND=(
-    python
-    "$SCRIPT"
-    --config "$DEFAULT_CONFIG"
-    --site-config "$SITE_CONFIG"
-    --subject-config "$SUBJECT_CONFIG"
-    --analyses "${ANALYSES[@]}"
-    --group-subjects "${SUBJECTS[@]}"
-    --metric "$METRIC"
-    --interval "$INTERVAL"
-    --smooth-sigma-samples "$SMOOTH_SIGMA_SAMPLES"
-    --cluster-forming-p "$CLUSTER_FORMING_P"
-    --cluster-alpha "$CLUSTER_ALPHA"
-    --tail "$CLUSTER_TAIL"
-    --n-permutations "$N_PERMUTATIONS"
-    --random-seed "$RANDOM_SEED"
-    --print-summary
-)
-
-if [[ "$ALLOW_MISSING" == "1" ]]; then
-    COMMAND+=(--allow-missing)
-fi
-
-if [[ "$VALIDATE_ONLY" == "1" ]]; then
-    COMMAND+=(--validate-only)
-    echo ">>> Validate-only mode: no group report outputs will be written."
-elif [[ "$REBUILD" == "1" ]]; then
-    COMMAND+=(--overwrite)
-    echo ">>> Rebuild mode: group dot-side report outputs may be replaced."
-else
-    COMMAND+=(--resume)
-    echo ">>> Resume mode: completed group dot-side report outputs are reused."
-fi
-
 echo ">>> Analyses: ${ANALYSES[*]}"
 echo ">>> Subjects: ${SUBJECTS[*]}"
+echo ">>> Sensor groups: ${SENSOR_GROUPS[*]}"
 echo ">>> Metric: $METRIC"
 echo ">>> Interval: $INTERVAL"
 echo ">>> Smooth sigma samples: $SMOOTH_SIGMA_SAMPLES"
@@ -200,11 +187,49 @@ echo ">>> Tail: $CLUSTER_TAIL"
 echo ">>> Host: $(hostname)"
 echo ">>> Slots: ${NSLOTS:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-printf '>>> Command:'
-printf ' %q' "${COMMAND[@]}"
-printf '\n'
 
-"${COMMAND[@]}"
+for sensor_group in "${SENSOR_GROUPS[@]}"; do
+    COMMAND=(
+        python
+        "$SCRIPT"
+        --config "$DEFAULT_CONFIG"
+        --site-config "$SITE_CONFIG"
+        --subject-config "$SUBJECT_CONFIG"
+        --analyses "${ANALYSES[@]}"
+        --group-subjects "${SUBJECTS[@]}"
+        --sensor-group "$sensor_group"
+        --metric "$METRIC"
+        --interval "$INTERVAL"
+        --smooth-sigma-samples "$SMOOTH_SIGMA_SAMPLES"
+        --cluster-forming-p "$CLUSTER_FORMING_P"
+        --cluster-alpha "$CLUSTER_ALPHA"
+        --tail "$CLUSTER_TAIL"
+        --n-permutations "$N_PERMUTATIONS"
+        --random-seed "$RANDOM_SEED"
+        --print-summary
+    )
+
+    if [[ "$ALLOW_MISSING" == "1" ]]; then
+        COMMAND+=(--allow-missing)
+    fi
+
+    if [[ "$VALIDATE_ONLY" == "1" ]]; then
+        COMMAND+=(--validate-only)
+        echo ">>> Validate-only mode for ${sensor_group}: no group report outputs will be written."
+    elif [[ "$REBUILD" == "1" ]]; then
+        COMMAND+=(--overwrite)
+        echo ">>> Rebuild mode for ${sensor_group}: group dot-side report outputs may be replaced."
+    else
+        COMMAND+=(--resume)
+        echo ">>> Resume mode for ${sensor_group}: completed group dot-side report outputs are reused."
+    fi
+
+    echo ">>> Sensor group: $sensor_group"
+    printf '>>> Command:'
+    printf ' %q' "${COMMAND[@]}"
+    printf '\n'
+    "${COMMAND[@]}"
+done
 
 echo ">>> Completed UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-echo ">>> Embedded report: $DERIVATIVES_ROOT/reports/group/ses-01/dot_side_decoding/combined/dot_side_all_analyses_group_report_embedded.html"
+echo ">>> Embedded reports: $DERIVATIVES_ROOT/reports/group/ses-01/dot_side_decoding/<sensor-group>/combined"

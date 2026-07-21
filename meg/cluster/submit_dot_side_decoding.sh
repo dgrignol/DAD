@@ -4,24 +4,25 @@
 #
 # Purpose
 # Run the optional dot-side decoding sanity check on the CIMeC cluster as one
-# Sun Grid Engine array task per participant. Each task runs the four standard
-# neural-condition/model-source analyses sequentially. This wrapper consumes
-# completed Stage-04 epochs and the recorded Stage-04 source manifest; it never
-# reruns epoching, dRSA export, or MATLAB dRSA.
+# Sun Grid Engine array task per participant x decoder sensor group. Each task
+# runs the four standard neural-condition/model-source analyses sequentially
+# for one Stage-07 sensor group. This wrapper consumes completed Stage-04
+# epochs and the recorded Stage-04 source manifest; it never reruns epoching,
+# dRSA export, or MATLAB dRSA.
 #
 # Submission examples (run from the cluster head node)
 #   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
 #   mkdir -p cluster_logs
-#   qsub -t 1-7 meg/cluster/submit_dot_side_decoding.sh
+#   qsub -t 1-28 meg/cluster/submit_dot_side_decoding.sh
 #
 # Rebuild existing sanity-check outputs intentionally:
-#   qsub -v DAD_REBUILD=1 -t 1-7 \
+#   qsub -v DAD_REBUILD=1 -t 1-28 \
 #     meg/cluster/submit_dot_side_decoding.sh
 #
 # Run only selected analysis keys and change decoding settings:
 #   export DAD_DOT_SIDE_ANALYSES="occluded_deviant_observed,occluded_deviant_predicted"
 #   qsub -v DAD_DOT_SIDE_ANALYSES,DAD_DECODE_WINDOW_SAMPLES=15,DAD_TRIALS_PER_AVERAGE=2,DAD_RANDOM_SEED=97 \
-#     -t 1-7 meg/cluster/submit_dot_side_decoding.sh
+#     -t 1-28 meg/cluster/submit_dot_side_decoding.sh
 #
 # Validate inputs only, without decoding or writing outputs:
 #   qsub -v DAD_VALIDATE_ONLY=1 -t 1,4 \
@@ -37,7 +38,7 @@
 # Outputs
 # - Three-panel PNG, scores CSV, summary JSON, and MNE HTML report under
 #   derivatives/sanity_checks/sub-XX/ses-01/dot_side_decoding/
-#   <condition>/<model-source>/.
+#   <sensor-group>/<condition>/<model-source>/.
 #
 # Environment variables
 # - DAD_PROJECT_ROOT: cluster DAD root.
@@ -46,6 +47,9 @@
 # - DAD_VALIDATE_ONLY: 1 runs validation and exits before decoding.
 # - DAD_DOT_SIDE_ANALYSES: comma-separated analysis keys; default is the four
 #   standard analyses. The literal value all is equivalent.
+# - DAD_DOT_SIDE_SENSOR_GROUPS: comma-separated Stage-07 groups. Default is
+#   occipital,parietal,frontal,temporal. Add wholebrain explicitly if needed.
+# - DAD_DECODER_SENSOR_TYPE: grad or mag for Stage-07 groups; default grad.
 # - DAD_DOT_SIDE_CONDITION and DAD_DOT_SIDE_MODEL_SOURCE: backward-compatible
 #   single-analysis selection when DAD_DOT_SIDE_ANALYSES is unset.
 # - DAD_DECODE_TMIN, DAD_DECODE_TMAX, DAD_DECODE_SFREQ: decoding time grid.
@@ -56,7 +60,7 @@
 # - DAD_N_SPLITS: stratified CV folds.
 # - DAD_DOT_SIDE_OUT_DIR: optional explicit output directory.
 # Resource settings use standard qsub overrides, for example
-#   qsub -pe smp 8 -l h_vmem=32G -t 1-7 meg/cluster/submit_dot_side_decoding.sh
+#   qsub -pe smp 8 -l h_vmem=32G -t 1-28 meg/cluster/submit_dot_side_decoding.sh
 
 #$ -N DAD_dot_side
 #$ -S /bin/bash
@@ -65,7 +69,7 @@
 #$ -j y
 #$ -pe smp 4
 #$ -l h_vmem=24G
-#$ -t 1-7
+#$ -t 1-28
 
 set -euo pipefail
 
@@ -85,9 +89,11 @@ DECODE_TMIN="${DAD_DECODE_TMIN:-0.0}"
 DECODE_TMAX="${DAD_DECODE_TMAX:-2.667}"
 DECODE_SFREQ="${DAD_DECODE_SFREQ:-120.0}"
 DECODE_WINDOW_SAMPLES="${DAD_DECODE_WINDOW_SAMPLES:-10}"
-TRIALS_PER_AVERAGE="${DAD_TRIALS_PER_AVERAGE:-1}"
+TRIALS_PER_AVERAGE="${DAD_TRIALS_PER_AVERAGE:-2}"
 RANDOM_SEED="${DAD_RANDOM_SEED:-42}"
 N_SPLITS="${DAD_N_SPLITS:-5}"
+SENSOR_GROUPS_CSV="${DAD_DOT_SIDE_SENSOR_GROUPS:-occipital,parietal,frontal,temporal}"
+DECODER_SENSOR_TYPE="${DAD_DECODER_SENSOR_TYPE:-grad}"
 
 if [[ -n "${DAD_DOT_SIDE_ANALYSES:-}" ]]; then
     ANALYSES_RAW="$DAD_DOT_SIDE_ANALYSES"
@@ -124,9 +130,41 @@ for analysis_spec in "${ANALYSES[@]}"; do
     esac
 done
 
-if (( TASK_ID < 1 || TASK_ID > 7 )); then
-    echo "ERROR: SGE_TASK_ID must be between 1 and 7; got ${TASK_ID}." >&2
+IFS=',' read -r -a SENSOR_GROUPS <<< "$SENSOR_GROUPS_CSV"
+if (( ${#SENSOR_GROUPS[@]} == 0 )); then
+    echo "ERROR: no dot-side sensor groups were selected." >&2
     exit 2
+fi
+for sensor_group in "${SENSOR_GROUPS[@]}"; do
+    case "$sensor_group" in
+        posterior|wholebrain|occipital|parietal|pariatel|frontal|temporal)
+            ;;
+        *)
+            echo "ERROR: unsupported dot-side sensor group: $sensor_group" >&2
+            echo "Expected posterior, wholebrain, occipital, parietal, frontal, or temporal." >&2
+            exit 2
+            ;;
+    esac
+done
+case "$DECODER_SENSOR_TYPE" in
+    grad|mag)
+        ;;
+    *)
+        echo "ERROR: DAD_DECODER_SENSOR_TYPE must be grad or mag; got ${DECODER_SENSOR_TYPE}." >&2
+        exit 2
+        ;;
+esac
+
+N_SUBJECTS=7
+N_SENSOR_GROUPS="${#SENSOR_GROUPS[@]}"
+MAX_TASKS=$((N_SUBJECTS * N_SENSOR_GROUPS))
+if (( TASK_ID < 1 )); then
+    echo "ERROR: SGE_TASK_ID must be at least 1; got ${TASK_ID}." >&2
+    exit 2
+fi
+if (( TASK_ID > MAX_TASKS )); then
+    echo ">>> SGE_TASK_ID ${TASK_ID} exceeds requested subject x sensor-group count (${MAX_TASKS}); exiting without work."
+    exit 0
 fi
 if [[ "$REBUILD" != "0" && "$REBUILD" != "1" ]]; then
     echo "ERROR: DAD_REBUILD must be 0 or 1; got ${REBUILD}." >&2
@@ -141,8 +179,11 @@ if [[ "$TRIALS_PER_AVERAGE" != "all_trials_per_identity" && ! "$TRIALS_PER_AVERA
     exit 2
 fi
 
-SUBJECT_ID="$(printf "%02d" "$TASK_ID")"
+SUBJECT_INDEX=$(( (TASK_ID - 1) / N_SENSOR_GROUPS + 1 ))
+SENSOR_INDEX=$(( (TASK_ID - 1) % N_SENSOR_GROUPS ))
+SUBJECT_ID="$(printf "%02d" "$SUBJECT_INDEX")"
 SUBJECT_LABEL="sub-${SUBJECT_ID}"
+SENSOR_GROUP="${SENSOR_GROUPS[$SENSOR_INDEX]}"
 DEFAULT_CONFIG="$PROJECT_ROOT/meg/params/pipeline_default.yaml"
 SITE_CONFIG="$PROJECT_ROOT/meg/params/pipeline_cluster.yaml"
 SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/${SUBJECT_LABEL}.yaml"
@@ -202,6 +243,8 @@ for required_path in \
 done
 
 echo ">>> Subject: $SUBJECT_LABEL"
+echo ">>> Sensor group: $SENSOR_GROUP"
+echo ">>> Decoder sensor type: $DECODER_SENSOR_TYPE"
 echo ">>> Analyses: ${ANALYSES[*]}"
 if [[ "$VALIDATE_ONLY" == "1" ]]; then
     echo ">>> Validate-only mode: no decoding outputs will be written."
@@ -230,6 +273,8 @@ for analysis_spec in "${ANALYSES[@]}"; do
         --subject "$SUBJECT_ID"
         --condition "$CONDITION"
         --model-source "$MODEL_SOURCE"
+        --sensor-group "$SENSOR_GROUP"
+        --decoder-sensor-type "$DECODER_SENSOR_TYPE"
         --decode-tmin "$DECODE_TMIN"
         --decode-tmax "$DECODE_TMAX"
         --decode-sfreq "$DECODE_SFREQ"
@@ -240,7 +285,7 @@ for analysis_spec in "${ANALYSES[@]}"; do
     )
 
     if [[ -n "${DAD_DOT_SIDE_OUT_DIR:-}" ]]; then
-        COMMAND+=(--out-dir "$DAD_DOT_SIDE_OUT_DIR/$CONDITION/$MODEL_SOURCE")
+        COMMAND+=(--out-dir "$DAD_DOT_SIDE_OUT_DIR/$SENSOR_GROUP/$CONDITION/$MODEL_SOURCE")
     fi
 
     if [[ "$VALIDATE_ONLY" == "1" ]]; then
@@ -251,7 +296,7 @@ for analysis_spec in "${ANALYSES[@]}"; do
         COMMAND+=(--resume)
     fi
 
-    echo ">>> Analysis: condition=$CONDITION model_source=$MODEL_SOURCE"
+    echo ">>> Analysis: sensor_group=$SENSOR_GROUP condition=$CONDITION model_source=$MODEL_SOURCE"
     printf '>>> Command:'
     printf ' %q' "${COMMAND[@]}"
     printf '\n'
@@ -260,4 +305,4 @@ done
 
 echo ">>> Completed UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 echo ">>> Reports: $REPORT_DIR"
-echo ">>> Sanity outputs: $DERIVATIVES_ROOT/sanity_checks/$SUBJECT_LABEL/ses-01/dot_side_decoding"
+echo ">>> Sanity outputs: $DERIVATIVES_ROOT/sanity_checks/$SUBJECT_LABEL/ses-01/dot_side_decoding/$SENSOR_GROUP"

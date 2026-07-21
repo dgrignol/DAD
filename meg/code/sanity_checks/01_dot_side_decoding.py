@@ -5,8 +5,8 @@
 Purpose
 Run a MEG sanity check that decodes dot horizontal side (left vs right half of
 screen) with centered sliding windows for one neural condition and trajectory
-model source, and generate a
-3-panel figure:
+model source, using either the historical posterior-gradiometer feature set or
+a named Stage-07 sensor group, and generate a 3-panel figure:
 1) baseline-corrected contra/ipsi ERFs from posterior ROIs (auto-selected or
    explicitly overridden by user-provided magnetometer channel names),
 2) ipsi-minus-contra waveform,
@@ -51,13 +51,19 @@ Usage examples
      --subject 05 --condition occluded_deviant --model-source predicted \
      --decode-window-samples 10 --trials-per-average 2 --overwrite
 
-7) Explicit input/output overrides:
+7) Decode a Stage-07 lobe sensor group for poster/group summaries:
+   python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/01_dot_side_decoding.py \
+     --subject 05 --condition occluded_deviant --model-source observed \
+     --sensor-group occipital --decoder-sensor-type grad \
+     --decode-window-samples 10 --trials-per-average 2 --overwrite
+
+8) Explicit input/output overrides:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/01_dot_side_decoding.py \
      --epochs-fif /abs/path/to/sub-01_ses-01_task-Attention_run-all_epo.fif \
      --model-mat /abs/path/to/MovDot_SubNN_VXX_rescueTraject.mat \
      --out-dir /abs/path/to/output/folder
 
-8) Force specific ERF ROIs:
+9) Force specific ERF ROIs:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/01_dot_side_decoding.py \
      --left-roi-mag-channels MEG1731 \
      --right-roi-mag-channels MEG2241
@@ -83,6 +89,9 @@ Key assumptions
   neural epochs and the matching `occluded_nondeviant` trajectory from the
   same observed MAT file as the expected continuation.
 - Dot side label is `left` when model x < `Cfg.rectSize(1)/2`, else `right`.
+- `--sensor-group posterior` preserves the historical automatic posterior
+  gradiometer selection. Stage-07 groups use the shared MATLAB lobe channel
+  definitions and then filter to `--decoder-sensor-type`.
 - Sliding windows are interpreted after `--decode-sfreq` resampling. Edge
   windows are clipped and every effective window is recorded.
 - Trial averaging is deterministic, same-identity only, and drops incomplete
@@ -100,6 +109,7 @@ from collections import Counter
 import html
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any, Mapping
 
@@ -127,6 +137,11 @@ MODEL_SOURCES = ("observed", "predicted")
 ALL_TRIALS_PER_IDENTITY = "all_trials_per_identity"
 FIXED_COUNT_AVERAGING_MODE = "fixed_count"
 ALL_TRIALS_AVERAGING_MODE = "all_trials_per_identity"
+DECODER_SENSOR_TYPES = ("grad", "mag")
+STAGE07_SENSOR_GROUPS = ("wholebrain", "occipital", "parietal", "frontal", "temporal")
+DECODING_SENSOR_GROUPS = ("posterior", *STAGE07_SENSOR_GROUPS)
+MEGIN_SENSOR_GROUP_RE = re.compile(r"sensor_groups\.(\w+)\s*=\s*\{([^}]*)\};")
+MEG_CHANNEL_RE = re.compile(r"'(MEG\d{4})'")
 DECODER_MODEL_NAME = "Regularized linear discriminant analysis"
 DECODER_MODEL_DETAILS = (
     "Train-fold z-scored binary LDA with a pooled covariance estimate and "
@@ -218,6 +233,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "valid only for occluded_deviant and uses the matching "
             "occluded_nondeviant trajectory from the same MAT file."
         ),
+    )
+    parser.add_argument(
+        "--sensor-group",
+        default="posterior",
+        help=(
+            "Decoder sensor group. 'posterior' preserves the historical "
+            "auto-selected posterior gradiometer decoder; Stage-07 groups "
+            "include wholebrain, occipital, parietal, frontal, and temporal."
+        ),
+    )
+    parser.add_argument(
+        "--decoder-sensor-type",
+        choices=DECODER_SENSOR_TYPES,
+        default="grad",
+        help="MEG sensor type to use as decoder features for Stage-07 groups.",
     )
     parser.add_argument(
         "--project-root",
@@ -382,6 +412,7 @@ def resolve_input_output_paths(
     session = str(cfg["layout"]["session_bids_id"]).removeprefix("ses-")
     resolved_analysis = Path(cfg["resolved_paths"]["derivatives_analysis_dir"])
     derivatives_root = Path(cfg["resolved_paths"]["derivatives_root"])
+    sensor_group = normalize_sensor_group(args.sensor_group)
 
     default_epochs = (
         resolved_analysis
@@ -389,15 +420,17 @@ def resolve_input_output_paths(
         / f"sub-{subject}_ses-{session}_task-Attention_run-all_epo.fif"
     )
     default_model = Path(discover_trajectory_models(cfg)["observed"])
-    default_out = (
+    default_base = (
         derivatives_root
         / "sanity_checks"
         / f"sub-{subject}"
         / f"ses-{session}"
         / "dot_side_decoding"
-        / str(args.condition)
-        / str(args.model_source)
     )
+    if sensor_group == "posterior":
+        default_out = default_base / str(args.condition) / str(args.model_source)
+    else:
+        default_out = default_base / sensor_group / str(args.condition) / str(args.model_source)
     default_source_manifest = (
         Path(cfg["resolved_paths"]["derivatives_reports_dir"])
         / "source_manifest.json"
@@ -426,6 +459,58 @@ def resolve_input_output_paths(
 def analysis_key(condition: str, model_source: str) -> str:
     """Return the stable condition/model-source identifier used in outputs."""
     return f"{condition}_{model_source}"
+
+
+def normalize_sensor_group(value: str) -> str:
+    """Normalize decoder sensor-group names used on the CLI and in paths."""
+    text = str(value).strip().lower().replace("_", "")
+    if text in {"wholebrain", "whole"}:
+        return "wholebrain"
+    if text == "pariatel":
+        return "parietal"
+    if text in DECODING_SENSOR_GROUPS:
+        return text
+    raise ValueError(
+        f"Unknown --sensor-group {value!r}; expected one of "
+        f"{', '.join(DECODING_SENSOR_GROUPS)}."
+    )
+
+
+def stage07_sensor_group_definition_path() -> Path:
+    """Return the MATLAB utility containing the canonical Stage-07 groups."""
+    return Path(__file__).resolve().parents[1] / "analysis" / "drsa_stage_utils.m"
+
+
+def load_stage07_sensor_groups(path: Path | None = None) -> dict[str, list[str]]:
+    """
+    Load Stage-07 MEGIN/Neuromag sensor groups from the MATLAB utility.
+
+    The decoder uses the same lobe definitions as dRSA/ERF exports. Each group
+    contains mixed magnetometer and planar gradiometer names; feature selection
+    later filters that list to ``--decoder-sensor-type``.
+    """
+    definition_path = path or stage07_sensor_group_definition_path()
+    text = definition_path.read_text(encoding="utf-8")
+    groups: dict[str, list[str]] = {}
+    for raw_group, body in MEGIN_SENSOR_GROUP_RE.findall(text):
+        group = normalize_sensor_group(raw_group)
+        if group == "posterior":
+            continue
+        channels = MEG_CHANNEL_RE.findall(body)
+        if channels:
+            groups[group] = channels
+    for group in ("frontal", "temporal", "parietal", "occipital"):
+        if group not in groups:
+            raise RuntimeError(
+                f"Stage-07 sensor group {group!r} was not found in {definition_path}."
+            )
+    wholebrain: list[str] = []
+    for group in ("frontal", "temporal", "parietal", "occipital"):
+        for channel in groups[group]:
+            if channel not in wholebrain:
+                wholebrain.append(channel)
+    groups["wholebrain"] = wholebrain
+    return groups
 
 
 def resolve_model_condition(condition: str, model_source: str) -> str:
@@ -481,6 +566,12 @@ def validate_cli_args(args: argparse.Namespace) -> None:
         raise SystemExit(str(exc)) from exc
     if args.n_splits < 2:
         raise SystemExit("--n-splits must be at least 2.")
+    try:
+        sensor_group = normalize_sensor_group(args.sensor_group)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if sensor_group == "posterior" and args.decoder_sensor_type != "grad":
+        raise SystemExit("The historical posterior decoder supports only --decoder-sensor-type grad.")
     try:
         resolve_model_condition(args.condition, args.model_source)
     except ValueError as exc:
@@ -661,6 +752,81 @@ def select_posterior_decoder_channels(info: mne.Info) -> list[str]:
     if len(selected) < 10:
         raise RuntimeError("Too few decoder channels selected; inspect sensor geometry.")
     return selected
+
+
+def select_stage07_decoder_channels(
+    info: mne.Info,
+    *,
+    sensor_group: str,
+    decoder_sensor_type: str,
+) -> tuple[list[str], dict[str, Any]]:
+    """
+    Select decoder features from a Stage-07 lobe sensor group.
+
+    Data flow
+    - Load the canonical Stage-07 mixed MEG channel list for the requested
+      group.
+    - Keep channels of ``decoder_sensor_type`` present in the current epochs.
+    - Preserve MNE channel order so the feature matrix is stable across runs.
+    """
+    group = normalize_sensor_group(sensor_group)
+    if group == "posterior":
+        channels = select_posterior_decoder_channels(info)
+        return channels, {
+            "sensor_group": "posterior",
+            "decoder_sensor_type": "grad",
+            "selection_policy": (
+                "Historical auto-selected posterior gradiometers: grad channels "
+                "with head-y below the 45th percentile."
+            ),
+            "n_selected_channels": int(len(channels)),
+            "selected_channels": channels,
+        }
+
+    if decoder_sensor_type not in DECODER_SENSOR_TYPES:
+        raise ValueError(
+            f"Unsupported decoder sensor type {decoder_sensor_type!r}; "
+            f"expected one of {DECODER_SENSOR_TYPES}."
+        )
+    stage07_groups = load_stage07_sensor_groups()
+    requested = stage07_groups[group]
+    requested_set = set(requested)
+    picks = mne.pick_types(
+        info,
+        meg=decoder_sensor_type,
+        eeg=False,
+        eog=False,
+        stim=False,
+        misc=False,
+        exclude=[],
+    )
+    sensor_type_channels = [info["ch_names"][int(idx)] for idx in picks]
+    sensor_type_set = set(sensor_type_channels)
+    selected = [channel for channel in sensor_type_channels if channel in requested_set]
+    dropped_not_sensor_type = [channel for channel in requested if channel not in sensor_type_set]
+    if len(selected) < 2:
+        raise RuntimeError(
+            f"Too few {decoder_sensor_type} channels selected for Stage-07 "
+            f"sensor group {group!r}: {selected}."
+        )
+    return selected, {
+        "sensor_group": group,
+        "decoder_sensor_type": decoder_sensor_type,
+        "sensor_group_definition_file": str(stage07_sensor_group_definition_path()),
+        "selection_policy": (
+            "Stage-07 MEGIN/Neuromag lobe list filtered to the requested "
+            "MNE sensor type and available channels in this epochs file."
+        ),
+        "n_stage07_group_channels": int(len(requested)),
+        "stage07_group_channels": requested,
+        "n_available_channels_for_sensor_type": int(len(sensor_type_channels)),
+        "n_selected_channels": int(len(selected)),
+        "selected_channels": selected,
+        "n_dropped_stage07_channels_not_this_sensor_type_or_layout": int(
+            len(dropped_not_sensor_type)
+        ),
+        "dropped_stage07_channels_not_this_sensor_type_or_layout": dropped_not_sensor_type,
+    }
 
 
 def select_left_right_mag_rois(info: mne.Info) -> tuple[list[str], list[str]]:
@@ -1532,6 +1698,7 @@ def build_three_panel_plot(
     left_roi: list[str],
     right_roi: list[str],
     n_decoder_channels: int,
+    decoder_sensor_label: str,
     erf_baseline_window: tuple[float, float],
     condition_label: str,
     model_source: str,
@@ -1594,7 +1761,7 @@ def build_three_panel_plot(
     ax_bottom.set_ylabel("Accuracy")
     ax_bottom.set_ylim(0.35, 1.0)
     ax_bottom.set_title(
-        "Dot side decoding from posterior gradiometers "
+        f"Dot side decoding from {decoder_sensor_label} "
         f"(n={n_decoder_channels}; model={model_source})"
     )
     ax_bottom.legend(loc="upper right", frameon=True)
@@ -1760,6 +1927,7 @@ def main() -> None:
     """Run the end-to-end sanity-check decoding workflow."""
     args = build_arg_parser().parse_args()
     validate_cli_args(args)
+    sensor_group = normalize_sensor_group(args.sensor_group)
     model_condition = resolve_model_condition(args.condition, args.model_source)
     current_analysis_key = analysis_key(args.condition, args.model_source)
     epochs_fif, model_mat, out_dir, source_manifest, cfg = resolve_input_output_paths(args)
@@ -1800,17 +1968,26 @@ def main() -> None:
             cfg=cfg,
             n_times_target=int(round((args.decode_tmax - args.decode_tmin) * args.decode_sfreq)) + 1,
         )
+        decoder_channels, decoder_selection = select_stage07_decoder_channels(
+            epochs_header[args.condition].info,
+            sensor_group=sensor_group,
+            decoder_sensor_type=str(args.decoder_sensor_type),
+        )
         if args.print_summary:
             print(
                 json.dumps(
                     {
                         "stage04_validation": stage04_validation,
                         "decoding_input_validation": validation,
+                        "sensor_group": sensor_group,
+                        "decoder_sensor_type": str(args.decoder_sensor_type),
+                        "decoder_sensor_selection": decoder_selection,
                         "out_dir": str(out_dir),
                         "outputs": {key: str(value) for key, value in output_paths.items()},
                         "analysis_key": current_analysis_key,
                         "model_source": args.model_source,
                         "model_condition": model_condition,
+                        "n_decoder_channels": int(len(decoder_channels)),
                         "decode_window_samples": int(args.decode_window_samples),
                         "trials_per_average": format_trial_averaging_request(
                             args.trials_per_average
@@ -1835,7 +2012,11 @@ def main() -> None:
     )
 
     epochs_condition = epochs_all[args.condition].copy().load_data()
-    decoder_channels = select_posterior_decoder_channels(epochs_condition.info)
+    decoder_channels, decoder_selection = select_stage07_decoder_channels(
+        epochs_condition.info,
+        sensor_group=sensor_group,
+        decoder_sensor_type=str(args.decoder_sensor_type),
+    )
     left_roi, right_roi = resolve_erf_mag_rois(
         epochs_condition.info,
         left_override=left_roi_override,
@@ -1991,6 +2172,11 @@ def main() -> None:
         left_roi=left_roi,
         right_roi=right_roi,
         n_decoder_channels=len(decoder_channels),
+        decoder_sensor_label=(
+            "posterior gradiometers"
+            if sensor_group == "posterior"
+            else f"Stage-07 {sensor_group} {args.decoder_sensor_type} channels"
+        ),
         erf_baseline_window=erf_baseline_window,
         condition_label=args.condition,
         model_source=args.model_source,
@@ -2041,6 +2227,9 @@ def main() -> None:
         "model_source": args.model_source,
         "model_condition": model_condition,
         "analysis_key": current_analysis_key,
+        "sensor_group": sensor_group,
+        "decoder_sensor_type": str(args.decoder_sensor_type),
+        "decoder_sensor_selection": decoder_selection,
         "subject": str(cfg["subject"]["id"]),
         "session": str(cfg["layout"]["session_bids_id"]).removeprefix("ses-"),
         "stage04_validation": stage04_validation,
@@ -2100,7 +2289,7 @@ def main() -> None:
     report = mne.Report(
         title=(
             f"Dot-side decoding sanity check | sub-{args.subject} ses-{args.session} "
-            f"| {args.condition} | {args.model_source}"
+            f"| {args.condition} | {args.model_source} | {sensor_group}"
         )
     )
 
@@ -2112,6 +2301,8 @@ def main() -> None:
             f"model_source={summary['model_source']}\n"
             f"model_condition={summary['model_condition']}\n"
             f"analysis_key={summary['analysis_key']}\n"
+            f"sensor_group={summary['sensor_group']}\n"
+            f"decoder_sensor_type={summary['decoder_sensor_type']}\n"
             f"subject=sub-{summary['subject']}\n"
             f"session=ses-{summary['session']}\n"
             f"n_trials={summary['n_trials']}\n"

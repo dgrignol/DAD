@@ -7,11 +7,12 @@ Build a combined group-level report for the optional dot-side decoding sanity
 check. The script consumes completed per-subject outputs from
 ``01_dot_side_decoding.py``, tests each requested neural-condition/model-source
 analysis against chance with a 1D sign-flip cluster permutation test, writes
-group figures and machine-readable JSON, and builds an HTML report containing
-all group analyses before any participant-specific figures. Occluded-condition
-accuracy plots mark the configured complete-occlusion and reappearance frames,
-and each participant section starts with source-trial counts by identity for
-all three neural conditions.
+group figures and machine-readable JSON, and builds an HTML report for one
+decoder sensor group containing all group analyses before any
+participant-specific figures. Occluded-condition accuracy plots mark the
+configured complete-occlusion and reappearance frames, and each participant
+section starts with source-trial counts by identity for all three neural
+conditions.
 
 Usage examples
 1) Build the default group report locally after subjects 01-07 have completed:
@@ -45,7 +46,13 @@ Usage examples
      --config meg/params/pipeline_default.yaml \
      --site-config meg/params/pipeline_cluster.yaml \
      --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --sensor-group occipital --interval sem \
      --overwrite
+
+6) Build one report per Stage-07 sensor group with the cluster wrapper:
+
+   qsub -v DAD_REBUILD=1,DAD_DOT_SIDE_INTERVAL=sem \
+     meg/cluster/submit_dot_side_group_report.sh
 
 Inputs
 - Per-subject summary JSON from ``01_dot_side_decoding.py``.
@@ -54,9 +61,13 @@ Inputs
 
 Outputs
 - One group PNG per analysis under
-  ``derivatives/sanity_checks/group/ses-01/dot_side_decoding/<condition>/<model-source>/``.
+  ``derivatives/sanity_checks/group/ses-01/dot_side_decoding/<sensor-group>/<condition>/<model-source>/``
+  for Stage-07 groups, with the historical posterior path preserved for
+  ``--sensor-group posterior``.
 - Combined JSON and linked/embedded HTML reports under
-  ``derivatives/reports/group/ses-01/dot_side_decoding/combined/``.
+  ``derivatives/reports/group/ses-01/dot_side_decoding/<sensor-group>/combined/``
+  for Stage-07 groups, with the historical posterior path preserved for
+  ``--sensor-group posterior``.
 - One participant trial-count PNG per subject under the combined report's
   ``participant_trial_counts`` directory.
 
@@ -102,6 +113,13 @@ from preprocessing_stage_utils import guarded_path, utc_now, write_json  # noqa:
 
 DEFAULT_SUBJECTS = ["01", "02", "03", "04", "05", "06", "07"]
 DEFAULT_METRIC = "accuracy_balanced_undersampled_sets"
+DECODING_SENSOR_GROUPS = ("posterior", "wholebrain", "occipital", "parietal", "frontal", "temporal")
+ANALYSIS_COLORS = {
+    "always_visible_observed": "#1f77b4",
+    "occluded_nondeviant_observed": "#2ca02c",
+    "occluded_deviant_observed": "#ff7f0e",
+    "occluded_deviant_predicted": "#9467bd",
+}
 SUPPORTED_METRICS = (
     "accuracy_balanced_undersampled_sets",
     "accuracy_unbalanced_train",
@@ -112,28 +130,28 @@ STANDARD_ANALYSES = (
         "condition": "always_visible",
         "model_source": "observed",
         "model_condition": "always_visible",
-        "label": "Always visible | observed model",
+        "label": "Always visible | actual",
     },
     {
         "key": "occluded_nondeviant_observed",
         "condition": "occluded_nondeviant",
         "model_source": "observed",
         "model_condition": "occluded_nondeviant",
-        "label": "Occluded nondeviant | observed model",
+        "label": "Occluded nondeviant | actual nondeviant",
     },
     {
         "key": "occluded_deviant_observed",
         "condition": "occluded_deviant",
         "model_source": "observed",
         "model_condition": "occluded_deviant",
-        "label": "Occluded deviant | observed model",
+        "label": "Occluded deviant | actual deviant",
     },
     {
         "key": "occluded_deviant_predicted",
         "condition": "occluded_deviant",
         "model_source": "predicted",
         "model_condition": "occluded_nondeviant",
-        "label": "Occluded deviant | predicted model",
+        "label": "Occluded deviant | predicted nondeviant",
     },
 )
 ANALYSIS_BY_KEY = {str(item["key"]): item for item in STANDARD_ANALYSES}
@@ -185,6 +203,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=("observed", "predicted"),
         default="observed",
         help="Model source used with the backward-compatible --condition mode.",
+    )
+    parser.add_argument(
+        "--sensor-group",
+        default="posterior",
+        help=(
+            "Decoder sensor group to aggregate. 'posterior' preserves the "
+            "historical decoder outputs; Stage-07 groups include wholebrain, "
+            "occipital, parietal, frontal, and temporal."
+        ),
     )
     parser.add_argument(
         "--group-subjects",
@@ -272,6 +299,21 @@ def normalize_subject_label(value: str) -> str:
     return f"sub-{int(text):02d}"
 
 
+def normalize_sensor_group(value: str) -> str:
+    """Normalize decoder sensor-group names used by the group report."""
+    text = str(value).strip().lower().replace("_", "")
+    if text in {"wholebrain", "whole"}:
+        return "wholebrain"
+    if text == "pariatel":
+        return "parietal"
+    if text in DECODING_SENSOR_GROUPS:
+        return text
+    raise ValueError(
+        f"Unknown --sensor-group {value!r}; expected one of "
+        f"{', '.join(DECODING_SENSOR_GROUPS)}."
+    )
+
+
 def resolve_analysis_specs(args: argparse.Namespace) -> list[dict[str, str]]:
     """Resolve requested analysis keys into validated ordered specifications."""
     if args.analyses and args.condition:
@@ -317,19 +359,32 @@ def resolve_config(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]
     return cfg, warnings
 
 
-def combined_output_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
+def combined_output_paths(
+    cfg: Mapping[str, Any],
+    *,
+    sensor_group: str = "posterior",
+) -> dict[str, Path]:
     """Return output paths for the combined group report."""
     derivatives_root = Path(cfg["resolved_paths"]["derivatives_root"])
     session = str(cfg["layout"]["session_bids_id"])
-    report_dir = (
+    base_dir = (
         derivatives_root
         / "reports"
         / "group"
         / session
         / "dot_side_decoding"
-        / "combined"
     )
-    stem = "dot_side_all_analyses_group"
+    group = normalize_sensor_group(sensor_group)
+    report_dir = (
+        base_dir / "combined"
+        if group == "posterior"
+        else base_dir / group / "combined"
+    )
+    stem = (
+        "dot_side_all_analyses_group"
+        if group == "posterior"
+        else f"dot_side_{group}_all_analyses_group"
+    )
     return {
         "report_dir": report_dir,
         "report_json": report_dir / f"{stem}_report.json",
@@ -338,16 +393,27 @@ def combined_output_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
     }
 
 
-def group_figure_path(cfg: Mapping[str, Any], analysis: Mapping[str, str]) -> Path:
+def group_figure_path(
+    cfg: Mapping[str, Any],
+    analysis: Mapping[str, str],
+    *,
+    sensor_group: str = "posterior",
+) -> Path:
     """Return the group-figure path for one condition/model-source analysis."""
     derivatives_root = Path(cfg["resolved_paths"]["derivatives_root"])
     session = str(cfg["layout"]["session_bids_id"])
-    return (
+    group = normalize_sensor_group(sensor_group)
+    base_dir = (
         derivatives_root
         / "sanity_checks"
         / "group"
         / session
         / "dot_side_decoding"
+    )
+    if group != "posterior":
+        base_dir = base_dir / group
+    return (
+        base_dir
         / analysis["condition"]
         / analysis["model_source"]
         / f"{analysis['key']}_dot_side_group_accuracy.png"
@@ -357,10 +423,12 @@ def group_figure_path(cfg: Mapping[str, Any], analysis: Mapping[str, str]) -> Pa
 def participant_trial_count_figure_path(
     cfg: Mapping[str, Any],
     subject: str,
+    *,
+    sensor_group: str = "posterior",
 ) -> Path:
     """Return the combined report's trial-count figure path for one subject."""
     return (
-        combined_output_paths(cfg)["report_dir"]
+        combined_output_paths(cfg, sensor_group=sensor_group)["report_dir"]
         / "participant_trial_counts"
         / f"{subject}_trial_counts_by_identity.png"
     )
@@ -373,16 +441,21 @@ def subject_output_paths(
     session: str,
     condition: str,
     model_source: str = "observed",
+    sensor_group: str = "posterior",
 ) -> dict[str, Path]:
     """Return canonical subject-level dot-side output paths."""
-    out_dir = (
+    group = normalize_sensor_group(sensor_group)
+    base_dir = (
         derivatives_root
         / "sanity_checks"
         / subject
         / session
         / "dot_side_decoding"
-        / condition
-        / model_source
+    )
+    out_dir = (
+        base_dir / condition / model_source
+        if group == "posterior"
+        else base_dir / group / condition / model_source
     )
     stem = f"{condition}_{model_source}"
     return {
@@ -405,6 +478,10 @@ def validate_cli_args(args: argparse.Namespace) -> None:
         raise SystemExit("--n-permutations must be non-negative.")
     if args.smooth_sigma_samples < 0:
         raise SystemExit("--smooth-sigma-samples must be non-negative.")
+    try:
+        normalize_sensor_group(args.sensor_group)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
 
 
 # -----------------------------------------------------------------------------
@@ -420,6 +497,7 @@ def load_subject_score(
     condition: str,
     model_source: str = "observed",
     metric: str,
+    sensor_group: str = "posterior",
 ) -> tuple[dict[str, Any] | None, dict[str, str] | None]:
     """
     Load one subject's dot-side summary and score series.
@@ -436,6 +514,7 @@ def load_subject_score(
         session=session,
         condition=condition,
         model_source=model_source,
+        sensor_group=sensor_group,
     )
     summary_path = paths["summary_json"]
     if not summary_path.is_file():
@@ -453,6 +532,12 @@ def load_subject_score(
             raise RuntimeError(
                 "summary model_source mismatch: "
                 f"{summary.get('model_source')!r} != {model_source!r}"
+            )
+        expected_group = normalize_sensor_group(sensor_group)
+        saved_group = normalize_sensor_group(summary.get("sensor_group", "posterior"))
+        if saved_group != expected_group:
+            raise RuntimeError(
+                f"summary sensor_group mismatch: {saved_group!r} != {expected_group!r}"
             )
         scores_csv = Path(str(summary.get("scores_csv", paths["scores_csv"]))).expanduser().resolve()
         figure_path = Path(str(summary.get("figure_path", paths["figure"]))).expanduser().resolve()
@@ -514,6 +599,7 @@ def load_group_inputs(
     model_source: str = "observed",
     metric: str,
     allow_missing: bool,
+    sensor_group: str = "posterior",
 ) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
     """
     Load and validate all requested subject-level dot-side outputs.
@@ -537,6 +623,7 @@ def load_group_inputs(
             condition=condition,
             model_source=model_source,
             metric=metric,
+            sensor_group=sensor_group,
         )
         if record is not None:
             records.append(record)
@@ -563,6 +650,9 @@ def load_group_inputs(
         "model_source",
         "model_condition",
         "analysis_key",
+        "sensor_group",
+        "decoder_sensor_type",
+        "n_decoder_channels",
         "n_times",
         "sfreq_hz",
         "decode_window_samples",
@@ -604,6 +694,9 @@ def validate_cross_analysis_settings(
         return
 
     scalar_keys = (
+        "sensor_group",
+        "decoder_sensor_type",
+        "n_decoder_channels",
         "sfreq_hz",
         "decode_window_samples",
         "decode_tmin_sec",
@@ -1095,6 +1188,9 @@ def plot_group_accuracy(
     metric: str,
     condition: str,
     model_source: str,
+    analysis_key: str,
+    analysis_label: str,
+    sensor_group: str,
     occlusion_timing: Mapping[str, Any],
     out_file: Path,
     raw_root: Path,
@@ -1105,20 +1201,18 @@ def plot_group_accuracy(
     mean = np.asarray(interval_result["mean"], dtype=float)
     low = np.asarray(interval_result["low"], dtype=float)
     high = np.asarray(interval_result["high"], dtype=float)
+    color = ANALYSIS_COLORS.get(str(analysis_key), "#1f77b4")
 
     fig, ax = plt.subplots(figsize=(13, 6), constrained_layout=True)
-    for _subject, series in zip(subjects, values, strict=True):
-        ax.plot(times, series, color="0.65", lw=0.8, alpha=0.65, label="_nolegend_")
-
     ax.fill_between(
         times,
         low,
         high,
-        color="#4c78a8",
+        color=color,
         alpha=0.22,
         label=str(interval_result["label"]),
     )
-    ax.plot(times, mean, color="#1f77b4", lw=2.2, label=f"Group mean ({metric})")
+    ax.plot(times, mean, color=color, lw=2.2, label=f"Group mean ({metric})")
     chance = float(stats_result["chance"])
     ax.axhline(chance, color="k", lw=1.0, ls=":", label=f"Chance = {chance:g}")
     ax.axvline(0.0, color="k", lw=1.0, ls="--", alpha=0.7)
@@ -1138,7 +1232,6 @@ def plot_group_accuracy(
             continue
         start_time = _time_for_cluster(times, cluster["start_index"])
         end_time = _time_for_cluster(times, cluster["end_index"])
-        color = "#d62728"
         alpha = 0.18
         ax.axvspan(start_time, end_time, color=color, alpha=alpha, lw=0)
         ax.plot([start_time, end_time], [cluster_y, cluster_y], color=color, lw=4)
@@ -1170,7 +1263,7 @@ def plot_group_accuracy(
     )
 
     ax.set_title(
-        f"Group dot-side decoding | {condition} | {model_source} model | "
+        f"Group dot-side decoding | {sensor_group} | {analysis_label} | "
         f"n={len(subjects)}"
     )
     ax.set_xlabel("Time from condition onset (s)")
@@ -1607,17 +1700,25 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
     """Load all requested analyses and write one group-first combined report."""
     raw_root = Path(cfg["resolved_paths"]["data_root"])
     subjects = [normalize_subject_label(value) for value in args.group_subjects]
+    sensor_group = normalize_sensor_group(args.sensor_group)
     analysis_specs = resolve_analysis_specs(args)
-    output_paths = combined_output_paths(cfg)
+    output_paths = combined_output_paths(cfg, sensor_group=sensor_group)
     participant_count_paths = {
-        subject: participant_trial_count_figure_path(cfg, subject)
+        subject: participant_trial_count_figure_path(
+            cfg,
+            subject,
+            sensor_group=sensor_group,
+        )
         for subject in subjects
     }
     expected_outputs = [
         output_paths["report_json"],
         output_paths["report_html"],
         output_paths["report_embedded_html"],
-        *[group_figure_path(cfg, spec) for spec in analysis_specs],
+        *[
+            group_figure_path(cfg, spec, sensor_group=sensor_group)
+            for spec in analysis_specs
+        ],
     ]
 
     if args.resume and all(path.is_file() for path in expected_outputs):
@@ -1631,10 +1732,17 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
                 f"requested selection: existing={existing_report.get('analysis_keys')}, "
                 f"requested={requested_keys}. Use --overwrite to rebuild."
             )
+        if normalize_sensor_group(existing_report.get("sensor_group", "posterior")) != sensor_group:
+            raise RuntimeError(
+                "Existing combined report sensor group does not match the "
+                f"requested selection: existing={existing_report.get('sensor_group')!r}, "
+                f"requested={sensor_group!r}. Use --overwrite to rebuild."
+            )
         return {
             "stage": "dot_side_group_report",
             "status": "completed_resume",
             "analysis_keys": requested_keys,
+            "sensor_group": sensor_group,
             "report_files": {
                 key: str(value)
                 for key, value in output_paths.items()
@@ -1662,6 +1770,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             model_source=spec["model_source"],
             metric=args.metric,
             allow_missing=args.allow_missing,
+            sensor_group=sensor_group,
         )
         times = records[0]["times"]
         raw_values = np.stack([record["values"] for record in records], axis=0)
@@ -1694,7 +1803,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             item["end_time_sec"] = float(times[item["end_index"]])
             clusters_for_report.append(item)
 
-        figure_path = group_figure_path(cfg, spec)
+        figure_path = group_figure_path(cfg, spec, sensor_group=sensor_group)
         if not args.validate_only:
             figure_path = plot_group_accuracy(
                 times=times,
@@ -1705,6 +1814,9 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
                 metric=args.metric,
                 condition=spec["condition"],
                 model_source=spec["model_source"],
+                analysis_key=spec["key"],
+                analysis_label=spec["label"],
+                sensor_group=sensor_group,
                 occlusion_timing=occlusion_timing,
                 out_file=figure_path,
                 raw_root=raw_root,
@@ -1715,6 +1827,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
                 **spec,
                 "subjects_requested": subjects,
                 "subjects_included": valid_subjects,
+                "sensor_group": sensor_group,
                 "skipped_inputs": skipped,
                 "times_sec": times,
                 "group_mean": interval_result["mean"],
@@ -1762,12 +1875,14 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
             "stage": "dot_side_group_report",
             "status": "validated",
             "analysis_keys": [result["key"] for result in analysis_results],
+            "sensor_group": sensor_group,
             "metric": args.metric,
             "analyses": {
                 result["key"]: {
                     "subjects_requested": result["subjects_requested"],
                     "subjects_included": result["subjects_included"],
                     "skipped_inputs": result["skipped_inputs"],
+                    "sensor_group": sensor_group,
                     "n_times": int(np.asarray(result["times_sec"]).size),
                     "cluster_count": len(result["clusters"]),
                     "significant_cluster_count": int(
@@ -1810,6 +1925,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
     summary_lines = [
         "Stage status: completed",
         f"Analyses: {', '.join(result['key'] for result in analysis_results)}",
+        f"Sensor group: {sensor_group}",
         f"Metric: {args.metric}",
         f"Subjects requested: {', '.join(subjects)}",
         f"Chance: {args.chance:g}",
@@ -1825,6 +1941,7 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         "status": "completed",
         "generated_utc": utc_now(),
         "analysis_keys": [result["key"] for result in analysis_results],
+        "sensor_group": sensor_group,
         "metric": args.metric,
         "session_bids_id": str(cfg["layout"]["session_bids_id"]),
         "subjects_requested": subjects,
@@ -1851,7 +1968,10 @@ def build_group_report(cfg: Mapping[str, Any], args: argparse.Namespace) -> dict
         },
     }
     write_json(output_paths["report_json"], report, raw_root=raw_root, overwrite=True)
-    title = f"Group | {cfg['layout']['session_bids_id']} | Dot-side decoding | all analyses"
+    title = (
+        f"Group | {cfg['layout']['session_bids_id']} | Dot-side decoding | "
+        f"{sensor_group} | all analyses"
+    )
     write_combined_html_report(
         output_paths["report_html"],
         title=title,

@@ -165,16 +165,14 @@ def _write_subject_output(
     *,
     condition: str = "always_visible",
     model_source: str = "observed",
+    sensor_group: str = "posterior",
 ) -> None:
     """Write a minimal subject dot-side output bundle for input-loader tests."""
+    base_dir = root / "sanity_checks" / subject / "ses-01" / "dot_side_decoding"
     out_dir = (
-        root
-        / "sanity_checks"
-        / subject
-        / "ses-01"
-        / "dot_side_decoding"
-        / condition
-        / model_source
+        base_dir / condition / model_source
+        if sensor_group == "posterior"
+        else base_dir / sensor_group / condition / model_source
     )
     out_dir.mkdir(parents=True)
     stem = f"{condition}_{model_source}"
@@ -200,9 +198,12 @@ def _write_subject_output(
                     else condition
                 ),
                 "analysis_key": stem,
+                "sensor_group": sensor_group,
+                "decoder_sensor_type": "grad",
                 "subject": subject.removeprefix("sub-"),
                 "session": "01",
                 "identity_range": [1, 4],
+                "n_decoder_channels": 2,
                 "n_times": int(times.size),
                 "sfreq_hz": 120.0,
                 "decode_window_samples": 10,
@@ -355,6 +356,84 @@ def test_group_input_loader_reports_missing_subjects(tmp_path):
             metric="accuracy_balanced_undersampled_sets",
             allow_missing=True,
         )
+
+
+def test_stage07_sensor_group_paths_are_group_scoped(tmp_path):
+    """Stage-07 reports use sensor-group subfolders and tagged report names."""
+    subject_paths = group_report.subject_output_paths(
+        derivatives_root=tmp_path,
+        subject="sub-01",
+        session="ses-01",
+        condition="always_visible",
+        model_source="observed",
+        sensor_group="occipital",
+    )
+    cfg = {
+        "resolved_paths": {"derivatives_root": str(tmp_path)},
+        "layout": {"session_bids_id": "ses-01"},
+    }
+    combined_paths = group_report.combined_output_paths(cfg, sensor_group="occipital")
+
+    assert subject_paths["out_dir"] == (
+        tmp_path
+        / "sanity_checks"
+        / "sub-01"
+        / "ses-01"
+        / "dot_side_decoding"
+        / "occipital"
+        / "always_visible"
+        / "observed"
+    )
+    assert combined_paths["report_json"].name == (
+        "dot_side_occipital_all_analyses_group_report.json"
+    )
+    assert combined_paths["report_json"].parent == (
+        tmp_path
+        / "reports"
+        / "group"
+        / "ses-01"
+        / "dot_side_decoding"
+        / "occipital"
+        / "combined"
+    )
+
+
+def test_group_input_loader_rejects_wrong_sensor_group_summary(tmp_path):
+    """A lobe report must not accidentally aggregate another sensor group's files."""
+    times = np.arange(5, dtype=float) / 120.0
+    _write_subject_output(
+        tmp_path,
+        "sub-01",
+        times,
+        np.full(5, 0.55),
+        sensor_group="occipital",
+    )
+    summary_path = (
+        tmp_path
+        / "sanity_checks"
+        / "sub-01"
+        / "ses-01"
+        / "dot_side_decoding"
+        / "occipital"
+        / "always_visible"
+        / "observed"
+        / "always_visible_observed_dot_side_decoding_summary.json"
+    )
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    summary["sensor_group"] = "parietal"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+    record, skipped = group_report.load_subject_score(
+        derivatives_root=tmp_path,
+        subject="sub-01",
+        session="ses-01",
+        condition="always_visible",
+        metric="accuracy_balanced_undersampled_sets",
+        sensor_group="occipital",
+    )
+
+    assert record is None
+    assert skipped is not None
+    assert "sensor_group mismatch" in skipped["reason"]
 
 
 def test_group_input_loader_rejects_time_axis_mismatch(tmp_path):

@@ -2697,3 +2697,41 @@ Suggested commit message:
 
 Suggested commit message:
 `Expand dRSA PE models and group reporting`
+# 21 Jul 2026 11:18
+
+## Add sensor-group dot-side decoding
+
+### `meg/cluster/submit_dot_side_decoding.sh`
+- Expand the SGE array from one task per participant to one task per participant x requested decoder sensor group, with the default seven-subject/four-region configuration mapped across 28 tasks.
+- Add validated `DAD_DOT_SIDE_SENSOR_GROUPS` and `DAD_DECODER_SENSOR_TYPE` controls, including compatibility aliases for whole-brain and the historical parietal misspelling.
+- Pass the selected Stage-07 sensor group and MEG channel type into each participant analysis, nest custom and default outputs by group, and print group-specific completion paths.
+- Change the default same-identity pseudo-trial averaging request from one trial to two trials while preserving explicit overrides and the all-trials mode.
+
+### `meg/cluster/submit_dot_side_group_report.sh`
+- Add a validated sensor-group list and run the group-report command once per requested Stage-07 region instead of building a single unscoped aggregate.
+- Pass the selected group into the Python report, retain validate/rebuild/resume and missing-subject controls per group, and report the new group-scoped output layout.
+- Change the default group uncertainty band from 95% CI to SEM for poster-readable summaries while preserving the `DAD_DOT_SIDE_INTERVAL` override.
+
+### `meg/code/sanity_checks/01_dot_side_decoding.py`
+- Add `--sensor-group` and `--decoder-sensor-type` controls while preserving the historical posterior-gradiometer decoder as the backward-compatible default.
+- Parse the canonical MEGIN/Neuromag lobe channel definitions from the shared Stage-07 MATLAB utility, normalize group aliases, filter requested groups to available magnetometer or gradiometer channels, and preserve MNE channel order.
+- Record the complete decoder-selection policy, available/requested/selected channel counts, dropped channels, group name, sensor type, and selected channel list in validation and completed summary metadata.
+- Scope non-posterior output directories by sensor group and update figure/report titles so results cannot be mistaken for the historical posterior feature set.
+- Validate unsupported group/type combinations and require at least two selected channels before decoding.
+
+### `meg/code/sanity_checks/02_dot_side_group_report.py`
+- Add a one-group-per-run CLI contract with normalized group names, group-scoped participant input paths, group figures, combined JSON, and linked/embedded HTML reports while preserving historical posterior paths.
+- Validate saved participant summaries against the requested sensor group and enforce consistent decoder group, channel type, and channel count across analyses before aggregation.
+- Carry sensor-group provenance through validate-only results, completed report metadata, resume checks, analysis records, figure titles, and report summaries.
+- Use analysis-specific colors for group means, uncertainty bands, and significant-cluster markers, and omit individual-subject traces from the group accuracy panel for a cleaner aggregate display.
+
+### `meg/tests/test_dot_side_decoding.py`
+- Add a synthetic MNE channel-selection test confirming Stage-07 group membership is filtered to the requested sensor type while retaining channel order and selection metadata.
+
+### `meg/tests/test_dot_side_group_report.py`
+- Extend fake participant bundles with sensor-group, decoder-type, and decoder-channel-count metadata.
+- Verify Stage-07 participant and group report paths are nested and named by sensor group without changing historical posterior paths.
+- Verify aggregation rejects a participant summary whose recorded group does not match the requested report group.
+
+Suggested commit message:
+`Add sensor-group dot-side decoding`
