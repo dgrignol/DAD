@@ -15,6 +15,7 @@ data/
 meg/data/
 meg/derivatives/
 meg/tmp/
+/tmp/
 experiment/triggers_report_sub03_copy_withNotes.pdf
 experiment/oldies/triggers_report_sub03_copy_withNotes.pdf
 reports/old_reports/

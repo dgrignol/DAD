@@ -1,5 +1,15 @@
 # 30 Jul 2026 18:04
 
+## Ignore repository temporary files
+
+### `.gitignore`
+- Ignore the repository-root `/tmp/` directory while leaving similarly named nested directories unaffected.
+
+Suggested commit message:
+`Ignore repository temporary files`
+
+# 30 Jul 2026 18:04
+
 ## Document v21 photodiode acquisition workflow
 
 ### `experiment/MEG_lab_procedure.md`
