@@ -1,7 +1,8 @@
 # MEG protocol CIMeC Ingmar de Vries
 
 -> a double ^^ preceeding text indicate a part in which the text needs updating.
--> Photodiode references are still present but not applicable at the moment as there is no photodiode
+-> The current v21 runtime uses the photodiode. Confirm the physical sensor
+   placement against the configured patch before every acquisition.
 
 ## Before subject
 
@@ -48,7 +49,18 @@
 
 - Stimulation PC:
   - Open Matlab.
-  - Start experiment and check triggers and photodiode on acquisition PC.
+  - Confirm the launcher uses
+    `MoveDot1_experiment_occlusion_v21_photodiode.m` with
+    `lib/Config_runtime_v21_photodiode.m`.
+  - Check the configured photodiode patch before attaching the sensor:
+    `photodiodePatchSizePx` defaults to `[50 50]` and
+    `photodiodePatchPositionPx` defaults to `[0 0]` from the PTB window
+    top-left. Adjust both values in the runtime config if needed.
+  - Start a test and verify both the digital triggers and the photodiode
+    pulses on the acquisition PC (photodiode channel: MISC 008).
+  - Verify that the patch returns to black after each pulse and at experiment
+    cleanup. Defaults are four frames for trial-condition markers and two
+    frames for marked visual events.
   - Check and if needed change refresh rate of projector (e.g. if you need 60Hz instead of 120Hz).
 
 - Eyetracker:

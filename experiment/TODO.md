@@ -4,8 +4,8 @@ experiment/lib/Config_stimuli_generation_V30_rescueTraject.m
 experiment/stimuli_generation_V30_rescueTraject.m
 experiment/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
 experiment/CreateInputFiles_v23_rescueTraject.m
-experiment/lib/Config_runtime_v20_rescueTraject.m
-experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
+experiment/lib/Config_runtime_v21_photodiode.m
+experiment/MoveDot1_experiment_occlusion_v21_photodiode.m
 
 **Experiment Flow**
 - [ ] if blink happens in between trials should be fine
@@ -22,6 +22,10 @@ experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
 
 **DONE**
 
+- [x] Move condition triggers to the fully drawn first-frame presentation
+      boundary and add a configurable photodiode patch. The v21 runtime
+      defaults to a `50 x 50 px` patch at `[0 0]`, enabled when `MEG=true`,
+      with four-frame condition pulses and two-frame marked-event pulses.
 
 **From participant feedback**
 - [x] catch trials to 15%

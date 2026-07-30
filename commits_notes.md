@@ -1,3 +1,39 @@
+# 30 Jul 2026 18:04
+
+## Document v21 photodiode acquisition workflow
+
+### `experiment/MEG_lab_procedure.md`
+- Replace the obsolete no-photodiode warning with a pre-acquisition requirement to confirm sensor placement against the configured v21 patch.
+- Document the active runtime/config pair, default patch geometry, MISC 008 acquisition channel, digital-trigger and pulse checks, pulse widths, and expected return to black.
+
+### `experiment/TODO.md`
+- Promote the active runtime/config paths from v20 to v21.
+- Record the completed first-frame trigger relocation and configurable MEG-enabled photodiode pulse policy.
+
+### `experiment/run_MEG_lab/MEG_lab_procedure.md`
+- Mirror the v21 photodiode setup and verification procedure in the standalone lab instructions.
+- Normalize the final newline while retaining the existing hardware troubleshooting guidance.
+
+### `experiment/run_MEG_lab/README_RUN_MEG_LAB.md`
+- Update the deployed stack identity, runtime preset path, and output expectations from v20 to v21 photodiode.
+- Document the lab defaults for patch enablement, size, position, condition-pulse duration, and marked-event pulse duration.
+
+### `experiment/run_MEG_lab/trigger_codes_occlusion_v10_rescueTraject.md`
+- Mirror the v21 trigger map ownership and photodiode marker policy in the lab copy.
+- Specify that condition codes `71`, `81`, and `91` mark the fully drawn first frame, event codes `111`, `112`, and `114`-`118` use the shorter pulse, and nonvisual sequence/status/gaze/ESC codes do not request pulses.
+
+### `experiment/trigger_codes_occlusion_v10_rescueTraject.md`
+- Update the trigger-map owner and current stack label to v21 while retaining the existing digital trigger values.
+- Document the distinction between four-frame condition markers and two-frame visual-event markers, plus the patch configuration and low-state behavior.
+
+### `paper/methods.md`
+- Describe v21 as the current runtime without retroactively assigning it to sub04-sub07, whose presented stack remains correctly reported as v20.
+- Add the photodiode timing, marked trigger set, `120 Hz` pulse durations, patch draw ordering, cleanup behavior, enablement policy, and configurable geometry/colors.
+- Update current-runtime paths and clarify which trigger, fixation, schedule, and response behaviors are shared with or inherited from v20.
+
+Suggested commit message:
+`Document v21 photodiode acquisition workflow`
+
 # 30 Jul 2026 18:03
 
 ## Add photodiode and display setup utilities

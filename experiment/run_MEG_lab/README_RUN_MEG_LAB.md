@@ -1,4 +1,4 @@
-# run_MEG_lab Launcher Notes (V30/v23/v20)
+# run_MEG_lab Launcher Notes (V30/v23/v21 photodiode)
 
 This folder is a standalone lab copy built from the current `experiment/` sources and launched with:
 
@@ -26,14 +26,18 @@ Alternative direct launch (if Intel wrapper is not required on your machine):
 
 ## Active lab defaults
 
-- Stimulus/schedule/runtime stack: `V30 / v23 / v20`
+- Stimulus/schedule/runtime stack: `V30 / v23 / v21_photodiode`
 - Unique path IDs per condition: `40` (`trialsPerCondition = 40`)
 - MEG mode: enabled
 - Real EyeLink: enabled
 - Fake eye tracker: disabled
-- Fixation replay threshold: `fixWindowDeg = 3.0` in `lib/Config_runtime_v20_rescueTraject.m`
+- Fixation replay threshold: `fixWindowDeg = 3.0` in `lib/Config_runtime_v21_photodiode.m`
 - Fixation replay policy: `replayLimit = 1`
 - Start block default: `targetBlock = 1` in `runExpReadable.m`
+- Photodiode patch: enabled by default in MEG mode, `50 x 50 px`, at
+  `[0 0]` relative to the PTB window top-left.
+- Photodiode pulses: four frames for condition/trial onset; two frames for
+  marked occlusion, type-1 catch, and catch-question events.
 
 ## Resume from a later block
 

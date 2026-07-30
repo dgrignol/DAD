@@ -1,11 +1,11 @@
 # Methods
 
-## Current implementation update (V30 generation / v23 schedule / v20 runtime)
+## Current implementation update (V30 generation / v23 schedule / v21 photodiode runtime)
 
 The active experiment stack is now:
 - generation: `stimuli_generation_V30_rescueTraject.m` with `Config_stimuli_generation_V30_rescueTraject.m` in /lib
 - schedule creation: `CreateInputFiles_v23_rescueTraject.m` with `Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m` in /lib
-- runtime: `MoveDot1_experiment_occlusion_v20_rescueTraject.m` with `Config_runtime_v20_rescueTraject.m` in /lib
+- runtime: `MoveDot1_experiment_occlusion_v21_photodiode.m` with `Config_runtime_v21_photodiode.m` in /lib
 - triggers in trigger_codes_occlusion_v10_rescueTraject.md
 
 Behavioral and UI updates applied in the current runtime:
@@ -23,7 +23,7 @@ Behavioral and UI updates applied in the current runtime:
   - `itiVisualSeparationDur = [0.300, 0.700] s` by default
   - if `ITIRangeSec(2) < itiVisualSeparationDur(2) + 0.300`, runtime warns and forces `itiVisualMode='off'`.
 - `fixation_short` uses tunable parameters `itiFixationShortDelaySec` (default `0.100 s`) and `itiFixationShortDurationSec` (default `0.300 s`) and does not use the `300 ms` tail guard.
-- ITI jitter runtime preset in `Config_runtime_v20_rescueTraject.m` is now `ITIRangeSec = [1.000, 1.500]` (seconds); this remains fully tunable and validated at runtime.
+- ITI jitter runtime preset in `Config_runtime_v21_photodiode.m` is `ITIRangeSec = [1.000, 1.500]` (seconds); this remains fully tunable and validated at runtime.
 - Catch rates are now `15%` in schedule config:
   - `catchRateType1Run1 = 0.15`
   - `catchRateType2Runs23 = 0.15`
@@ -40,9 +40,36 @@ Behavioral and UI updates applied in the current runtime:
 - The dedicated final message screen is removed from runtime flow; the final block uses the same end-of-block message pathway.
 - Central fixation rendering in the current runtime uses an ABC/bullseye-style fixation cross (Thaler et al., 2013 ) with a crosshair, replacing the simpler cross used in earlier runtimes.
 
+Photodiode synchronization added in the v21 runtime:
+- Trial-condition triggers `71`, `81`, and `91` are emitted only after the
+  first stimulus frame is fully drawn and immediately before the patch draw
+  and corresponding `Screen('Flip')`.
+- The patch is high for four displayed frames at condition/trial onset and
+  for two displayed frames at occlusion boundaries (`111`, `112`, `114`,
+  `115`), type-1 catch disappear/reappear events (`116`, `117`), and
+  catch-question onset (`118`). At `120 Hz`, these defaults correspond to
+  approximately `33.3 ms` and `16.7 ms`, respectively.
+- The patch is drawn last on every experiment-controlled display flip. It is
+  held at its low color outside marked pulses, including an explicit low
+  frame after a pulse and during cleanup.
+- The runtime preset enables the patch by default when `MEG=true`. Patch
+  size (`photodiodePatchSizePx`, default `[50 50]` pixels), top-left-relative
+  location (`photodiodePatchPositionPx`, default `[0 0]`), high/low colors,
+  and both pulse widths are configurable and validated against the opened
+  display bounds.
+- Trigger values and the DataPixx output schedule are unchanged from v20;
+  v21 changes the trial-condition emission point and adds the visual
+  photodiode marker.
+
 ## Methods changes
 
-The main methods sections in this file describe the latest stack, used for sub04-sub07: V30 stimulus generation, v23 scheduling, v20 runtime, and v10 trigger coding. Earlier participants were run with pilot stacks. The table below reports only data actually saved/presented to participants; generated or prepared extra blocks are not interpreted as part of the methods.
+The main methods sections describe the V30 stimulus generation and v23
+scheduling shared by the current v21 stack and the v20 stack used for
+sub04-sub07. The v21 photodiode runtime is the current launch target, but it
+is not assigned retroactively to those participants. Earlier participants
+were run with pilot stacks. The table below reports only data actually
+saved/presented to participants; generated or prepared extra blocks are not
+interpreted as part of the methods.
 
 | Subject | Presented stack | Saved blocks | Source trials completed | Replay presentations | Total presentations | Scored catch questions | Notes |
 |---|---|---:|---:|---:|---:|---:|---|
@@ -58,7 +85,7 @@ Source trials completed are non-replay scheduled presentations. Total presentati
 
 Stimulus-generation changes:
 - The unique trajectory pool increased from `20` sequence IDs per condition in sub01-sub03 to `40` sequence IDs per condition in sub04-sub07.
-- Condition trigger codes changed with the runtime: v18/v19 used `31` (`always_visible`), `41` (`occluded_nondeviant`), and `51` (`occluded_deviant`); v20 used `71`, `81`, and `91`. Sequence identity triggers were emitted at frame `12`; the usable sequence range was `1-20` for sub01-sub03 and `1-40` for sub04-sub07.
+- Condition trigger codes changed with the runtime: v18/v19 used `31` (`always_visible`), `41` (`occluded_nondeviant`), and `51` (`occluded_deviant`); v20 introduced `71`, `81`, and `91`, which v21 retains. Sequence identity triggers were emitted at frame `12`; the usable sequence range was `1-20` for sub01-sub03 and `1-40` for sub04-sub07.
 - Baseline and post-deviance curvature windows were stable across the saved rescueTraject inputs: `[-0.8, -0.3755] U [0.3755, 0.8]`, with `randomizeCurvatureOnDeviant = true` and `flipCurvatureOnDeviant = false`.
 - The signed deviant-turn window changed across early inputs. The saved presented files show `[-81,-15] U [15,81] deg` for sub01, `[-81,-10] U [10,81] deg` for sub02, and `[-81,0] U [0,81] deg` for sub03-sub07.
 - `Cfg.DirChange = 30` was saved in the input files but should not be reported as a fixed deviant turn. The generator sampled actual deviant turns from `deviantSignedTurnWindows`, saved the resulting `xySeqs`, and runtime consumed the precomputed `xy` trajectories rather than recomputing paths from `Cfg.DirChange`.
@@ -72,7 +99,7 @@ Schedule, task, and display changes:
 - The dedicated final message screen was enabled for sub01 and disabled from sub02 onward.
 - The fixation acceptance window was `7 deg` for all participants except sub02, which used `3 deg`.
 - Run-family color cueing was enabled for all participants except sub03, where it was disabled.
-- The current v20 runtime used for sub04-sub07 renders an ABC/bullseye-style fixation cross (Thaler et al., 2013 ) with a crosshair; v18/v19 used a simpler fixation cross.
+- The v20 runtime used for sub04-sub07 and the current v21 runtime render an ABC/bullseye-style fixation cross (Thaler et al., 2013 ) with a crosshair; v18/v19 used a simpler fixation cross.
 
 Eye tracking and ocular recordings:
 - For sub01, the eye tracker operated online during the experiment, so fixation-break detection and the associated replay logic were active. The saved eye-tracker data were subsequently lost, however, and offline analysis of ocular activity for this participant relied on EOG recordings instead.
@@ -123,7 +150,7 @@ Latest-stack per-block schedule:
 - Run 2: shuffled first half of `occluded_nondeviant` + first half of `occluded_deviant`
 - Run 3: shuffled remaining halves of both occluded conditions
 
-With `40` base trials per condition, base run lengths are `40/40/40` before catch insertion. Runtime (`MoveDot1_experiment_occlusion_v20_rescueTraject.m`) supports block resume by starting at user-selected `iBlock`. The actual number of saved blocks and trials per participant is reported in the Methods changes section.
+With `40` base trials per condition, base run lengths are `40/40/40` before catch insertion. Runtime (`MoveDot1_experiment_occlusion_v21_photodiode.m`) supports block resume by starting at user-selected `iBlock`. The actual number of saved blocks and trials per participant is reported in the Methods changes section.
 
 ## Catch trials and task
 
@@ -156,7 +183,7 @@ Each trial displayed one trajectory. A central fixation cross (Thaler et al., 20
 
 On catch trials, a post-trial question was shown for `4.0 s`:
 - schedule default prompt: `"Has the dot changed its course?"`
-- runtime preset in `Config_runtime_v20_rescueTraject.m` overrides this with: `"Did the trajectory change while occluded?"`
+- runtime preset in `Config_runtime_v21_photodiode.m` overrides this with: `"Did the trajectory change while occluded?"`
 
 Response mapping:
 - YES: code `1` (`RightArrow`, `8`, `y`; MEG button value `8`, blue)
