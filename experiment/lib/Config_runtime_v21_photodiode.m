@@ -1,10 +1,11 @@
-% Config_runtime_v20_rescueTraject.m
+% Config_runtime_v21_photodiode.m
 %
 % Purpose:
 %   Define workspace variables consumed by:
-%     MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%     MoveDot1_experiment_occlusion_v21_photodiode.m
 %   so the experiment can be started non-interactively with a reproducible
-%   runtime preset (subject/block/mode/debug/eye-tracker/occluder settings).
+%   runtime preset (subject/block/mode/debug/eye-tracker/occluder and
+%   photodiode settings).
 %
 % How it works:
 %   - This file is a SCRIPT (not a class and not a function).
@@ -13,14 +14,14 @@
 %     clearvars -except list and uses them as runtime overrides.
 %
 % Usage example (inside experiment/):
-%   run('lib/Config_runtime_v20_rescueTraject.m');
-%   run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');
+%   run('lib/Config_runtime_v21_photodiode.m');
+%   run('MoveDot1_experiment_occlusion_v21_photodiode.m');
 %
 % Usage example (MATLAB batch from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
-%    run('lib/Config_runtime_v20_rescueTraject.m'); ...
-%    run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');"
+%    run('lib/Config_runtime_v21_photodiode.m'); ...
+%    run('MoveDot1_experiment_occlusion_v21_photodiode.m');"
 %
 % Notes:
 %   - Set optional fields to [] to use schedule defaults from:
@@ -33,8 +34,9 @@
 % Outputs:
 %   Variables in workspace:
 %     iSub, iBlock, viewingDistanceMm, practice_mode, MEG, ...
-%     ITIRangeSec, and all optional override variables supported by v20
-%     rescueTraject.
+%     ITIRangeSec, photodiodePatchEnabled, photodiodePatchSizePx,
+%     photodiodePatchPositionPx, photodiode colors/pulse widths, and all
+%     optional override variables supported by v21 photodiode.
 
 %% Core session identity and run mode
 % Data flow: these values define participant/session selection and suppress
@@ -104,6 +106,20 @@ pathBandStraightEndForwardDotRadiusScale = []; % Accepted: [] or finite scalar >
 pathBandStraightPostStartWidthExtraDotRadiusScale = []; % Accepted: [] or finite scalar >= 0. Default when []/unset: scheduleCfg.pathBandStraightPostStartWidthExtraDotRadiusScale (current default: 0.15).
 pathBandStraightStartBackshiftPixelOffset = []; % Accepted: [] or finite scalar (pixels, signed). Default when []/unset: scheduleCfg.pathBandStraightStartBackshiftPixelOffset (current default: -0.5).
 
+%% Photodiode patch and pulse controls
+% Data flow: values below -> v21 runtime validation -> absolute patch
+% rectangle after the PTB window opens -> final draw call before every flip.
+% Position is an [x y] pixel offset from the window's top-left corner.
+% Condition triggers 71/81/91 use the trial pulse width; visual event
+% triggers 111/112/114/115/116/117/118 use the event pulse width.
+photodiodePatchEnabled = []; % Accepted: [] or logical. Default when []/unset: follows MEG (enabled in MEG mode, disabled otherwise).
+photodiodePatchSizePx = [50 50]; % Accepted: finite [width height] values >= 1 pixel.
+photodiodePatchPositionPx = [0 0]; % Accepted: finite non-negative [x y] pixel offset from window top-left.
+photodiodePatchHighColor = [255 255 255]; % Accepted: finite RGB triplet in [0,255].
+photodiodePatchLowColor = [0 0 0]; % Accepted: finite RGB triplet in [0,255], different from high color.
+photodiodeTrialPulseFrames = 4; % Accepted: integer >= 1; used for condition/trial-onset markers.
+photodiodeEventPulseFrames = 2; % Accepted: integer >= 1; used for marked within-trial/question events.
+
 %% PTB sync policy override and flip-miss guardrails
 % Data flow: optional timing guard overrides; [] keeps schedule defaults.
 debugSkipSyncTests = []; % Accepted: [] or {0,1}/logical. Default when []/unset: policy mode (MEG->schedule skipSyncTestsWhenMEG=false; debug non-MEG may use skipSyncTestsInDebug=true).
@@ -147,7 +163,10 @@ itiRangeForPrint = ITIRangeSec;
 if isempty(itiRangeForPrint)
     itiRangeForPrint = [0.500, 1.000];
 end
-fprintf(['Loaded runtime preset for MoveDot1 v20 rescueTraject: ' ...
-    'SUB=%02d startBlock=%02d practice=%d dryRun=%d debugRun=%s ITI=[%.3f %.3f] entranceStyle=%s\n'], ...
+fprintf(['Loaded runtime preset for MoveDot1 v21 photodiode: ' ...
+    ['SUB=%02d startBlock=%02d practice=%d dryRun=%d debugRun=%s ' ...
+    'ITI=[%.3f %.3f] entranceStyle=%s diodeEnabled=%s size=%s position=%s\n']], ...
     iSub, iBlock, practice_mode, double(dryRunValidateScheduleOnly), ...
-    mat2str(debug_runNumber), itiRangeForPrint(1), itiRangeForPrint(2), char(pathBandEntranceStyle));
+    mat2str(debug_runNumber), itiRangeForPrint(1), itiRangeForPrint(2), ...
+    char(pathBandEntranceStyle), mat2str(photodiodePatchEnabled), ...
+    mat2str(photodiodePatchSizePx), mat2str(photodiodePatchPositionPx));

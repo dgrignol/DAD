@@ -6,7 +6,7 @@
 %     1) runtime config preset load
 %     2) stimuli_generation_V30_rescueTraject.m
 %     3) CreateInputFiles_v23_rescueTraject.m
-%     4) MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%     4) MoveDot1_experiment_occlusion_v21_photodiode.m
 %
 % Why this launcher exists:
 %   - Keep one place where subject/block and overwrite policy are edited.
@@ -23,14 +23,14 @@
 %    run('runExpReadable.m');"
 %
 % Inputs:
-%   - lib/Config_runtime_v20_rescueTraject.m
+%   - lib/Config_runtime_v21_photodiode.m
 %   - lib/Config_stimuli_generation_V30_rescueTraject.m
 %   - lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
 %
 % Outputs:
 %   - input_files/MovDot_SubXX_V30_rescueTraject.mat
 %   - input_files/SubXX_TrialStruct_v23_rescueTraject.mat
-%   - output_files/MoveDot1_occlusion_v20_rescueTraject_SUBXX_BLOCKYY.mat
+%   - output_files/MoveDot1_occlusion_v21_photodiode_SUBXX_BLOCKYY.mat
 %
 % Key assumptions:
 %   - Called scripts use relative paths from experiment/.
@@ -68,7 +68,7 @@ save(launcherCfgPath, 'launcherCfg');
 
 %% Step 1: Stimuli generation (V30)
 % Data flow: targetSub + overwrite flag -> MovDot_SubXX_V30_rescueTraject.mat
-run('lib/Config_runtime_v20_rescueTraject.m');
+run('lib/Config_runtime_v21_photodiode.m');
 addpath('lib');
 cfgStim = Config_stimuli_generation_V30_rescueTraject;  % explicit dependency touchpoint
 iSub = launcherCfg.targetSub;
@@ -144,7 +144,7 @@ end
 
 %% Step 3: Runtime launch (MoveDot1 experiment)
 % Data flow: targetSub/targetBlock + runtime overrides -> live block execution.
-run('lib/Config_runtime_v20_rescueTraject.m');
+run('lib/Config_runtime_v21_photodiode.m');
 iSub = launcherCfg.targetSub;
 iBlock = launcherCfg.targetBlock;
 fixWindowDeg = launcherCfg.fixationWindowDeg;  % consumed by called script workspace
@@ -157,7 +157,7 @@ eyeTrackerDoCalibration = true;
 eyeTrackerAllowBetweenBlockCalibration = true;
 dryRunValidateScheduleOnly = false;
 debugSkipSyncTests = 0;
-run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');
+run('MoveDot1_experiment_occlusion_v21_photodiode.m');
 
 %% Cleanup
 % Data flow: best-effort temp checkpoint cleanup at normal launcher exit.

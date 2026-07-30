@@ -1,3 +1,74 @@
+# 30 Jul 2026 18:02
+
+## Add v21 photodiode experiment runtime
+
+### `experiment/CreateInputFiles_v23_rescueTraject.m`
+- Preserve `launcherCfgPath` across the schedule script's workspace cleanup so `runExperiment.m` can reload its temporary launcher snapshot before starting the runtime.
+- Update the active message-flow dependency documentation from the retired v20 runtime to the v21 photodiode runtime.
+
+### `experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m` -> `experiment/MoveDot1_experiment_occlusion_v21_photodiode.m`
+- Rename the active runtime and its output/debug identities from v20 rescueTraject to v21 photodiode while retaining the established schedule, EyeLink, replay, ITI, and display behavior.
+- Move condition-trigger emission for codes `71`, `81`, and `91` to the fully drawn first-frame presentation boundary immediately before the photodiode patch draw and display flip.
+- Add validated, configurable patch enablement, size, top-left-relative position, high/low colors, four-frame trial pulses, and two-frame marked-event pulses for trigger codes `111`, `112`, `114`, `115`, `116`, `117`, and `118`.
+- Route experiment-controlled screen flips through a photodiode-aware wrapper, keep the patch low outside requested pulses, prevent overlapping requests from collapsing the required low transition, and force a final low frame during cleanup.
+- Extend runtime configuration persistence, diagnostics, output naming, and catch-question presentation so trigger logging and photodiode frames remain aligned.
+
+### `experiment/lib/Config_runtime_v20_rescueTraject.m` -> `experiment/lib/Config_runtime_v21_photodiode.m`
+- Rename the development runtime preset for v21 and expose the patch geometry, colors, enablement policy, and trial/event pulse widths as documented workspace overrides.
+- Keep the non-lab EyeLink and fixation controls delegated to schedule defaults while printing the active photodiode settings in the preset audit line.
+
+### `experiment/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m`
+- Update active runtime and eye-tracker comments to identify the v21 photodiode consumer while preserving the existing v23 schedule configuration and compatibility-oriented filename.
+
+### `experiment/runExpReadable.m`
+- Switch both runtime-preset loads and the final direct launch from v20 to v21.
+- Update documented inputs and output filenames so the readable launcher matches the active photodiode stack.
+
+### `experiment/runExperiment.m`
+- Default to the v21 config and runtime, validate an overridable `runtimeExperimentScript`, and retain its path in the temporary launcher snapshot.
+- Carry all photodiode patch and pulse overrides across generator/schedule scripts before launching the selected runtime.
+- Update launcher documentation and output naming for the V30/v23/v21 stack.
+
+### `experiment/runTestExperiment.m`
+- Point the laptop-safe end-to-end launcher and optional output cleanup at the v21 runtime/output identity.
+- Update the documented test stack while retaining fake-eye-tracker and non-MEG defaults.
+
+### `experiment/run_MEG_lab/CreateInputFiles_v23_rescueTraject.m`
+- Mirror the active schedule dependency documentation and preserve `launcherCfgPath` through workspace cleanup so the standalone lab launcher can continue after schedule generation.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v20_rescueTraject.m` -> `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v21_photodiode.m`
+- Mirror the v21 photodiode runtime rename and timing implementation in the standalone MEG-lab deployment copy.
+- Keep the deployed runtime byte-identical to the development runtime so condition/event pulses, low-state cleanup, and trigger timing follow the same code path in both environments.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v20_rescueTraject.m` -> `experiment/run_MEG_lab/lib/Config_runtime_v21_photodiode.m`
+- Mirror the v21 patch and pulse controls in the lab preset.
+- Retain lab-specific real-EyeLink defaults, the `3.0 deg` fixation window, bounded replay policy, and calibration behavior.
+
+### `experiment/run_MEG_lab/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m`
+- Update active runtime and eye-tracker comments to the v21 photodiode name while retaining the mirrored v23 schedule defaults.
+
+### `experiment/run_MEG_lab/runExpReadable.m`
+- Switch the standalone lab launcher to the v21 runtime/config/output identity.
+- Preserve the lab-specific readable-launch defaults, including the documented `3.0 deg` fixation preset.
+
+### `experiment/run_MEG_lab/runExperiment.m`
+- Mirror the configurable v21 runtime selection and photodiode override handoff used by the development launcher.
+- Preserve the launcher snapshot across generation and schedule steps before starting acquisition.
+
+### `experiment/run_MEG_lab/runTestExperiment.m`
+- Mirror the v21 test-launch and output-cleanup paths in the standalone lab copy.
+
+### `experiment/run_MEG_lab/stimuli_generation_V30_rescueTraject.m`
+- Preserve `launcherCfgPath` during generator workspace cleanup so the lab launcher can reload its configuration for schedule generation and runtime launch.
+- Update the active runtime compatibility comment to v21.
+
+### `experiment/stimuli_generation_V30_rescueTraject.m`
+- Preserve `launcherCfgPath` during generator workspace cleanup for the multi-step launcher.
+- Update exported trigger/event metadata documentation to reference the active v21 runtime.
+
+Suggested commit message:
+`Add v21 photodiode experiment runtime`
+
 # 29 Jun 2026 12:09
 
 ## Add dot ERF sanity-check analysis

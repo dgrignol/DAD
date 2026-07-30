@@ -4,7 +4,7 @@
 %   One-command launcher for the current real experiment stack:
 %     1) stimuli_generation_V30_rescueTraject.m
 %     2) CreateInputFiles_v23_rescueTraject.m
-%     3) MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%     3) MoveDot1_experiment_occlusion_v21_photodiode.m
 %
 %   The launcher is configured for real acquisition mode:
 %     - MEG/DataPixx enabled
@@ -29,17 +29,20 @@
 %   - showPathPlots (logical, default false)
 %   - randomSeed (integer, default iSub*100 + 1)
 %   - numBlocks (integer >= 1, default schedule config value)
-%   - runtimeConfigScript (path, default 'lib/Config_runtime_v20_rescueTraject.m')
+%   - runtimeConfigScript (path, default
+%     'lib/Config_runtime_v21_photodiode.m')
+%   - runtimeExperimentScript (path, default
+%     'MoveDot1_experiment_occlusion_v21_photodiode.m')
 %
 % Inputs:
-%   - lib/Config_runtime_v20_rescueTraject.m (runtime preset)
+%   - lib/Config_runtime_v21_photodiode.m (runtime preset)
 %   - lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
 %   - lib/Config_stimuli_generation_V30_rescueTraject.m
 %
 % Outputs:
 %   - input_files/MovDot_SubXX_V30_rescueTraject*.mat
 %   - input_files/SubXX_TrialStruct_v23_rescueTraject.mat
-%   - output_files/MoveDot1_occlusion_v20_rescueTraject_SUBXX_BLOCKYY.mat
+%   - output_files/MoveDot1_occlusion_v21_photodiode_SUBXX_BLOCKYY.mat
 %   - output_files/MBssbbaa.edf (one EDF per completed block)
 %
 % Key assumptions:
@@ -69,7 +72,12 @@ if ~exist('numBlocks', 'var')
     numBlocks = [];
 end
 if ~exist('runtimeConfigScript', 'var') || isempty(runtimeConfigScript)
-    runtimeConfigScript = fullfile('lib', 'Config_runtime_v20_rescueTraject.m');
+    runtimeConfigScript = fullfile('lib', ...
+        'Config_runtime_v21_photodiode.m');
+end
+if ~exist('runtimeExperimentScript', 'var') || isempty(runtimeExperimentScript)
+    runtimeExperimentScript = ...
+        'MoveDot1_experiment_occlusion_v21_photodiode.m';
 end
 
 %% Resolve launcher location and load runtime preset
@@ -83,6 +91,9 @@ addpath('lib');
 
 if exist(runtimeConfigScript, 'file') ~= 2
     error('Runtime config script not found: %s', runtimeConfigScript);
+end
+if exist(runtimeExperimentScript, 'file') ~= 2
+    error('Runtime experiment script not found: %s', runtimeExperimentScript);
 end
 run(runtimeConfigScript);
 
@@ -144,8 +155,9 @@ launcherCfg.iBlock = iBlock;
 launcherCfg.viewingDistanceMm = viewingDistanceMm;
 launcherCfg.randomSeed = randomSeed;
 launcherCfg.numBlocks = numBlocks;
+launcherCfg.runtimeExperimentScript = char(runtimeExperimentScript);
 
-% Runtime overrides passed to MoveDot1_experiment_occlusion_v20_rescueTraject.m
+% Runtime overrides passed to the v21 photodiode runtime.
 launcherCfg.MEG = logical(MEG);
 launcherCfg.practice_mode = practice_mode;
 launcherCfg.dryRunValidateScheduleOnly = logical(dryRunValidateScheduleOnly);
@@ -190,6 +202,13 @@ launcherCfg.eyeTrackerAllowBetweenBlockCalibration = logical(eyeTrackerAllowBetw
 launcherCfg.eyeTrackerSendTriggerMessages = eyeTrackerSendTriggerMessages;
 launcherCfg.eyeTrackerImageTransferEnabled = eyeTrackerImageTransferEnabled;
 launcherCfg.run1TransitionCountdownEnabled = run1TransitionCountdownEnabled;
+launcherCfg.photodiodePatchEnabled = photodiodePatchEnabled;
+launcherCfg.photodiodePatchSizePx = photodiodePatchSizePx;
+launcherCfg.photodiodePatchPositionPx = photodiodePatchPositionPx;
+launcherCfg.photodiodePatchHighColor = photodiodePatchHighColor;
+launcherCfg.photodiodePatchLowColor = photodiodePatchLowColor;
+launcherCfg.photodiodeTrialPulseFrames = photodiodeTrialPulseFrames;
+launcherCfg.photodiodeEventPulseFrames = photodiodeEventPulseFrames;
 
 launcherCfgPath = fullfile(tempdir, sprintf('runExperiment_cfg_pid%d.mat', feature('getpid')));
 save(launcherCfgPath, 'launcherCfg');
@@ -217,7 +236,7 @@ if launcherCfg.doGenerateSchedule
     run('CreateInputFiles_v23_rescueTraject.m');
 end
 
-%% Step 3: Launch runtime experiment (v20)
+%% Step 3: Launch runtime experiment (v21 photodiode)
 % Data flow: runtime overrides + prepared input files -> experiment execution.
 cfgData = load(launcherCfgPath, 'launcherCfg');
 launcherCfg = cfgData.launcherCfg;
@@ -269,8 +288,15 @@ eyeTrackerAllowBetweenBlockCalibration = launcherCfg.eyeTrackerAllowBetweenBlock
 eyeTrackerSendTriggerMessages = launcherCfg.eyeTrackerSendTriggerMessages;
 eyeTrackerImageTransferEnabled = launcherCfg.eyeTrackerImageTransferEnabled;
 run1TransitionCountdownEnabled = launcherCfg.run1TransitionCountdownEnabled;
+photodiodePatchEnabled = launcherCfg.photodiodePatchEnabled;
+photodiodePatchSizePx = launcherCfg.photodiodePatchSizePx;
+photodiodePatchPositionPx = launcherCfg.photodiodePatchPositionPx;
+photodiodePatchHighColor = launcherCfg.photodiodePatchHighColor;
+photodiodePatchLowColor = launcherCfg.photodiodePatchLowColor;
+photodiodeTrialPulseFrames = launcherCfg.photodiodeTrialPulseFrames;
+photodiodeEventPulseFrames = launcherCfg.photodiodeEventPulseFrames;
 
-run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');
+run(launcherCfg.runtimeExperimentScript);
 
 %% Cleanup temporary launcher snapshot
 % Data flow: best-effort deletion of temp state file.

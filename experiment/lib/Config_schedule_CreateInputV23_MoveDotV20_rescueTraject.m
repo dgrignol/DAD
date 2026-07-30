@@ -7,7 +7,7 @@ classdef Config_schedule_CreateInputV23_MoveDotV20_rescueTraject
         %   Centralize block/run schedule controls and catch-trial controls
         %   for:
         %     - experiment/CreateInputFiles_v23_rescueTraject.m
-        %     - experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
+        %     - experiment/MoveDot1_experiment_occlusion_v21_photodiode.m
         %
         % Usage example (interactive):
         %   In MATLAB, open this file and set:
@@ -272,7 +272,7 @@ classdef Config_schedule_CreateInputV23_MoveDotV20_rescueTraject
         % Example: 1e-6 ignores tiny numerical noise around zero.
         flipMissedEpsilonSec = 1e-6;
 
-        % Eye-tracker controls for MoveDot1_experiment_occlusion_v20_rescueTraject.
+        % Eye-tracker controls for MoveDot1_experiment_occlusion_v21_photodiode.
         % Master switch for eye-tracker support.
         % Example: true enables EyeLink setup and trial recording.
         eyeTrackerEnabled = false;

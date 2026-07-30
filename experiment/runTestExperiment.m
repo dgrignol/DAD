@@ -1,7 +1,7 @@
 % runTestExperiment.m
 %
 % Purpose:
-%   End-to-end local test launcher for the current V30/v23/v20 experiment
+%   End-to-end local test launcher for the current V30/v23/v21 experiment
 %   stack using a laptop-safe runtime profile:
 %     - no 11MEG
 %     - fake eye-tracker mode (no EyeLink hardware required)
@@ -10,7 +10,7 @@
 % What this script does:
 %   1) Generates subject-specific trajectories (V30) for participant 99.
 %   2) Builds trial schedule and catch plan (v23) for participant 99.
-%   3) Launches the runtime experiment (v20) with fake eye-tracker enabled.
+%   3) Launches the v21 photodiode runtime with fake eye-tracker enabled.
 %
 % Usage example (from experiment/):
 %   run('runTestExperiment.m');
@@ -27,7 +27,7 @@
 % Outputs:
 %   - input_files/MovDot_Sub99_V30_rescueTraject*.mat
 %   - input_files/Sub99_TrialStruct_v23_rescueTraject.mat
-%   - output_files/MoveDot1_occlusion_v20_rescueTraject_SUB99_BLOCKXX.mat
+%   - output_files/MoveDot1_occlusion_v21_photodiode_SUB99_BLOCKXX.mat
 %     (for each completed block)
 %
 % Key assumptions:
@@ -61,7 +61,7 @@ testViewingDistanceMm = 1000;
 practice_mode = 0;
 
 %% Runtime behavior profile (safe local test)
-% Data flow: workspace overrides -> v20 runtime Conf.* fields.
+% Data flow: workspace overrides -> v21 runtime Conf.* fields.
 trackeye = true;
 ignoreEyeTracker = false;
 fakeEyeTracker = true;
@@ -173,7 +173,7 @@ if launcherCfg.doGenerateSchedule
     run('CreateInputFiles_v23_rescueTraject.m');
 end
 
-%% Step 3: Launch v20 runtime experiment
+%% Step 3: Launch v21 photodiode runtime experiment
 % Data flow: workspace overrides above -> runtime script.
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));
 cfgData = load(launcherCfgPath, 'launcherCfg');
@@ -207,12 +207,14 @@ overwriteExisting = launcherCfg.overwriteExisting;
 deleteExistingRuntimeOutput = launcherCfg.deleteExistingRuntimeOutput;
 
 if deleteExistingRuntimeOutput
-    outputMat = fullfile('output_files', sprintf('MoveDot1_occlusion_v20_rescueTraject_SUB%02d_BLOCK%02d.mat', iSub, iBlock));
+    outputMat = fullfile('output_files', sprintf( ...
+        'MoveDot1_occlusion_v21_photodiode_SUB%02d_BLOCK%02d.mat', ...
+        iSub, iBlock));
     if exist(outputMat, 'file') == 2
         delete(outputMat);
     end
 end
-run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');
+run('MoveDot1_experiment_occlusion_v21_photodiode.m');
 
 % Best-effort cleanup of temporary launcher state.
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));

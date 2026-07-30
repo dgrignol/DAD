@@ -56,7 +56,7 @@
 %
 % Trigger/event metadata compatibility:
 %   The exported trial fields are aligned with:
-%     - experiment/MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%     - experiment/MoveDot1_experiment_occlusion_v21_photodiode.m
 %     - experiment/trigger_codes_occlusion_v10_rescueTraject.md
 %
 % Usage example (interactive from experiment/):
@@ -129,7 +129,7 @@ end
 %       rejecting the attempt.
 %   - turnRescueScaleGrid:
 %       turn scales in [0,1], tried in order. 1 means no change.
-clearvars -except overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID iSub allowInteractivePrompts pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale enableTurnMagnitudeRescue turnRescueScaleGrid showPathPlots;
+clearvars -except launcherCfgPath overwriteExisting fixedDevianceFrame fixedOcclusionEndFrame targetSubjectID iSub allowInteractivePrompts pathBandTerminalStyle pathBandStraightBackshiftDotRadiusScale enableTurnMagnitudeRescue turnRescueScaleGrid showPathPlots;
 clc;
 
 if ~(exist('fixedDevianceFrame', 'var') && ~isempty(fixedDevianceFrame))

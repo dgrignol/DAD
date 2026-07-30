@@ -43,7 +43,7 @@
 %       * schedule controls (numBlocks, runsPerBlock, run2 split)
 %       * catch controls (rates, disappear range, gap, prompt settings)
 %       * message-flow controls consumed by
-%         MoveDot1_experiment_occlusion_v20_rescueTraject.m
+%         MoveDot1_experiment_occlusion_v21_photodiode.m
 %
 % Workspace overrides (optional):
 %   - iSub
@@ -70,7 +70,7 @@
 
 %% Setup and input collection
 % Data flow: dialog/workspace overrides + config -> file names and controls.
-clearvars -except iSub targetSubjectID randomSeed numBlocks overwriteExisting allowInteractivePrompts;
+clearvars -except launcherCfgPath iSub targetSubjectID randomSeed numBlocks overwriteExisting allowInteractivePrompts;
 clc;
 addpath('lib/');
 

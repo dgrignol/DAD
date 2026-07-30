@@ -1,4 +1,4 @@
-% MoveDot1_experiment_occlusion_v20_rescueTraject.m
+% MoveDot1_experiment_occlusion_v21_photodiode.m
 %
 % Purpose:
 %   Run the one-dot occlusion paradigm with three runs per block and
@@ -12,7 +12,7 @@
 %   - Run 3: mixed occluded_nondeviant + occluded_deviant base trials +
 %            inserted type-2 catches.
 %
-% Timing-focused v20 rescueTraject additions:
+% Timing-focused v20 rescueTraject additions retained in v21:
 %   - SkipSyncTests policy is no longer forced in MEG mode.
 %   - Full flip diagnostics are stored per frame:
 %       * VBLTimestamp
@@ -27,6 +27,17 @@
 %   - EyeLink setup/calibration can be requested even when fake gaze replay
 %     mode is enabled (trackeye=1, fakeEyeTracker=1, eyeTrackerDoCalibration=1).
 %
+% Photodiode-timing additions in v21:
+%   - Condition triggers 71/81/91 are issued after frame 1 is fully drawn and
+%     immediately before the photodiode patch and Screen('Flip').
+%   - Selected visual events produce frame-counted photodiode pulses:
+%       * four frames for condition/trial onset;
+%       * two frames for occlusion boundaries, type-1 catch visibility
+%         changes, and catch-question onset.
+%   - Patch size and top-left-relative position are workspace-configurable.
+%   - Every experiment-controlled flip explicitly draws the patch last, with
+%     the low color outside active pulses and during cleanup.
+%
 % Trigger logic (MEG/DataPixx):
 %   - Condition and occlusion triggers are preserved.
 %   - Sequence-identity trigger fires once per trial at fixed frame offset.
@@ -39,13 +50,13 @@
 %       * 151 replay start
 %
 % Usage example (interactive from experiment/):
-%   MoveDot1_experiment_occlusion_v20_rescueTraject
+%   MoveDot1_experiment_occlusion_v21_photodiode
 %
 % Usage example (non-interactive shell from repo root):
 %   /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
 %    iSub=66; iBlock=1; viewingDistanceMm=1000; ...
-%    run('MoveDot1_experiment_occlusion_v20_rescueTraject.m');"
+%    run('MoveDot1_experiment_occlusion_v21_photodiode.m');"
 %
 % Inputs:
 %   - experiment/input_files/MovDot_SubXX_V30_rescueTraject.mat
@@ -75,6 +86,11 @@
 %     eyeTrackerSendTriggerMessages
 %   - eyeTrackerImageTransferEnabled
 %   - run1TransitionCountdownEnabled
+%   - photodiodePatchEnabled (logical; default follows MEG mode)
+%   - photodiodePatchSizePx ([width height], default [50 50])
+%   - photodiodePatchPositionPx ([x y] from window top-left, default [0 0])
+%   - photodiodePatchHighColor / photodiodePatchLowColor (RGB)
+%   - photodiodeTrialPulseFrames / photodiodeEventPulseFrames
 %   - allowInteractivePrompts (logical, default true)
 %
 % Runtime hotkeys during trial playback:
@@ -82,8 +98,8 @@
 %   - o: re-enable fixation-abort/replay queueing
 %
 % Outputs:
-%   - experiment/output_files/MoveDot1_occlusion_v20_rescueTraject_SUBXX_BLOCKYY.mat
-%   - experiment/output_files/debug_actual_triggers_occlusion_v20_rescueTraject_subXX_blockYY_runZZ.csv
+%   - experiment/output_files/MoveDot1_occlusion_v21_photodiode_SUBXX_BLOCKYY.mat
+%   - experiment/output_files/debug_actual_triggers_occlusion_v21_photodiode_subXX_blockYY_runZZ.csv
 %     (debug mode; columns: trigger, trial, frame, seconds, label, iti_duration_sec)
 %   - experiment/output_files/MBssbbaa.edf
 %     (real EyeLink mode only; one EDF per block, received at each block end)
@@ -96,9 +112,15 @@
 
 %% Clear state and define runtime configuration
 % Data flow: static conf values + user input -> runtime settings and file paths.
-clearvars -except iSub iBlock viewingDistanceMm MEG dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec itiVisualMode itiGreyColor itiVisualSeparationDur itiFixationShortDelaySec itiFixationShortDurationSec catchQuestionTopYFrac catchQuestionBottomYFrac catchBottomLeftXFrac catchBottomRightXFrac miniBlinkBreakEnabled miniBlinkBreakEveryNTrials miniBlinkBreakDurationSec pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled allowInteractivePrompts;
+clearvars -except iSub iBlock viewingDistanceMm MEG dryRunValidateScheduleOnly debug_runNumber dryRunSimulatedBreakKeys question_text debugTriggerMode runColorCueEnabled practice_mode practiceRunPercentageTrials ITIRangeSec itiVisualMode itiGreyColor itiVisualSeparationDur itiFixationShortDelaySec itiFixationShortDurationSec catchQuestionTopYFrac catchQuestionBottomYFrac catchBottomLeftXFrac catchBottomRightXFrac miniBlinkBreakEnabled miniBlinkBreakEveryNTrials miniBlinkBreakDurationSec pathBandEntranceStyle pathBandStraightBackshiftDotRadiusScale pathBandStraightEndForwardDotRadiusScale pathBandStraightPostStartWidthExtraDotRadiusScale pathBandStraightStartBackshiftPixelOffset debugSkipSyncTests flipMissedWarnThresholdCount flipMissedAbortEnabled flipMissedAbortThresholdCount trackeye ignoreEyeTracker fakeEyeTracker fakeGazeBreakRate enableFixationAbort fixWindowDeg fixBreakToleranceFrames fixationWarningDurationSec replayLimit allowInfiniteReplays eyeTrackerDoCalibration eyeTrackerAllowBetweenBlockCalibration eyeTrackerSendTriggerMessages eyeTrackerImageTransferEnabled run1TransitionCountdownEnabled photodiodePatchEnabled photodiodePatchSizePx photodiodePatchPositionPx photodiodePatchHighColor photodiodePatchLowColor photodiodeTrialPulseFrames photodiodeEventPulseFrames allowInteractivePrompts;
 clc;
-sca;
+% The schedule-only path is intentionally headless. Avoid calling PTB's
+% screen cleanup helper there because no display/window has been opened.
+if ~exist('dryRunValidateScheduleOnly', 'var') || ...
+        isempty(dryRunValidateScheduleOnly) || ...
+        ~logical(dryRunValidateScheduleOnly)
+    sca;
+end
 format shortG;
 addpath('lib/');
 
@@ -177,6 +199,27 @@ end
 if ~exist('run1TransitionCountdownEnabled', 'var')
     run1TransitionCountdownEnabled = [];
 end
+if ~exist('photodiodePatchEnabled', 'var')
+    photodiodePatchEnabled = [];
+end
+if ~exist('photodiodePatchSizePx', 'var')
+    photodiodePatchSizePx = [];
+end
+if ~exist('photodiodePatchPositionPx', 'var')
+    photodiodePatchPositionPx = [];
+end
+if ~exist('photodiodePatchHighColor', 'var')
+    photodiodePatchHighColor = [];
+end
+if ~exist('photodiodePatchLowColor', 'var')
+    photodiodePatchLowColor = [];
+end
+if ~exist('photodiodeTrialPulseFrames', 'var')
+    photodiodeTrialPulseFrames = [];
+end
+if ~exist('photodiodeEventPulseFrames', 'var')
+    photodiodeEventPulseFrames = [];
+end
 if ~exist('allowInteractivePrompts', 'var') || isempty(allowInteractivePrompts)
     allowInteractivePrompts = true;
 end
@@ -242,7 +285,7 @@ Conf.debugTriggerMode = double(debugTriggerMode ~= 0);
 Conf.debug = Conf.debugTriggerMode; % Backward-compatible alias used by legacy debug paths.
 Conf.enableCatchTrials = 1;
 Conf.occlusionMode = 'pathband'; % default: pathband; optional: alpha.
-Conf.experimentName = 'MoveDot1_occlusion_v20_rescueTraject';
+Conf.experimentName = 'MoveDot1_occlusion_v21_photodiode';
 Conf.background = [0 0 0];
 Conf.rectColor = [0 0 0];
 Conf.rectBorderColor = [0 0 0];
@@ -256,7 +299,7 @@ Conf.fixColor = [0 0 0];
 Conf.uiTextColor = [220 220 220];
 Conf.fixSizeDeg = 0.2;
 Conf.showFixCrossBetweenTrials = 0; % kept for compatibility; not used in post-trial ITI.
-% ITI policy (v20 jittered): one post-trial blank with fixation.
+% ITI policy (retained in v21): one post-trial blank with fixation.
 % Data flow: ITIRangeSec override/default -> precomputed per-run vector ->
 % source-trial mapping (replay-safe) -> trial-specific WaitSecs duration.
 Conf.ITIRangeSec = local_resolve_iti_range(ITIRangeSec, [0.500 1.000]);
@@ -588,7 +631,7 @@ Conf.megButtonYesValue = uint32(8); % blue
 Conf.megButtonNoValue = uint32(1); % red
 Conf.enableKeyboardDebugResponse = true;
 
-% Start gate and run-transition messages (v20 rescueTraject).
+% Start gate and run-transition messages (retained in v21).
 % Data flow: schedule config constants -> runtime text, toggle, and timing controls.
 Conf.startMessageEnabled = logical(scheduleCfg.startMessageEnabled);
 Conf.startMessageText = char(scheduleCfg.startMessageText);
@@ -703,6 +746,91 @@ Conf.trigger.escapeTermination = double(local_schedule_get_or_default( ...
     scheduleCfg, 'triggerEscTermination', 152));
 Conf.sequenceIdentityTriggerFrame = 12;
 
+% Photodiode patch and pulse policy (v21).
+% Data flow:
+%   runtime preset/workspace overrides -> validated patch geometry/colors and
+%   frame-counted pulse widths -> resolved screen rectangle after window open.
+% The low state is drawn explicitly on every non-pulse flip. The default
+% [0 0] position is relative to the Psychtoolbox window's top-left corner.
+Conf.photodiodePatchEnabled = logical(Conf.MEG);
+if ~isempty(photodiodePatchEnabled)
+    Conf.photodiodePatchEnabled = logical(photodiodePatchEnabled);
+end
+Conf.photodiodePatchSizePx = [50 50];
+if ~isempty(photodiodePatchSizePx)
+    Conf.photodiodePatchSizePx = round(double(photodiodePatchSizePx(:)'));
+end
+Conf.photodiodePatchPositionPx = [0 0];
+if ~isempty(photodiodePatchPositionPx)
+    Conf.photodiodePatchPositionPx = round(double(photodiodePatchPositionPx(:)'));
+end
+Conf.photodiodePatchHighColor = [255 255 255];
+if ~isempty(photodiodePatchHighColor)
+    Conf.photodiodePatchHighColor = double(photodiodePatchHighColor(:)');
+end
+Conf.photodiodePatchLowColor = [0 0 0];
+if ~isempty(photodiodePatchLowColor)
+    Conf.photodiodePatchLowColor = double(photodiodePatchLowColor(:)');
+end
+Conf.photodiodeTrialPulseFrames = 4;
+if ~isempty(photodiodeTrialPulseFrames)
+    Conf.photodiodeTrialPulseFrames = double(photodiodeTrialPulseFrames);
+end
+Conf.photodiodeEventPulseFrames = 2;
+if ~isempty(photodiodeEventPulseFrames)
+    Conf.photodiodeEventPulseFrames = double(photodiodeEventPulseFrames);
+end
+Conf.photodiodePatchRectPx = [];
+Conf.photodiodeMarkedTriggerCodes = [ ...
+    Conf.trigger.conditionAlwaysVisible, ...
+    Conf.trigger.conditionOccludedNondeviant, ...
+    Conf.trigger.conditionOccludedDeviant, ...
+    Conf.trigger.occlusionStart, Conf.trigger.occlusionComplete, ...
+    Conf.trigger.occlusionEndStart, Conf.trigger.occlusionEndComplete, ...
+    Conf.trigger.catch1Disappear, Conf.trigger.catch1Reappear, ...
+    Conf.trigger.catchQuestionStart];
+
+if ~isscalar(Conf.photodiodePatchEnabled)
+    error('photodiodePatchEnabled must be a logical scalar.');
+end
+if numel(Conf.photodiodePatchSizePx) ~= 2 || ...
+        any(~isfinite(Conf.photodiodePatchSizePx)) || ...
+        any(Conf.photodiodePatchSizePx < 1)
+    error('photodiodePatchSizePx must be finite [width height] values >= 1 pixel.');
+end
+if numel(Conf.photodiodePatchPositionPx) ~= 2 || ...
+        any(~isfinite(Conf.photodiodePatchPositionPx)) || ...
+        any(Conf.photodiodePatchPositionPx < 0)
+    error('photodiodePatchPositionPx must be finite non-negative [x y] pixels.');
+end
+if numel(Conf.photodiodePatchHighColor) ~= 3 || ...
+        any(~isfinite(Conf.photodiodePatchHighColor)) || ...
+        any(Conf.photodiodePatchHighColor < 0) || any(Conf.photodiodePatchHighColor > 255)
+    error('photodiodePatchHighColor must be a finite RGB triplet in [0,255].');
+end
+if numel(Conf.photodiodePatchLowColor) ~= 3 || ...
+        any(~isfinite(Conf.photodiodePatchLowColor)) || ...
+        any(Conf.photodiodePatchLowColor < 0) || any(Conf.photodiodePatchLowColor > 255)
+    error('photodiodePatchLowColor must be a finite RGB triplet in [0,255].');
+end
+if isequal(Conf.photodiodePatchHighColor, Conf.photodiodePatchLowColor)
+    error('Photodiode patch high and low colors must differ.');
+end
+if ~isscalar(Conf.photodiodeTrialPulseFrames) || ...
+        ~isfinite(Conf.photodiodeTrialPulseFrames) || ...
+        Conf.photodiodeTrialPulseFrames < 1 || ...
+        Conf.photodiodeTrialPulseFrames ~= round(Conf.photodiodeTrialPulseFrames)
+    error('photodiodeTrialPulseFrames must be an integer >= 1.');
+end
+if ~isscalar(Conf.photodiodeEventPulseFrames) || ...
+        ~isfinite(Conf.photodiodeEventPulseFrames) || ...
+        Conf.photodiodeEventPulseFrames < 1 || ...
+        Conf.photodiodeEventPulseFrames ~= round(Conf.photodiodeEventPulseFrames)
+    error('photodiodeEventPulseFrames must be an integer >= 1.');
+end
+Conf.photodiodeTrialPulseFrames = round(Conf.photodiodeTrialPulseFrames);
+Conf.photodiodeEventPulseFrames = round(Conf.photodiodeEventPulseFrames);
+
 if ~ismember(lower(Conf.occlusionMode), {'pathband', 'alpha'})
     error('Conf.occlusionMode must be ''pathband'' or ''alpha''.');
 end
@@ -741,7 +869,7 @@ if missingISub || missingIBlock || missingViewingDistance
     end
 
     prompt = {'Subject Number:', 'Block Number:', 'Viewing Distance (mm):', 'Practice mode (0/1):'};
-    dlgtitle = 'Occlusion v20 rescueTraject (practice by run) input';
+    dlgtitle = 'Occlusion v21 photodiode (practice by run) input';
     dims = [1 50];
     definput = {defaultSub, defaultBlock, defaultDistanceMm, defaultPractice};
     userInput = inputdlg(prompt, dlgtitle, dims, definput);
@@ -870,7 +998,7 @@ if ~isfield(tsData, 'TrialOrder')
 end
 
 if ndims(tsData.TrialOrder) ~= 3
-    error('TrialOrder in %s must be 3D [block x trial x run] for v20 rescueTraject mode.', ...
+    error('TrialOrder in %s must be 3D [block x trial x run] for v21 photodiode mode.', ...
         trialStructFile);
 end
 
@@ -1079,6 +1207,12 @@ try
     screenNumber = max(screens);
     [window, windowRect] = Screen('OpenWindow', screenNumber, Conf.background);
     Screen('BlendFunction', window, 'GL_SRC_ALPHA', 'GL_ONE_MINUS_SRC_ALPHA');
+    Conf.photodiodePatchRectPx = local_resolve_photodiode_patch_rect(Conf, windowRect);
+    fprintf(['Photodiode patch: enabled=%d rect=%s high=%s low=%s ' ...
+        'trialFrames=%d eventFrames=%d\n'], ...
+        Conf.photodiodePatchEnabled, mat2str(Conf.photodiodePatchRectPx), ...
+        mat2str(Conf.photodiodePatchHighColor), mat2str(Conf.photodiodePatchLowColor), ...
+        Conf.photodiodeTrialPulseFrames, Conf.photodiodeEventPulseFrames);
     KbName('UnifyKeyNames');
     Conf.escapeKeyCode = KbName('ESCAPE');
     Conf.catchYesKeyCodes = local_keynames_to_codes(Conf.catchKeyYes);
@@ -1555,7 +1689,7 @@ try
                 output(iTrial).catch_reappear_frame = catchReappearFrame;
                 output(iTrial).catch_alt_source_index = catchAltSourceIdx;
 
-                % No pre-trial pause in v20 rescueTraject mode:
+                % No pre-trial pause in v21 photodiode mode:
                 % timing between trials is handled by an explicit post-trial interval.
 
                 % Start EyeLink recording for this trial (real hardware mode).
@@ -1577,11 +1711,6 @@ try
                     WaitSecs(0.1);
                 end
 
-                % Trial start trigger (condition-specific).
-                [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
-                    local_emit_trigger(Conf, condTrigger, iTrial, 1, ...
-                    'trial_condition_onset', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
-
                 % Frame loop with fixed-timestep flipping.
                 frameVblTimestamp = nan(framesPerTrial, 1);
                 frameStimulusOnsetTime = nan(framesPerTrial, 1);
@@ -1602,6 +1731,8 @@ try
                 vbl = NaN;
                 trialStimulusOnsetTime = NaN;
                 trialFrameTimer = tic;
+                photodiodePulseFramesRemaining = 0;
+                photodiodeLastFlipHigh = false;
 
                 for iFrame = 1:framesPerTrial
                     local_draw_arena(window, rectCoords, Conf);
@@ -1724,6 +1855,19 @@ try
                         DrawFormattedText(window, overlayText, overlayX, overlayY, Conf.debugOverlayTextColor);
                     end
 
+                    % Trial onset is issued only after frame 1 is fully drawn.
+                    % The photodiode patch is drawn later by the flip wrapper,
+                    % keeping it as the final draw call before presentation.
+                    if iFrame == 1
+                        [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
+                            local_emit_trigger(Conf, condTrigger, iTrial, iFrame, ...
+                            'trial_condition_onset', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                        photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                            photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                            Conf.photodiodeTrialPulseFrames, ...
+                            condTrigger, iTrial, iFrame);
+                    end
+
                     % Sequence-identity trigger: emitted once per trial at fixed frame offset.
                     if iFrame == sequenceTriggerFrame
                         [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
@@ -1737,43 +1881,74 @@ try
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.catch1Disappear, iTrial, iFrame, ...
                                 'catch1_disappear', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.catch1Disappear, iTrial, iFrame);
                         end
                         if isfinite(catchReappearFrame) && iFrame == round(catchReappearFrame)
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.catch1Reappear, iTrial, iFrame, ...
                                 'catch1_reappear', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.catch1Reappear, iTrial, iFrame);
                         end
                     elseif logical(trial.occlusion_enabled)
                         if iFrame == occStartFrame
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.occlusionStart, iTrial, iFrame, ...
                                 'occlusion_start', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.occlusionStart, iTrial, iFrame);
                         end
                         if iFrame == occCompleteFrame
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.occlusionComplete, iTrial, iFrame, ...
                                 'occlusion_complete', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.occlusionComplete, iTrial, iFrame);
                         end
                         if iFrame == occEndStartFrame
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.occlusionEndStart, iTrial, iFrame, ...
                                 'occlusion_end_start', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.occlusionEndStart, iTrial, iFrame);
                         end
                         if iFrame == occEndCompleteFrame
                             [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
                                 local_emit_trigger(Conf, Conf.trigger.occlusionEndComplete, iTrial, iFrame, ...
                                 'occlusion_end_complete', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+                            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                                photodiodePulseFramesRemaining, photodiodeLastFlipHigh, ...
+                                Conf.photodiodeEventPulseFrames, ...
+                                Conf.trigger.occlusionEndComplete, iTrial, iFrame);
                         end
                     end
 
+                    photodiodeHighThisFrame = logical(Conf.photodiodePatchEnabled) && ...
+                        photodiodePulseFramesRemaining > 0;
                     if iFrame == 1
-                        [flipVbl, flipStimulusOnset, flipTimestamp, flipMissed] = Screen('Flip', window);
+                        [flipVbl, flipStimulusOnset, flipTimestamp, flipMissed] = ...
+                            local_flip_with_photodiode(window, Conf, photodiodeHighThisFrame);
                         trialStimulusOnsetTime = flipStimulusOnset;
                         output(iTrial).trial_start_time = flipStimulusOnset;
                     else
                         requestedWhen = vbl + (1 - 0.5) * ifi;
                         [flipVbl, flipStimulusOnset, flipTimestamp, flipMissed] = ...
-                            Screen('Flip', window, requestedWhen);
+                            local_flip_with_photodiode(window, Conf, photodiodeHighThisFrame, requestedWhen);
+                    end
+                    photodiodeLastFlipHigh = photodiodeHighThisFrame;
+                    if photodiodePulseFramesRemaining > 0
+                        photodiodePulseFramesRemaining = photodiodePulseFramesRemaining - 1;
                     end
                     frameVblTimestamp(iFrame) = flipVbl;
                     frameStimulusOnsetTime(iFrame) = flipStimulusOnset;
@@ -1805,6 +1980,16 @@ try
 
                 if Conf.useEyelink
                     local_eyelink_stop_trial_recording(Conf);
+                end
+
+                % An early loop exit can occur between two high-pulse frames.
+                % Present one explicit low state before warnings, feedback, or
+                % cleanup so the diode can never remain latched white.
+                if photodiodeLastFlipHigh
+                    local_draw_trial_fixation_baseline(window, Conf);
+                    local_flip_with_photodiode(window, Conf, false);
+                    photodiodeLastFlipHigh = false;
+                    photodiodePulseFramesRemaining = 0;
                 end
 
                 if gazeBreakTriggered
@@ -1928,7 +2113,7 @@ try
 
             if Conf.debug || ~isempty(debugTriggerLog)
                 debugTriggerFile = fullfile(outputDir, sprintf( ...
-                    'debug_actual_triggers_occlusion_v20_rescueTraject_sub%02d_block%02d_run%02d.csv', ...
+                    'debug_actual_triggers_occlusion_v21_photodiode_sub%02d_block%02d_run%02d.csv', ...
                     iSub, currentBlock, currentRun));
                 debugTriggerItiSec = nan(size(debugTriggerTrial(:)));
                 if ~isempty(output)
@@ -2182,7 +2367,7 @@ Conf.eyeTrackerEdfFile = [selectedBase '.edf'];
 Conf.eyeTrackerLocalEdfPath = selectedLocalPath;
 Eyelink('Openfile', Conf.eyeTrackerEdfFile);
 Eyelink('command', sprintf(['add_file_preamble_text ' ...
-    '''MoveDot occlusion v20 rescueTraject: subject %d ; block %d ; practice %d ; time %s'''], ...
+    '''MoveDot occlusion v21 photodiode: subject %d ; block %d ; practice %d ; time %s'''], ...
     iSub, currentBlock, double(Conf.practiceModeEnabled), datestr(now, 'YYYYmmddHHMMSS')));
 Conf.eyeTrackerBlockFileOpen = true;
 end
@@ -2355,7 +2540,7 @@ if Conf.fixationWarningDurationSec <= 0
 end
 local_present_message_cushion(window, Conf);
 local_draw_text_message_screen(window, Conf, 'Please keep your fixation on the cross.');
-Screen('Flip', window);
+local_flip_with_photodiode(window, Conf, false);
 WaitSecs(max(0, double(Conf.fixationWarningDurationSec)));
 local_present_message_cushion(window, Conf);
 end
@@ -2526,6 +2711,98 @@ else
 end
 end
 
+function patchRect = local_resolve_photodiode_patch_rect(Conf, windowRect)
+% LOCAL_RESOLVE_PHOTODIODE_PATCH_RECT Resolve validated patch screen geometry.
+%
+% Inputs:
+%   Conf.photodiodePatchPositionPx - [x y] offset from window top-left.
+%   Conf.photodiodePatchSizePx     - [width height] in display pixels.
+%   windowRect                     - Psychtoolbox [left top right bottom].
+% Output:
+%   patchRect                      - Absolute Psychtoolbox rectangle.
+%
+% Assumption:
+%   The entire patch must lie inside the participant-display window. Invalid
+%   geometry stops the run before stimulus presentation.
+windowRect = double(windowRect(:)');
+positionPx = double(Conf.photodiodePatchPositionPx(:)');
+sizePx = double(Conf.photodiodePatchSizePx(:)');
+patchLeftTop = windowRect(1:2) + positionPx;
+patchRect = [patchLeftTop, patchLeftTop + sizePx];
+if patchRect(1) < windowRect(1) || patchRect(2) < windowRect(2) || ...
+        patchRect(3) > windowRect(3) || patchRect(4) > windowRect(4)
+    error(['Photodiode patch rect %s falls outside window rect %s. ' ...
+        'Adjust photodiodePatchPositionPx or photodiodePatchSizePx.'], ...
+        mat2str(patchRect), mat2str(windowRect));
+end
+end
+
+function framesRemaining = local_request_photodiode_pulse( ...
+        framesRemaining, previousFlipHigh, requestedFrames, triggerCode, ...
+        trialNum, frameNum)
+% LOCAL_REQUEST_PHOTODIODE_PULSE Start one non-overlapping frame-counted pulse.
+%
+% Inputs:
+%   framesRemaining - high frames still owed by the active pulse.
+%   previousFlipHigh - whether the immediately preceding display flip was high.
+%   requestedFrames - high-frame count for the new pulse.
+%   triggerCode, trialNum, frameNum - diagnostic event identity.
+% Output:
+%   framesRemaining - requested high-frame count for the new pulse.
+%
+% A new marked visual event is valid only when the preceding pulse has
+% completed and at least one low frame has been presented. Treating overlap
+% as a runtime error protects pulse-width class identity instead of silently
+% truncating, extending, or merging pulses.
+if ~isscalar(framesRemaining) || ~isfinite(framesRemaining) || framesRemaining < 0
+    error('Internal photodiode pulse state must be a finite scalar >= 0.');
+end
+if ~isscalar(previousFlipHigh)
+    error('Internal photodiode previous-flip state must be scalar.');
+end
+if framesRemaining > 0 || logical(previousFlipHigh)
+    error(['Photodiode pulse overlap at trial %d frame %d for trigger %d: ' ...
+        '%d high frame(s) remain or the preceding flip was still high.'], ...
+        round(double(trialNum)), round(double(frameNum)), ...
+        round(double(triggerCode)), round(double(framesRemaining)));
+end
+framesRemaining = round(double(requestedFrames));
+end
+
+function local_draw_photodiode_patch(window, Conf, patchHigh)
+% LOCAL_DRAW_PHOTODIODE_PATCH Draw the configured high or low patch state.
+%
+% This helper must be the final draw operation before each experiment-owned
+% flip. Disabled mode performs no drawing so non-MEG development runs retain
+% their historical appearance.
+if ~isfield(Conf, 'photodiodePatchEnabled') || ...
+        ~logical(Conf.photodiodePatchEnabled)
+    return;
+end
+if ~isfield(Conf, 'photodiodePatchRectPx') || isempty(Conf.photodiodePatchRectPx)
+    error('Photodiode patch rectangle is unavailable after window setup.');
+end
+if logical(patchHigh)
+    patchColor = Conf.photodiodePatchHighColor;
+else
+    patchColor = Conf.photodiodePatchLowColor;
+end
+Screen('FillRect', window, double(patchColor(:)'), Conf.photodiodePatchRectPx);
+end
+
+function varargout = local_flip_with_photodiode(window, Conf, patchHigh, varargin)
+% LOCAL_FLIP_WITH_PHOTODIODE Draw the patch last and present one screen frame.
+%
+% Optional arguments after patchHigh are forwarded to Screen('Flip'), such as
+% the requested presentation deadline used by the fixed-timestep frame loop.
+local_draw_photodiode_patch(window, Conf, patchHigh);
+if nargout > 0
+    [varargout{1:nargout}] = Screen('Flip', window, varargin{:});
+else
+    Screen('Flip', window, varargin{:});
+end
+end
+
 function local_draw_fixation(window, xCenter, yCenter, fixSizePx, fixColor)
 % LOCAL_DRAW_FIXATION Draw an ABC fixation target (bullseye + crosshair).
 %
@@ -2617,17 +2894,17 @@ if strcmpi(Conf.itiVisualMode, 'fixation_short')
 
     if preCueSec > 0
         local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
-        Screen('Flip', window);
+        local_flip_with_photodiode(window, Conf, false);
         WaitSecs(preCueSec);
     end
     if cueSec > 0
         local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false, Conf.itiGreyColor);
-        Screen('Flip', window);
+        local_flip_with_photodiode(window, Conf, false);
         WaitSecs(cueSec);
     end
     if postCueSec > 0
         local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
-        Screen('Flip', window);
+        local_flip_with_photodiode(window, Conf, false);
         WaitSecs(postCueSec);
     end
     return;
@@ -2635,7 +2912,7 @@ end
 
 if suppressVisualCue || strcmpi(Conf.itiVisualMode, 'off')
     local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
     WaitSecs(itiDurationSec);
     return;
 end
@@ -2655,26 +2932,26 @@ postSepSec = max(0, itiDurationSec - sepEndSec);
 
 if preSepSec > 0
     local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
     WaitSecs(preSepSec);
 end
 
 if sepWindowSec > 0
     local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, true);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
     WaitSecs(sepWindowSec);
 end
 
 if postSepSec > 0
     local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx, false);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
     WaitSecs(postSepSec);
 end
 % local_draw_low_luminance_grid_mask(window, Conf, xCenter, yCenter, fixSizePx);
-% Screen('Flip', window);
+% local_flip_with_photodiode(window, Conf, false);
 % WaitSecs(max(0, double(Conf.postTrialGridSec)));
 % local_draw_post_trial_blank(window, Conf, xCenter, yCenter, fixSizePx);
-% Screen('Flip', window);
+% local_flip_with_photodiode(window, Conf, false);
 % WaitSecs(max(0, double(Conf.postTrialBlank2Sec)));
 end
 
@@ -2738,7 +3015,7 @@ if durationSec <= 0
     return;
 end
 local_draw_trial_fixation_baseline(window, Conf);
-Screen('Flip', window);
+local_flip_with_photodiode(window, Conf, false);
 WaitSecs(durationSec);
 end
 
@@ -3267,50 +3544,90 @@ function [trialOut, debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debug
 % LOCAL_RUN_CATCH_QUESTION Show catch prompt and collect response (MEG + keyboard).
 %
 % Data flow:
-%   prompt onset -> response polling loop -> one end-status trigger.
-%   Exactly one of correct/incorrect/timeout is emitted per catch question.
-abortFromQuestion = false;
+%   response logger + fully drawn prompt -> trigger 118 -> first prompt flip
+%   and two-frame photodiode pulse -> explicit low prompt flip -> response
+%   polling -> one end-status trigger.
+% Exactly one of correct/incorrect/timeout is emitted per catch question.
 trialOut.catch_question_presented = true;
 
 % Enforce a short baseline fixation cushion between the stimulus trial and
 % the catch-question screen.
 local_present_message_cushion(window, Conf);
 
-questionStart = GetSecs;
-trialOut.catch_question_start_time = questionStart;
+questionStart = NaN;
+trialOut.catch_question_start_time = NaN;
 trialOut.catch_response_code = 0;
 trialOut.catch_response_label = 'none';
 trialOut.catch_response_rt_sec = NaN;
 trialOut.catch_response_device = '';
 trialOut.catch_timed_out = false;
 
-[debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
-    local_emit_trigger(Conf, Conf.trigger.catchQuestionStart, trialNum, 0, ...
-    'catch_question_start', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
-
+% Arm response acquisition before the first visible question frame so an
+% unusually early response is retained while the marker completes its pulse.
 local_start_meg_response_log(Conf);
 cleanupObj = onCleanup(@() local_stop_meg_response_log(Conf));
 
-deadline = questionStart + Conf.catchResponseTimeoutSec;
-while GetSecs < deadline
-    % Keep fixation continuously visible while showing top/bottom question text.
-    local_draw_catch_question_screen(window, Conf, xCenter, yCenter, fixSizePx);
-    Screen('Flip', window);
+deadline = inf;
+firstQuestionFrame = true;
+responseCaptured = false;
+abortPending = false;
+photodiodePulseFramesRemaining = 0;
+photodiodeReturnedLow = ~logical(Conf.photodiodePatchEnabled);
 
-    [responseCode, responseDevice, responseTime, escapePressed] = local_poll_catch_response(Conf);
-    if escapePressed
-        abortFromQuestion = true;
-        break;
+while true
+    % Keep the same question content visible while the high pulse completes
+    % and on the first explicit low-state frame.
+    local_draw_catch_question_screen(window, Conf, xCenter, yCenter, fixSizePx);
+    if firstQuestionFrame
+        [debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel] = ...
+            local_emit_trigger(Conf, Conf.trigger.catchQuestionStart, trialNum, 0, ...
+            'catch_question_start', debugTriggerLog, debugTriggerTrial, debugTriggerFrame, debugTriggerSec, debugTriggerLabel);
+        if Conf.photodiodePatchEnabled
+            photodiodePulseFramesRemaining = local_request_photodiode_pulse( ...
+                photodiodePulseFramesRemaining, false, ...
+                Conf.photodiodeEventPulseFrames, ...
+                Conf.trigger.catchQuestionStart, trialNum, 0);
+        end
     end
-    if responseCode > 0
-        trialOut.catch_response_code = responseCode;
-        trialOut.catch_response_label = local_response_label(responseCode);
-        trialOut.catch_response_rt_sec = responseTime - questionStart;
-        trialOut.catch_response_device = responseDevice;
+
+    photodiodeHighThisFrame = logical(Conf.photodiodePatchEnabled) && ...
+        photodiodePulseFramesRemaining > 0;
+    [~, questionStimulusOnset] = local_flip_with_photodiode( ...
+        window, Conf, photodiodeHighThisFrame);
+    if firstQuestionFrame
+        questionStart = questionStimulusOnset;
+        trialOut.catch_question_start_time = questionStart;
+        deadline = questionStart + Conf.catchResponseTimeoutSec;
+        firstQuestionFrame = false;
+    end
+    if photodiodePulseFramesRemaining > 0
+        photodiodePulseFramesRemaining = photodiodePulseFramesRemaining - 1;
+    end
+    if ~photodiodeHighThisFrame
+        photodiodeReturnedLow = true;
+    end
+
+    if ~responseCaptured && ~abortPending && GetSecs < deadline
+        [responseCode, responseDevice, responseTime, escapePressed] = local_poll_catch_response(Conf);
+        if escapePressed
+            abortPending = true;
+        elseif responseCode > 0
+            trialOut.catch_response_code = responseCode;
+            trialOut.catch_response_label = local_response_label(responseCode);
+            trialOut.catch_response_rt_sec = responseTime - questionStart;
+            trialOut.catch_response_device = responseDevice;
+            responseCaptured = true;
+        end
+    end
+
+    % Even after an immediate response or ESC, complete the requested high
+    % frames and one explicit low frame before changing visual content.
+    if photodiodeReturnedLow && (abortPending || responseCaptured || GetSecs >= deadline)
         break;
     end
 end
 
+abortFromQuestion = abortPending;
 if ~abortFromQuestion
     % Resolve timeout status first; this state is mutually exclusive with
     % answered catches and drives which single end-status trigger is sent.
@@ -4432,7 +4749,7 @@ else
     local_draw_fixation(window, xCenter, yCenter, fixSizePx, feedbackColor);
 end
 
-Screen('Flip', window);
+local_flip_with_photodiode(window, Conf, false);
 WaitSecs(max(0, double(Conf.catchFeedbackDurationSec)));
 end
 
@@ -4512,7 +4829,7 @@ cleanupObj = onCleanup(@() local_stop_meg_response_log(Conf));
 
 while true
     local_draw_text_message_screen(window, Conf, Conf.startMessageText);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     [accepted, escapePressed] = local_poll_start_message_response(Conf, acceptAfter);
     if escapePressed
@@ -4593,7 +4910,7 @@ while GetSecs < deadline
         messageToDraw = sprintf('%s\n\nSecond task starts in: %d s', messageToDraw, remainingSec);
     end
     local_draw_text_message_screen(window, Conf, messageToDraw);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     [keyDown, ~, keyCode] = KbCheck;
     if keyDown && keyCode(Conf.escapeKeyCode)
@@ -4627,7 +4944,7 @@ while GetSecs < deadline
         Screen('FillRect', window, double(Conf.background(:)'));
     end
     local_draw_fixation(window, xCenter, yCenter, fixSizePx, Conf.fixColor);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     [keyDown, ~, keyCode] = KbCheck;
     if keyDown && keyCode(Conf.escapeKeyCode)
@@ -4703,7 +5020,7 @@ while true
         msg = sprintf('%s\n\n%s %d', ...
             char(Conf.blinkBreakTitleText), char(Conf.blinkBreakCountdownPrefix), remainingSec);
         local_draw_text_message_screen(window, Conf, msg);
-        Screen('Flip', window);
+        local_flip_with_photodiode(window, Conf, false);
         lastShownSec = remainingSec;
     end
     if remainingSec <= 0
@@ -4763,7 +5080,7 @@ cleanupObj = onCleanup(@() local_stop_meg_response_log(Conf));
 
 while true
     local_draw_text_message_screen(window, Conf, msg);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     [accepted, escapePressed] = local_poll_start_message_response(Conf, acceptAfter);
     if escapePressed
@@ -4813,7 +5130,7 @@ cleanupObj = onCleanup(@() local_stop_meg_response_log(Conf)); %#ok<NASGU>
 
 while true
     local_draw_text_message_screen(window, Conf, Conf.betweenBlockCalibrationChoiceText);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     canAccept = GetSecs >= acceptAfter;
     if Conf.enableKeyboardDebugResponse
@@ -4938,14 +5255,14 @@ msg = char(Conf.finalMessageText);
 showDurationSec = max(0, double(Conf.finalMessageDurationSec));
 if showDurationSec == 0
     local_draw_text_message_screen(window, Conf, msg);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
     return;
 end
 
 deadline = GetSecs + showDurationSec;
 while GetSecs < deadline
     local_draw_text_message_screen(window, Conf, msg);
-    Screen('Flip', window);
+    local_flip_with_photodiode(window, Conf, false);
 
     [keyDown, ~, keyCode] = KbCheck;
     if keyDown && keyCode(Conf.escapeKeyCode)
@@ -4981,6 +5298,16 @@ function local_cleanup_runtime(Conf)
 % EyeLink teardown runs for both:
 %  - real EyeLink acquisition mode, and
 %  - fake-gaze mode with explicit EyeLink calibration setup.
+%
+% Before any window is closed, force one final low-state photodiode frame.
+% This also covers exceptions and abort paths that bypass normal trial
+% completion.
+try
+    local_force_photodiode_low_on_cleanup(Conf);
+catch
+    % Cleanup must remain best-effort if the window is already unavailable.
+end
+
 eyelinkSessionActive = false;
 if isfield(Conf, 'useEyelinkSession')
     eyelinkSessionActive = logical(Conf.useEyelinkSession);
@@ -5034,4 +5361,30 @@ try
     sca;
 catch
 end
+end
+
+function local_force_photodiode_low_on_cleanup(Conf)
+% LOCAL_FORCE_PHOTODIODE_LOW_ON_CLEANUP Present a final low patch if possible.
+%
+% Inputs:
+%   Conf - runtime configuration with patch enabled flag, rectangle, and
+%          low color.
+%
+% The normal flip wrapper needs an explicit window handle. During exception
+% cleanup, recover the still-open PTB window and draw only the low patch over
+% the current back buffer before closing all screens.
+if ~isfield(Conf, 'photodiodePatchEnabled') || ...
+        ~logical(Conf.photodiodePatchEnabled) || ...
+        ~isfield(Conf, 'photodiodePatchRectPx') || ...
+        isempty(Conf.photodiodePatchRectPx)
+    return;
+end
+
+openWindows = Screen('Windows');
+if isempty(openWindows)
+    return;
+end
+window = openWindows(end);
+local_draw_photodiode_patch(window, Conf, false);
+Screen('Flip', window);
 end
