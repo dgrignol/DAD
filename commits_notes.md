@@ -1,3 +1,25 @@
+# 30 Jul 2026 18:03
+
+## Add photodiode and display setup utilities
+
+### `experiment/display_refresh_rate_utility.m`
+- Add a standalone Psychtoolbox utility that requests a target display resolution/refresh mode, measures real pre/post flip cadence, and returns a structured validation report without launching the experiment.
+- Require agreement among the exposed OS mode, post-request resolution/rate, PTB median inter-flip interval and stability checks, and DATAPixx input status before reporting `PASS`.
+- Measure 360 retained flip intervals after warmup, report distribution and missed/long-frame diagnostics, and print compact failed-check names for troubleshooting.
+- Refuse to change the global display mode while PTB windows are open, retain sync tests during measurement, and restore the original resolution, pixel depth, priority, cursor, and PTB preference after failure or when requested.
+- Keep the requested mode active only after a successful validation when explicitly allowed by the caller; this utility intentionally remains in the development `experiment/` folder rather than the standalone lab copy.
+
+### `experiment/photodiode_patch_calibrator.m`
+- Add an interactive Psychtoolbox layout tool for moving and resizing the v21 photodiode patch with keyboard controls on the participant display.
+- Clamp the patch to the display bounds, support one- and ten-pixel adjustment steps, and print runtime-compatible position and size assignments only when the operator accepts the selection.
+- Restore the window, cursor, priority, and prior sync-test preference after acceptance, cancellation, or failure.
+
+### `experiment/run_MEG_lab/photodiode_patch_calibrator.m`
+- Mirror the photodiode patch calibrator byte-for-byte in the standalone MEG-lab deployment so sensor placement can be configured directly on the acquisition display.
+
+Suggested commit message:
+`Add photodiode and display setup utilities`
+
 # 30 Jul 2026 18:02
 
 ## Add v21 photodiode experiment runtime
