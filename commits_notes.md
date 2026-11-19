@@ -1,3 +1,40 @@
+# 19 Nov 2026 17:28
+
+## docs(meg): document staged preprocessing and archive legacy trigger context
+
+### `meg/docs/COHORT_PREPROCESSING_REVIEW_GUIDE.md`
+
+- For participant-level final component decisions use the [final ICA review guide](FINAL_ICA_COMPONENT_REVIEW_GUIDE.md). The component book is the human interface; the standard HTML records processing evidence.
+- Document DAD cohort preprocessing: roadmap and review gates; Records and current status; Current annotation-policy handoff (2026-11-07 decision); Participant execution policy; Stage 1: sources, acquisition headers, and digital triggers; Stage 2: trial preparation.
+
+### `meg/docs/PIPELINE_SPEC_basic.md`
+
+- The user approved accepted 4A/4B annotated inputs -> continuous spectrum-fit 50/100 Hz (10 s) in memory -> unchanged Stage 5 epochs/export, omitting ICA now. Future selected exact-model ICA applies before that same continuous line removal. No permanent continuous output is required. `DAD_EPOCH_PREPARATION=inline_no_ica` (or `inline_ica`) requires a new `DAD_PROCESSING_RUN` label; epochs, exports, ERF and MATLAB outputs/reports share that isolated namespace. Derived manifests retain canonical ancestry and actual preparation; input/model/timing/operator and artifact bindings guard resume. The...
+- Document MEG Preprocessing Basic Pipeline Specification; Current continuous-in-memory epoch route (2026-11-12); Parallel cohort execution contract; Scope; Stage interfaces and implementation status; Stage 2 trial preparation requirements.
+
+### `meg/docs/meg_preprocessing_pipeline.mmd`
+
+- Align the workflow diagram with staged source/trigger review, immutable trial/timing gates, separate cleaning review and downstream epoch/export interfaces.
+
+### `triggers_check/context.md`
+
+- Remove the obsolete generic v16 context filename; preserve its contents and historical scope in context_legacy_v16.md.
+
+### `triggers_check/context_legacy_v16.md`
+
+- Rename triggers_check/context.md to triggers_check/context_legacy_v16.md, preserving the original v16 investigation and its source/configuration references.
+- Mark the context as historical and point current cohort work to the preprocessing review guide rather than treating archived v16 scripts as current.
+
+## Local validation
+
+- All 735 synthetic checks passed across the 37 changed/new test modules using the locally cached audited scikit-learn 1.7.2 with MNE 1.11.0.
+- Static validation passed for 107 Python files, 24 shell scripts, 43 YAML/environment files and two JavaScript files; no MATLAB/acquisition runtime was launched.
+- The complete test process tree ran with operating-system access denial for mounted volumes and the network. MORWUR data/derivatives and the cluster were never accessed.
+- Preserve intentional Markdown hard breaks, terminal blank lines and original CRLF instrument calibration bytes; check code whitespace separately.
+
+Suggested commit message:
+`docs(meg): document staged preprocessing and archive legacy trigger context`
+
 # 19 Nov 2026 17:27
 
 ## feat(cluster): migrate cohort workflows to SLURM on DIPSEN

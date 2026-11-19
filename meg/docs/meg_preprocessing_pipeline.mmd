@@ -1,55 +1,97 @@
 flowchart TB
-    config[/"Default YAML + subject selector<br/>+ optional tuning YAML"/]
+    %% Stage numbers are workflow gates; numeric script/report prefixes remain legacy IDs.
+    config["Default YAML + subject selector<br/>+ optional tuning YAML"]
     config --> cfg["pipeline_config.py<br/>merge, validate, resolve, raw guard"]
     cfg --> runner["run_pipeline.py<br/>preflight + separate stage processes"]
     runner --> inventory["dataset_inventory.py<br/>read-only optional QC"]
-    runner --> manifest[/"source_manifest.json<br/>raw sources + durable associations<br/>+ derivative lineage"/]
+    runner --> manifest["source_manifest.json<br/>raw sources + durable associations<br/>+ derivative lineage"]
 
-    raw[/"Raw task acquisition FIFs<br/>exact source stems preserved"/]
-    raw --> trigger["02 trigger extraction<br/>observed STI101 + saved CSV evidence"]
+    raw["Raw task acquisition FIFs<br/>exact source stems preserved"]
+    raw --> trigger["Stage 1 digital trigger extraction<br/>script 02_trigger_extraction_custom.py<br/>observed STI101 + saved CSV evidence"]
     trigger --> manifest
 
-    raw --> maxwell["03_A Maxwell filtering<br/>detect bads independently per run<br/>policy: reference / union / per-run"]
-    maxwell --> sss[/"*_raw_sss.fif"/]
-    maxwell -.-> maxqc>"Review/apply JSON + HTML + PSD QC"]
+    trigger --> stage2["Stage 2 trial preparation<br/>trial_preparation.py<br/>accepted ledger; original eligibility frozen"]
+    stage2 --> stage2ledger["Stage 2 trial decisions<br/>original source/sample keys + eligibility"]
+
+    raw --> timing["Stage 3 visual timing<br/>visual_timing.py + application workflow<br/>standalone measurement/proposal interfaces"]
+    stage2ledger --> timing
+    timing --> s3v001["Immutable s3-v001 source bundles<br/>measurements + proposals + maps<br/>preserved as original evidence"]
+    raw --> savedmat["Saved behavioral runResults MATs<br/>catch_type_code + exact trial identity"]
+    savedmat --> app["Published s3-v002 application<br/>hash-bound eligibility + donor application<br/>type-2 in 81/91; eight exact exclusions<br/>original flags and measured rows preserved<br/>36 hash-bound review records accepted"]
+    s3v001 -.-> app
+    app -.-> v20bench["SEPARATE FUTURE P04-P07 REQUEST<br/>historical v20 order + optical marker<br/>not a retrospective calibration"]
+    app --> audit["Independent s3-v002 reconciliation<br/>2,186 recorded type-2 keys; 5 P37 tail outputs unrecorded<br/>21,890 original + 2,079 catches - 6 = 23,963<br/>1,718 new catch onsets measured; 361 estimated<br/>catch and P33 scopes accepted 2026-10-21"]
+    audit --> p24rerun["P24 donor exclusion applied<br/>five measured events retained as evidence, removed from donors<br/>49 to 48 for 81; 90 to 89 for 111/112/114/115<br/>all affected medians remain 19 ms"]
+    p24rerun -.-> median["Task-2 estimates published<br/>ordinary unique-event medians: 19 ms for 71/81/91<br/>P04-P07/P17 estimated +19 ms; transfer error unknown<br/>preserve s3-v001 fallback maps"]
+    app -.-> median
+    median --> s3accept["Stage 3 accepted 2026-10-21<br/>formal decision + 36 hash-bound review records"]
+    app -.-> epoching
+    s3accept --> epoching
+    stage2ledger --> epoching
+
+    raw --> channelreview["Stage 4A accepted channels<br/>script 03_A_MaxFilt.py (legacy ID)<br/>per-run detections; accepted participant union<br/>existing accepted bads skipped in SQUID screening"]
+    channelreview --> squid["Stage 4A SQUID candidates<br/>squid_jumps.py / review_squid_jumps.py<br/>native channel scores + immutable proposals<br/>preparation changes no SSS or manual BAD files"]
+    squid --> squidreview{"Explicit source SQUID review<br/>dismiss / BAD_squid_jumps / bad-channel action<br/>reviewed zero is explicit; union default"}
+    squidreview --> maxwell["Stage 4A Maxwell filtering<br/>script 03_A_MaxFilt.py<br/>reviewed channels + central_run medoid<br/>SSS only on separate good stretches<br/>skipped samples retained and BAD"]
+    squidreview -.-> tuning
+    squidreview -.-> squidpreserve["Keep P04 all runs + P05 R1 manual BAD reviews<br/>P05 R2 active review untouched<br/>changed SSS: retain intervals as candidates for revalidation<br/>unchanged SSS: retain current reviews and acceptance"]
+    maxwell --> sss["*_raw_sss.fif"]
+    maxwell -.-> maxqc["Review/apply JSON + HTML + PSD QC<br/>changed SQUID treatment requires affected 4A acceptance"]
     maxwell --> manifest
 
-    sss --> artifacts["03_B physiological annotation<br/>FLUX muscle threshold default 10<br/>EOG only when channels exist<br/>MISC preserved"]
-    artifacts --> ann[/"*_ann.fif + *_ann.csv"/]
-    artifacts -.-> artqc>"Per-run threshold plots<br/>review/apply JSON + HTML"]
+    sss --> artifacts["Stage 4B physiological annotation<br/>script 03_B_ArtefactAnnotation.py<br/>FLUX muscle threshold default 10<br/>reviewed ocular intervals; EOG legacy<br/>preserve Stage 4A BAD_squid_jumps once"]
+    sss --> blinkcache["4B supplementary cluster ICA cache<br/>all good frontal mag + grad; up to 10 ICs<br/>1-40 Hz / 200 Hz fit copies<br/>source-bound model + native-grid sources"]
+    artifacts -.->|current known muscle/severe mask| blinkcache
+    artifacts --> ann["*_ann.fif + *_ann.csv"]
+    edfguide["EDF trial-mapped guidance<br/>non-BAD blink candidates + gap-aware traces<br/>no global offset / fixed lag correction"] -.-> artifacts
+    blinkcache --> edfreview["Local IC maps + cached source traces<br/>choose blink components; editable BAD_blink_auto<br/>EDF/MISC/frontal combined browser<br/>BACK / REDETECT preserve edits<br/>post-view MISC observations; SAVE / DISCARDALL"]
+    artifacts -.-> edfreview
+    edfguide -.-> edfreview
+    edfreview -->|rebuild reviewed 4B intervals| ann
+    artifacts -.-> artqc["Per-run threshold plots<br/>review/apply JSON + HTML"]
     artifacts --> manifest
 
-    ann --> manualica["03_C production manual ICA<br/>MEG 200 Hz, 1-40 Hz<br/>FastICA 30, seed 97"]
-    manualica --> prefit[("Compatible prefit ICA cache")]
-    manualica -.-> icaqc>"Sources + topographies<br/>component properties + optional EOG ranking"]
+    ann --> manualica["Stage 4C production manual ICA<br/>script 03_C_ICA.py<br/>MEG 200 Hz, 1-40 Hz<br/>fastica n_components=None, seed 97<br/>all BAD omitted; isolated stretches + edges"]
+    manualica --> prefit["Compatible prefit ICA cache"]
+    manualica -.-> icaqc["Sources + topographies<br/>component properties + before/after inspection"]
     manualica --> decision{"Explicit manual exclusions?<br/>null = unreviewed<br/>[] = reject none"}
-    decision -->|apply pass| cleaned[/"*_ica.fif"/]
+    decision -->|apply pass| cleaned["*_ica.fif<br/>native samples; no final HP/LP; spectrum_fit 50/100 on ALL runs<br/>implemented; P38 R1 retains future-HP warning<br/>4B/4C and applied-output acceptance pending"]
     cleaned --> manifest
 
-    maxqc -.-> tuning[/"03_tuning_choices.yaml"/]
+    maxqc -.-> tuning["03_tuning_choices.yaml"]
     artqc -.-> tuning
     icaqc -.-> tuning
     tuning -->|--tuning-config| runner
 
     ann -.-> autoica["03_C_ICA_auto.py<br/>DEPRECATED EXPERIMENTAL<br/>blocked and not registered"]
 
-    cleaned --> epoching["04 epoching<br/>manual-ICA lineage gate<br/>run-isolated trial intervals"]
+    ann --> inlineprep["Approved inline continuous preparation<br/>epoch_input_preparation.py<br/>current: skip ICA; future: exact reviewed ICA first<br/>then spectrum_fit 50/100, 10s within BAD/EDGE boundaries<br/>no new continuous FIF; native/auxiliary/annotations checked"]
+    prefit -.->|inline_ica only: exact-model Stage 4C receipt| inlineprep
+    cleaned -->|legacy saved_ica route| epoching["Stage 5 epoching<br/>script 04_epoching.py<br/>saved-ICA or explicit inline preparation<br/>accepted Stage 2/3 timing and eligibility unchanged<br/>native -0.5/+2.667 s; baseline none; detrend 1"]
+    inlineprep --> epoching
+    epoching -.-> runmanifest["Inline modes: processing_runs/NEW-LABEL<br/>derived manifest plus isolated epoch/export/ERF/dRSA<br/>input/operator/artifact contracts guard resume"]
     trigger --> epoching
-    epoching --> epochs[/"run-all_epo.fif<br/>metadata + trial decisions"/]
+    epoching --> epochs["run-all_epo.fif<br/>metadata + final trial decisions"]
     epoching --> manifest
 
-    epochs --> export["06 dRSA export<br/>20/40 identities<br/>fixed MEG channel axis"]
-    export --> tensors[/"Condition MAT + JSON<br/>bad/missing channels = NaN"/]
+    epochs --> export["Downstream dRSA export<br/>script 06_export_neural_for_drsa.py<br/>identity balance rechecked"]
+    export --> tensors["Condition MAT + JSON<br/>bad/missing channels = NaN"]
     export --> manifest
 
-    epochs -.-> erf["Optional ERF inspection<br/>-0.1 to 0 s baseline"]
+    epochs -.-> erf["Optional ERF inspection<br/>existing default -0.300/-0.100 s baseline<br/>10,000 permutations, seed 42"]
     epochs -.-> decoding["Optional dot-side decoding<br/>-0.4 to -0.2 s baseline"]
 
     note1["Trigger 150 trial rejection is downstream,<br/>not physiological artifact removal"]
     note2["EDF-to-MEG synchronization deferred;<br/>never zip EDF blocks to MEG runs"]
+    note3["Code 118 is a separate later question prompt;<br/>do not substitute or pool with motion onsets"]
+    note4["P29 keeps 37 eligible half-block trials;<br/>P38 keeps 16 eligible short-block trials<br/>each remains source/block-specific"]
     artifacts -.-> note1
     epoching -.-> note1
     artifacts -.-> note2
+    savedmat -.-> note3
+    app -.-> note4
 
     classDef deprecated fill:#f6f6f6,stroke:#9a9a9a,color:#666,stroke-dasharray: 4 2;
+    classDef planned fill:#fff8e6,stroke:#b7791f,color:#49340f,stroke-dasharray: 5 3;
     class autoica deprecated;
+    class median,s3accept,v20bench planned;
