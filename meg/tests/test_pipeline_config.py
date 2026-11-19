@@ -25,11 +25,22 @@ sys.path.insert(0, str(PREPROCESSING_DIR))
 import pipeline_config  # noqa: E402
 
 
+def test_working_cohort_excludes_p15_without_changing_accepted_accounting_roster():
+    """Current analysis defaults and immutable Stage 2/3 coverage remain distinct."""
+    import yaml
+    cfg = yaml.safe_load((Path(__file__).resolve().parents[1] / "params/pipeline_default.yaml").read_text())
+    assert cfg["analysis_cohort"]["included_subjects"] == list(pipeline_config.WORKING_SUBJECT_IDS)
+    assert len(pipeline_config.WORKING_SUBJECT_IDS) == 35 and "15" not in pipeline_config.WORKING_SUBJECT_IDS
+    assert len(pipeline_config.ANALYSIS_SUBJECT_IDS) == 36 and "15" in pipeline_config.ANALYSIS_SUBJECT_IDS
+    assert "15" in pipeline_config.SUPPORTED_SUBJECT_IDS and "15" in cfg["subject_profiles"]
+    assert cfg["matlab_drsa"]["group_average_subjects"] == list(pipeline_config.WORKING_SUBJECT_IDS)
+
+
 def _minimal_config(tmp_path: Path) -> dict:
     """
     Build a valid multisubject core config with isolated raw/output roots.
 
-    The helper includes all seven profile keys because the default
+    The helper includes all supported profile keys because the default
     configuration contract validates the complete supported cohort even when a
     test selects only one participant.
     """
@@ -272,10 +283,14 @@ def test_subject_selector_normalization(selector, expected):
 
 
 def test_subject_selector_rejects_out_of_range_values():
-    """The external dataset currently supports participants 01 through 07."""
-    with pytest.raises(ValueError, match="01-07"):
-        pipeline_config.normalize_subject_id("08")
+    """The external dataset currently supports participants 01 through 39."""
+    with pytest.raises(ValueError, match="01-39"):
+        pipeline_config.normalize_subject_id("40")
 
+
+# -----------------------------------------------------------------------------
+# Optional independent eye-aid settings must leave older configs usable
+# -----------------------------------------------------------------------------
 
 def test_tuning_config_is_merged_after_subject_config(tmp_path):
     """Accepted review choices override defaults without replacing the selector."""

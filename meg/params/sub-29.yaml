@@ -1,0 +1,20 @@
+# sub-29.yaml
+# Purpose: select P29 and preserve the reviewed interrupted B2 boundary.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-29.yaml \
+#   --preflight-only
+# Stage 2 usage: python meg/code/preprocessing_basic/trial_preparation.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-29.yaml
+# Data flow: profile + exact partial-onset/termination pair -> ledger. B6 keeps
+# its own identity; the early unpaired B6 ESC is not a trial exclusion key.
+subject:
+  id: "29"
+
+epoching:
+  accepted_trial_exclusions:
+    - source_fif: "sub29_run02_150926_halfBlock.fif"
+      raw_sample_frame: 269558
+      condition_code: 71
+      reason: "stage1_reviewed_interrupted_trial"
+      required_boundary_marker: {code: 152, raw_sample_frame: 270938}
+      decision_reference: "PREPROCESSING_DECISIONS.md#other-observed-only-termination-markers"

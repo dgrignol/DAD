@@ -24,6 +24,15 @@ Usage examples
        values={"muscle_threshold": 8.0},
    )
 
+3) Save only one recording's review, retaining other concurrently saved runs:
+
+   update_tuning_file(
+       path="/tmp/sub-04_tuning.yaml", raw_root="/read-only/raw",
+       subject_id="04", section="artifact_annotation",
+       mapping_key="manual_eye_reviews",
+       values={"sub04_run01_220526.fif": receipt},
+   )
+
 Data flow
 resolved configuration -> raw acquisition-run discovery -> stable run records
 -> guarded derivative paths -> stage reports/tuning/manifest lineage.
@@ -39,9 +48,13 @@ Safety assumptions
 
 from __future__ import annotations
 
+import fcntl
 import html
 import json
+import os
 import re
+import stat
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -335,6 +348,17 @@ def _read_optional_yaml_mapping(path: Path) -> dict[str, Any]:
     return parsed
 
 
+def _plain_tuning_values(value: Any) -> Any:
+    """Normalize scientific values while preserving native YAML keys/dates."""
+    if isinstance(value, Mapping):
+        return {_plain_tuning_values(key): _plain_tuning_values(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_tuning_values(item) for item in value]
+    if isinstance(value, (np.generic, np.ndarray, Path)):
+        return _plain_tuning_values(_json_default(value))
+    return value
+
+
 def update_tuning_file(
     *,
     path: str | Path,
@@ -342,30 +366,66 @@ def update_tuning_file(
     subject_id: str,
     section: str,
     values: Mapping[str, Any],
+    mapping_key: str | None = None,
 ) -> Path:
     """
     Merge one accepted interactive decision into a reusable tuning YAML file.
 
     The generated file can be supplied to ``run_pipeline.py --tuning-config``
-    for the noninteractive apply pass.
+    for the noninteractive apply pass. Normalize NumPy scalars/arrays and Paths
+    with the existing report serializer before YAML encoding; scientific library
+    return types must not turn a completed interactive review into a save error.
+
+    When mapping_key is supplied, values contains entries of that nested mapping
+    (for example one exact-source receipt), not a whole map loaded at GUI startup.
+    Each supplied entry replaces its complete old value; other entries survive.
+    A short advisory lock covers reading, merging and atomic replacement on
+    macOS/Linux. The persistent hidden .lock file is only a write lock. This
+    protects different runs saved by overlapping interactive processes; it does
+    not merge competing annotation edits of the same recording.
     """
     resolved = guarded_path(path, raw_root)
     resolved.parent.mkdir(parents=True, exist_ok=True)
-    payload = _read_optional_yaml_mapping(resolved)
-    payload.setdefault("subject", {})["id"] = str(subject_id)
-    current = payload.get(section)
-    if current is None:
-        current = {}
-    if not isinstance(current, dict):
-        raise ValueError(
-            f"Existing tuning section {section!r} must be a mapping in {resolved}."
-        )
-    current.update(dict(values))
-    payload[section] = current
-    resolved.write_text(
-        yaml.safe_dump(payload, sort_keys=False),
-        encoding="utf-8",
-    )
+    lock_path = guarded_path(resolved.with_name(f".{resolved.name}.lock"), raw_root)
+    # Read the latest file inside the lock, after the potentially long GUI
+    # session. Never delete the lock file: another process may be waiting on it.
+    with lock_path.open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        payload = _read_optional_yaml_mapping(resolved)
+        payload.setdefault("subject", {})["id"] = str(subject_id)
+        current = payload.get(section)
+        if current is None:
+            current = {}
+        if not isinstance(current, dict):
+            raise ValueError(f"Existing tuning section {section!r} must be a mapping in {resolved}.")
+        if mapping_key is None:
+            current.update(dict(values))
+        else:
+            entries = current.get(mapping_key)
+            if entries is None:
+                entries = {}
+            if not isinstance(entries, dict):
+                raise ValueError(f"Tuning {section}.{mapping_key} must be a mapping in {resolved}.")
+            entries.update(dict(values))
+            current[mapping_key] = entries
+        payload[section] = current
+        # Serialize before touching the old file. A same-directory replacement
+        # exposes a complete YAML to readers and retains existing permissions.
+        encoded = yaml.safe_dump(_plain_tuning_values(payload), sort_keys=False)
+        mode = stat.S_IMODE(resolved.stat().st_mode) if resolved.exists() else 0o644
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=resolved.parent,
+                    prefix=f".{resolved.name}.", suffix=".tmp", delete=False) as handle:
+                temporary = Path(handle.name)
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            temporary.chmod(mode)
+            os.replace(temporary, resolved)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
     return resolved
 
 

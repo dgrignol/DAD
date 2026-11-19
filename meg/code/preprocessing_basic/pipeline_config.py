@@ -35,6 +35,10 @@ configuration or JSON snapshot.
 
 Configuration layers are merged in this order: default, machine/site paths,
 subject selector, then reviewed tuning decisions.
+Current cohort contract
+The working analysis cohort excludes P15 under the 2026-11-07 coverage decision.
+Historical source profiles and accepted 36-participant Stage 2/3 validation stay
+readable; WORKING_SUBJECT_IDS supplies current downstream defaults separately.
 
 Key safety contract
 The configured raw-data root is read-only. All output paths must pass
@@ -43,6 +47,10 @@ writes files.
 """
 
 from __future__ import annotations
+
+import math
+import os
+import re
 
 import argparse
 import json
@@ -60,7 +68,13 @@ except ImportError as exc:  # pragma: no cover - environment dependency.
     ) from exc
 
 
-SUPPORTED_SUBJECT_IDS = tuple(f"{number:02d}" for number in range(1, 8))
+SUPPORTED_SUBJECT_IDS = tuple(f"{number:02d}" for number in range(1, 40))
+# The accepted Stage 2/3 accounting cohort stays frozen at P04-P39. Keep
+# P15 readable for provenance/recovery and historical cohort validation.
+ANALYSIS_SUBJECT_IDS = tuple(f"{number:02d}" for number in range(4, 40))
+# Current processing/analysis defaults honor the participant-specific 2026-11-07
+# P15 exclusion without rewriting earlier source/timing acceptance contracts.
+WORKING_SUBJECT_IDS = tuple(subject for subject in ANALYSIS_SUBJECT_IDS if subject != "15")
 CORE_REQUIRED_SECTIONS = (
     "project",
     "subject",
@@ -158,18 +172,18 @@ def normalize_subject_id(value: Any) -> str:
     Normalize a supported subject selector to a two-digit identifier.
 
     Accepted examples are ``1``, ``"01"``, ``"sub01"``, and ``"sub-01"``.
-    Only participants 01 through 07 are valid for the current external
+    Participants 01 through 39 are valid for the current external
     multisubject dataset.
     """
     if isinstance(value, bool):
-        raise ValueError("Subject ID must identify one of 01-07, not bool.")
+        raise ValueError("Subject ID must identify one of 01-39, not bool.")
     text = str(value).strip().lower()
     if text.startswith("sub-"):
         text = text[4:]
     elif text.startswith("sub"):
         text = text[3:]
     if not text.isdigit():
-        raise ValueError(f"Subject ID must identify one of 01-07; got {value!r}.")
+        raise ValueError(f"Subject ID must identify one of 01-39; got {value!r}.")
     normalized = f"{int(text):02d}"
     if normalized not in SUPPORTED_SUBJECT_IDS:
         raise ValueError(
@@ -411,6 +425,9 @@ def validate_config(
     except ValueError as exc:
         errors.append(str(exc))
         selected_subject_id = None
+    if cfg.get("analysis_cohort") and selected_subject_id is not None and selected_subject_id not in cfg["analysis_cohort"].get("included_subjects", ANALYSIS_SUBJECT_IDS):
+        reason = cfg["analysis_cohort"].get("excluded_subjects", {}).get(selected_subject_id, "Excluded by the current analysis policy.")
+        warnings.append(f"Subject {selected_subject_id} is excluded from cohort analyses: {reason}")
 
     missing_profiles = [
         subject_id
@@ -460,6 +477,47 @@ def validate_config(
             errors.append(
                 f"`subject_profiles.{subject_id}.completed_behavioral_blocks` "
                 "must contain integer block identifiers."
+            )
+        runtime_by_block = profile.get("runtime_by_block")
+        if runtime_by_block is not None:
+            if not isinstance(runtime_by_block, Mapping) or any(
+                not isinstance(block, int) or not isinstance(version, str) or not version
+                for block, version in runtime_by_block.items()
+            ):
+                errors.append(
+                    f"`subject_profiles.{subject_id}.runtime_by_block` must map "
+                    "integer block IDs to nonempty runtime names."
+                )
+            elif isinstance(completed_blocks, list) and set(runtime_by_block) != set(completed_blocks):
+                errors.append(
+                    f"`subject_profiles.{subject_id}.runtime_by_block` must cover "
+                    "every completed behavioral block exactly once."
+                )
+        block_map = profile.get("acquisition_block_map")
+        if block_map is not None:
+            valid_map = isinstance(block_map, Mapping) and bool(block_map) and all(
+                type(run) is int and run > 0 and isinstance(blocks, list) and blocks
+                and all(type(block) is int and block > 0 for block in blocks)
+                for run, blocks in block_map.items()
+            )
+            if not valid_map:
+                errors.append(
+                    f"`subject_profiles.{subject_id}.acquisition_block_map` must "
+                    "map positive acquisition IDs to nonempty integer block lists."
+                )
+            else:
+                blocks = [block for group in block_map.values() for block in group]
+                if len(blocks) != len(set(blocks)) or set(blocks) != set(completed_blocks or []):
+                    errors.append(
+                        f"`subject_profiles.{subject_id}.acquisition_block_map` must "
+                        "cover every completed behavioral block exactly once."
+                    )
+        truncated = profile.get("truncated_acquisition_runs", [])
+        if (not isinstance(truncated, list) or any(type(run) is not int for run in truncated)
+                or (truncated and (not isinstance(block_map, Mapping) or not set(truncated).issubset(block_map)))):
+            errors.append(
+                f"`subject_profiles.{subject_id}.truncated_acquisition_runs` must "
+                "list acquisition IDs present in the explicit block map."
             )
         reported_pattern = profile.get("reported_trigger_csv_pattern")
         if not isinstance(reported_pattern, str) or not reported_pattern:
@@ -653,6 +711,40 @@ def validate_config(
                     errors.append(
                         f"`trigger_parser.{window_key}` must be greater than zero."
                     )
+            reviewed_pairs = trigger.get("reviewed_keep_both_transitions", [])
+            if not isinstance(reviewed_pairs, list):
+                errors.append(
+                    "`trigger_parser.reviewed_keep_both_transitions` must be a list."
+                )
+            else:
+                pair_keys = (
+                    "source_fif",
+                    "first_code",
+                    "first_sample_raw",
+                    "second_code",
+                    "second_sample_raw",
+                    "reason",
+                )
+                for pair_index, pair in enumerate(reviewed_pairs):
+                    field = (
+                        "trigger_parser.reviewed_keep_both_transitions"
+                        f"[{pair_index}]"
+                    )
+                    if not isinstance(pair, Mapping):
+                        errors.append(f"`{field}` must be a mapping.")
+                        continue
+                    _require_keys(pair, field, pair_keys, errors)
+                    for key in ("source_fif", "reason"):
+                        _expect_type(pair.get(key), str, f"{field}.{key}", errors)
+                    for key in (
+                        "first_code",
+                        "first_sample_raw",
+                        "second_code",
+                        "second_sample_raw",
+                    ):
+                        value = pair.get(key)
+                        if isinstance(value, bool) or not isinstance(value, int):
+                            errors.append(f"`{field}.{key}` must be an integer.")
 
     if "epoching" in requested:
         epoching = sections["epoching"]
@@ -677,6 +769,39 @@ def validate_config(
             tmin = epoching["tmin_sec"]
             tmax = epoching["tmax_sec"]
             _expect_type(epoching["enabled"], bool, "epoching.enabled", errors)
+            if "require_stage2_ledger" in epoching:
+                _expect_type(epoching["require_stage2_ledger"], bool,
+                             "epoching.require_stage2_ledger", errors)
+            accepted = epoching.get("accepted_trial_exclusions", [])
+            if not isinstance(accepted, list):
+                errors.append("`epoching.accepted_trial_exclusions` must be a list.")
+            else:
+                seen_exclusions = set()
+                for item in accepted:
+                    if (not isinstance(item, Mapping)
+                        or not isinstance(item.get("source_fif"), str)
+                        or Path(item["source_fif"]).name != item["source_fif"]
+                        or type(item.get("raw_sample_frame")) is not int
+                        or item["raw_sample_frame"] < 0
+                        or type(item.get("condition_code")) is not int
+                        or not isinstance(item.get("reason"), str) or not item["reason"]
+                        or not isinstance(item.get("decision_reference"), str)
+                        or not item["decision_reference"]
+                        or type(item.get("require_recording_tail_evidence", False)) is not bool):
+                        errors.append("Invalid source/sample accepted trial exclusion.")
+                        continue
+                    key = (item["source_fif"], item["raw_sample_frame"])
+                    marker = item.get("required_boundary_marker")
+                    if marker is not None and (
+                        not isinstance(marker, Mapping)
+                        or type(marker.get("code")) is not int
+                        or type(marker.get("raw_sample_frame")) is not int
+                        or marker["raw_sample_frame"] <= item["raw_sample_frame"]
+                    ):
+                        errors.append(f"Invalid accepted partial-trial boundary marker: {key}")
+                    if key in seen_exclusions:
+                        errors.append(f"Duplicate accepted trial exclusion: {key}")
+                    seen_exclusions.add(key)
             _expect_type(tmin, (int, float), "epoching.tmin_sec", errors)
             _expect_type(tmax, (int, float), "epoching.tmax_sec", errors)
             if (

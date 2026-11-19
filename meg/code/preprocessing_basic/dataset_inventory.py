@@ -25,6 +25,8 @@ Usage examples
 Data flow
 resolved configuration -> explicit source-category discovery -> lazy FIF-header
 inspection -> optional inventory QC and durable source manifest.
+The inventory also copies selected experimenter session/run notes as
+unverified review clues and exposes each FIF's acquisition high/low-pass.
 
 Scientific boundary
 MEG files are acquisition runs; behavioral MAT, trigger CSV, and EDF files are
@@ -41,6 +43,7 @@ are written.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import platform
 import re
@@ -60,6 +63,14 @@ from pipeline_config import (
 
 INVENTORY_SCHEMA_VERSION = "4.0"
 SOURCE_MANIFEST_SCHEMA_VERSION = "2.0"
+
+SESSION_LOG_NAME = "Demographics & Sessions log - Session Log.csv"
+RUN_DETAILS_NAME = "Demographics & Sessions log - Runs Details.csv"
+SESSION_REVIEW_COLUMNS = (
+    "Data_Quality_Flag", "Technical_Issues", "Behavioral_Notes",
+    "Protocol_Deviation", "Followup_Required", "Followup_Details",
+    "General_Session_Notes",
+)
 
 
 # -----------------------------------------------------------------------------
@@ -151,6 +162,8 @@ def summarize_fif_file(fif_path: str | Path, stim_channel: str) -> dict[str, Any
         "name": path.name,
         "size_bytes": path.stat().st_size,
         "sfreq_hz": float(raw.info["sfreq"]),
+        "online_highpass_hz": float(raw.info["highpass"]),
+        "online_lowpass_hz": float(raw.info["lowpass"]),
         "n_channels": int(raw.info["nchan"]),
         "n_samples": int(raw.n_times),
         "duration_sec": float(raw.n_times / raw.info["sfreq"]),
@@ -168,6 +181,54 @@ def summarize_fif_file(fif_path: str | Path, stim_channel: str) -> dict[str, Any
             if kind == "misc"
         ],
     }
+
+
+def read_session_review_clues(data_root: str | Path, subject_id: str) -> dict[str, Any]:
+    """Read experimenter notes as review clues, never as verified data labels.
+
+    Only quality, technical, behavioral, and run-detail fields are included in
+    derivatives. Demographics and compensation are deliberately omitted. The
+    original CSVs remain untouched under the read-only raw tree.
+    """
+    notes_dir = Path(data_root) / "Notes_from_session"
+    session_path = notes_dir / SESSION_LOG_NAME
+    runs_path = notes_dir / RUN_DETAILS_NAME
+    result: dict[str, Any] = {
+        "interpretation": "Experimenter notes are clues; verify against recordings and derivatives.",
+        "session_csv": str(session_path),
+        "runs_csv": str(runs_path),
+        "session": {},
+        "run_details": [],
+    }
+    if session_path.is_file():
+        with session_path.open(newline="", encoding="utf-8-sig") as handle:
+            matches = [row for row in csv.DictReader(handle)
+                       if row.get("Participant_ID", "").strip().upper() == f"P{int(subject_id):02d}"]
+        if len(matches) == 1:
+            result["session"] = {
+                key: matches[0].get(key, "").strip()
+                for key in SESSION_REVIEW_COLUMNS if matches[0].get(key, "").strip()
+            }
+        elif len(matches) > 1:
+            result["warning"] = "Multiple session-log rows match this participant."
+    if runs_path.is_file():
+        with runs_path.open(newline="", encoding="utf-8-sig") as handle:
+            rows = list(csv.reader(handle))
+        in_subject = False
+        for row in rows:
+            heading = row[0].strip() if row else ""
+            participant = re.fullmatch(r"Participant\s+(\d+)", heading, re.I)
+            if participant:
+                in_subject = int(participant.group(1)) == int(subject_id)
+                continue
+            if in_subject and any(cell.strip() for cell in row):
+                result["run_details"].append({
+                    "topic": heading,
+                    "runs": {f"run_{index}": cell.strip()
+                             for index, cell in enumerate(row[1:], start=1)
+                             if cell.strip()},
+                })
+    return result
 
 
 # -----------------------------------------------------------------------------
@@ -286,6 +347,10 @@ def build_inventory_payload(
         "subject_bids_id": cfg["layout"]["subject_bids_id"],
         "session_bids_id": cfg["layout"]["session_bids_id"],
         "subject_profile": cfg.get("subject_profile", {}),
+        "session_review_clues": read_session_review_clues(
+            resolved["data_root"],
+            cfg.get("subject", {}).get("id", cfg["layout"]["subject_bids_id"].rsplit("-", 1)[-1]),
+        ),
         "config_sources": {
             "default": str(default_config_path),
             "subject": str(subject_config_path) if subject_config_path else None,
@@ -377,12 +442,21 @@ def inventory_markdown(payload: Mapping[str, Any]) -> str:
 
     lines.extend(["", "## Checks"])
     lines.extend(f"- {key}: `{value}`" for key, value in payload["checks"].items())
+    lines.extend(["", "## Session Notes (unverified review clues)"])
+    clues = payload.get("session_review_clues", {})
+    lines.append(f"- {clues.get('interpretation', 'No notes were available.')}")
+    for key, value in clues.get("session", {}).items():
+        lines.append(f"- {key}: {value}")
+    for item in clues.get("run_details", []):
+        lines.append(f"- {item['topic']}: {item['runs']}")
     lines.extend(["", "## Task MEG Acquisition Runs"])
     if payload["files"]["meg_fif"]:
         for item in payload["files"]["meg_fif"]:
             lines.append(
                 f"- `{item['path']}`: {item['sfreq_hz']} Hz, "
-                f"{item['n_channels']} channels, EOG={item['eog_channel_names']}, "
+                f"{item['n_channels']} channels, online highpass="
+                f"{item['online_highpass_hz']} Hz, online lowpass="
+                f"{item['online_lowpass_hz']} Hz, EOG={item['eog_channel_names']}, "
                 f"MISC={item['misc_channel_names']}"
             )
     else:

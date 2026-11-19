@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
 import sys
 
 import numpy as np
@@ -89,6 +90,83 @@ def test_tuning_file_rejects_raw_tree_output(tmp_path):
             section="ica",
             values={"manual_exclude": []},
         )
+
+
+def test_tuning_file_normalizes_nested_ica_metadata_and_preserves_other_decisions(tmp_path):
+    """A real NumPy ICA-duration value must not break the final ocular SAVE."""
+    tuning = tmp_path / "tuning.yaml"
+    tuning.write_text("stage4_review:\n  03_A_MaxFilt:\n    status: accepted\noriginal_integer_keys:\n  1: retained\n")
+    update_tuning_file(path=tuning, raw_root=tmp_path / "raw", subject_id="04",
+        section="artifact_annotation", values={"manual_eye_reviews": {"source.fif": {
+            "preliminary_ica": {"fit_duration_sec": np.float64(800.79),
+                "n_components_fitted": np.int64(12), "selected_components": np.array([0, 2])}}}})
+    saved = yaml.safe_load(tuning.read_text())
+    assert saved["stage4_review"]["03_A_MaxFilt"]["status"] == "accepted"
+    assert saved["original_integer_keys"] == {1: "retained"}
+    assert saved["artifact_annotation"]["manual_eye_reviews"]["source.fif"]["preliminary_ica"] == {
+        "fit_duration_sec": 800.79, "n_components_fitted": 12, "selected_components": [0, 2]}
+
+
+def test_source_receipts_merge_latest_file_and_replace_one_complete_entry(tmp_path):
+    """Saving a stale GUI must retain other runs and remove old same-run fields."""
+    path = tmp_path / "tuning.yaml"
+    path.write_text(yaml.safe_dump({"stage4_review": {"03_A_MaxFilt": {"status": "accepted"}},
+        "artifact_annotation": {"manual_eye_reviews": {
+            "run01.fif": {"obsolete": True}, "run02.fif": {"status": "reviewed"}}}}))
+    update_tuning_file(path=path, raw_root=tmp_path / "raw", subject_id="04",
+        section="artifact_annotation", mapping_key="manual_eye_reviews",
+        values={"run01.fif": {"status": "reviewed", "annotation_count": np.int64(0)}})
+    saved = yaml.safe_load(path.read_text())
+    assert saved["artifact_annotation"]["manual_eye_reviews"] == {
+        "run01.fif": {"status": "reviewed", "annotation_count": 0},
+        "run02.fif": {"status": "reviewed"}}
+    assert saved["stage4_review"]["03_A_MaxFilt"]["status"] == "accepted"
+
+
+def test_simultaneous_tuning_writers_preserve_all_source_receipts(tmp_path):
+    """Real independent processes must serialize read/merge/write, not lose runs."""
+    path = tmp_path / "tuning.yaml"
+    script = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from preprocessing_stage_utils import update_tuning_file
+for index in range(5):
+    update_tuning_file(path=sys.argv[2], raw_root=Path(sys.argv[2]).parent / 'raw',
+        subject_id='04', section='artifact_annotation', mapping_key='manual_eye_reviews',
+        values={f'{sys.argv[3]}_{index}.fif': {'status': 'reviewed'}})
+"""
+    processes = [subprocess.Popen([sys.executable, "-c", script, str(CODE_DIR), str(path), str(worker)],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for worker in range(4)]
+    try:
+        for process in processes:
+            stdout, stderr = process.communicate(timeout=30)
+            assert process.returncode == 0, stdout + stderr
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+    saved = yaml.safe_load(path.read_text())["artifact_annotation"]["manual_eye_reviews"]
+    assert set(saved) == {f"{worker}_{index}.fif" for worker in range(4) for index in range(5)}
+
+
+def test_failed_atomic_tuning_replacement_keeps_previous_file(tmp_path, monkeypatch):
+    """A failed save must leave readable previous acceptance and no temp debris."""
+    import preprocessing_stage_utils as utils
+    path = tmp_path / "tuning.yaml"
+    path.write_text("subject:\n  id: '04'\nstage4_review:\n  retained: true\n")
+    before = path.read_bytes()
+
+    def fail_replace(*args):
+        raise OSError("Synthetic replacement failure")
+
+    monkeypatch.setattr(utils.os, "replace", fail_replace)
+    with pytest.raises(OSError, match="replacement failure"):
+        update_tuning_file(path=path, raw_root=tmp_path / "raw", subject_id="04",
+            section="ica", values={"manual_exclude": []})
+    assert path.read_bytes() == before
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 def test_json_writer_normalizes_numpy_values(tmp_path):

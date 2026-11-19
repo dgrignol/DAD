@@ -1,0 +1,20 @@
+# sub-38.yaml
+# Purpose: select P38 and preserve the reviewed partial first-block boundary.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-38.yaml \
+#   --preflight-only
+# Stage 2 usage: python meg/code/preprocessing_basic/trial_preparation.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-38.yaml
+# Data flow: profile + exact terminal trial/ESC evidence -> excluded ledger row;
+# all six blocks remain represented without automatically excluding P38.
+subject:
+  id: "38"
+
+epoching:
+  accepted_trial_exclusions:
+    - source_fif: "sub38_run01_051026.fif"
+      raw_sample_frame: 587306
+      condition_code: 71
+      reason: "stage1_reviewed_interrupted_trial"
+      required_boundary_marker: {code: 152, raw_sample_frame: 599572}
+      decision_reference: "PREPROCESSING_DECISIONS.md#other-observed-only-termination-markers"

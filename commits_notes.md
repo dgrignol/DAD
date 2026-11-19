@@ -1,3 +1,233 @@
+# 19 Nov 2026 17:23
+
+## feat(meg): extend cohort discovery and add reviewed trial accounting
+
+### `meg/code/maintenance/archive_preprocessing_restart.py`
+
+- Archive the approved pilot and first cohort Stage-1 attempt in place.
+- Behavior and boundaries: Record files, symlinks, and empty directories without reading contents; Return exact approved moves with each associated archive root; Atomically checkpoint the archive journal outside all moved sources; Inventory the fixed plan, optionally rename, then verify every move.
+
+### `meg/code/preprocessing_basic/02_trigger_extraction_custom.py`
+
+- Run the configuration-driven trigger extraction stage for all 39 DAD participants. The implementation lives in ``trigger_extraction.py`` so parser and alignment behavior can be tested without invoking the command-line entry point. The current analysis cohort is P04-P39; older profiles remain for provenance. P37's reviewed recording/block boundaries contain its unavailable first-run tail, and the full deep report is enabled for the cohort rerun.
+
+### `meg/code/preprocessing_basic/dataset_inventory.py`
+
+- Discover and validate external multisubject inputs before expensive MEG processing. This module is reusable infrastructure, not a numbered scientific stage. It also builds the durable source manifest written by run_pipeline.py.
+- Behavior and boundaries: Read only a FIF header and summarize acquisition/channel metadata; Read experimenter notes as review clues, never as verified data labels; Discover configured inputs and return a complete read-only preflight; Render a compact human-readable view of an inventory payload.
+
+### `meg/code/preprocessing_basic/deep_trigger_report.py`
+
+- Render the legacy subject-level reported-vs-observed trigger report bundle from the canonical outputs of ``trigger_extraction.py``. This preserves the familiar report filenames, block/run tables, anomaly plots, and transition plots without independently rediscovering or realigning FIF and CSV files.
+- Behavior and boundaries: Convert canonical alignment rows to the legacy full-table schema; Build anomaly context without anchoring a missing tail in a later FIF; Generate the complete legacy-format deep trigger report bundle.
+
+### `meg/code/preprocessing_basic/downstream_stage_utils.py`
+
+- Provide shared, importable contracts for DAD MEG epoching, dRSA export, and optional sanity workflows. The module validates the completed manual-ICA lineage, discovers the subject-specific trajectory model, and converts canonical trigger rows into run-isolated trial decisions with explicit exclusion evidence.
+- Behavior and boundaries: Parse bool-like CSV/JSON values without treating arbitrary text as true; Convert one run's canonical events into explicit epoch trial decisions.
+
+### `meg/code/preprocessing_basic/p24_acquisition_adapter.py`
+
+- Audit P24 acquisition differences and propose visual-onset timing.
+- Behavior and boundaries: Measure one event-local light rise and return sensitivity/QC values; Load Stage-02 events while preserving its digital sample and metadata; Measure run 5, then estimate earlier runs from its accepted median; Read P24 inputs, guard output location, and write the timing review.
+
+### `meg/code/preprocessing_basic/participant_parallel.py`
+
+- Resource-bounded process workers for independent participant operations.
+- Behavior and boundaries: Accept positive integer worker counts, including CLI/environment strings; Expose the same concurrency control only on independently parallel tools; Keep all independent participants eligible while respecting allocated CPUs; Set limits before spawning/importing numerical libraries; restore the parent.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+
+- Expand supported participant profiles and current-cohort defaults; validate exact reviewed trigger pairs, acquisition boundaries and accepted Stage-2 exclusions.
+
+### `meg/code/preprocessing_basic/preprocessing_stage_utils.py`
+
+- Provide shared, importable infrastructure for the configuration-driven DAD MEG preprocessing stages. This module is not a numbered scientific transformation. It keeps acquisition-run lineage, guarded output handling, tuning decisions, and source-manifest updates consistent across 03_A, 03_B, and 03_C.
+- Behavior and boundaries: Resolve and validate one output path without creating it; Write guarded UTF-8 text; Merge one accepted interactive decision into a reusable tuning YAML file.
+
+### `meg/code/preprocessing_basic/trial_preparation.py`
+
+- Prepare the Stage 2 cohort trial accounting without creating epochs.
+- Behavior and boundaries: Resolve a new dedicated bundle without touching Stage 1 paths; Read a small evidence table, retaining blank and original values; Hash a JSON-compatible scientific contract independently of mount paths; Hash small evidence/output files; never hash raw MEG signal files.
+
+### `meg/code/preprocessing_basic/trigger_extraction.py`
+
+- Implement reusable trigger reconstruction, transition handling, behavioral segment parsing, and reported-vs-observed alignment for the DAD MEG pipeline. The numbered scientific entry point is ``02_trigger_extraction_custom.py``.
+- Behavior and boundaries: Parse debug CSVs as validated behavioral segments; Return a boundary-preserving chronological view for transition lookup; Legacy parser retained for focused transition tests; Read one FIF lazily and reconstruct all observed non-zero windows.
+
+### `meg/params/pipeline_default.yaml`
+
+- Expand supported participant profiles and current-cohort defaults; validate exact reviewed trigger pairs, acquisition boundaries and accepted Stage-2 exclusions.
+
+### `meg/params/sub-04.yaml`
+
+- Select participant 04 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-08.yaml`
+
+- Select participant 08 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-09.yaml`
+
+- Select participant 09 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-10.yaml`
+
+- Select participant 10 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-11.yaml`
+
+- Select participant 11 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-12.yaml`
+
+- Select participant 12 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-13.yaml`
+
+- Select participant 13 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-14.yaml`
+
+- Select participant 14 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-15.yaml`
+
+- Select participant 15 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-16.yaml`
+
+- Select participant 16 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-17.yaml`
+
+- Select participant 17 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-18.yaml`
+
+- Select participant 18 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-19.yaml`
+
+- Select participant 19 through the shared verified profile. Carry explicit trigger_parser overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-20.yaml`
+
+- Select participant 20 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-21.yaml`
+
+- Select participant 21 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-22.yaml`
+
+- Select participant 22 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-23.yaml`
+
+- Select participant 23 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-24.yaml`
+
+- Select participant 24 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-25.yaml`
+
+- Select participant 25 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-26.yaml`
+
+- Select participant 26 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-27.yaml`
+
+- Select participant 27 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-28.yaml`
+
+- Select participant 28 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-29.yaml`
+
+- Select participant 29 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-30.yaml`
+
+- Select participant 30 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-31.yaml`
+
+- Select participant 31 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-32.yaml`
+
+- Select participant 32 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-33.yaml`
+
+- Select participant 33 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-34.yaml`
+
+- Select participant 34 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-35.yaml`
+
+- Select participant 35 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-36.yaml`
+
+- Select participant 36 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/params/sub-37.yaml`
+
+- Select participant 37 through the shared verified profile. Carry explicit epoching, trigger_parser overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-38.yaml`
+
+- Select participant 38 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-39.yaml`
+
+- Select participant 39 through the shared verified profile. Preserve the original participant data and derive all discovery metadata from the shared profile.
+
+### `meg/tests/test_cohort_stage1.py`
+
+- Exercise new cohort timing and provenance rules without touching raw data.
+- Exercise Accept observed v24/v25 names only in their configured blocks; The earlier-run estimate is visibly distinct from measured run 5; Do not copy demographics or compensation into derivative reports; Reset both transition and alignment cursors after missing recorded data; Working defaults exclude P15 while accepted Stage 1-3 stay readable.
+
+### `meg/tests/test_deep_trigger_report.py`
+
+- Validate legacy-format deep trigger report generation from canonical step-02 events and alignment data.
+- Exercise Missing run-1 data must not be illustrated using run-2 pulses; Resolve only confirmed unavailable tails; preserve missing observations; Keep raw REPORTED_ONLY while marking its excluded trial adjudicated; Do not auto-resolve missing breaks, tails, or trials without full evidence; Generate the complete legacy bundle from canonical step-02 evidence.
+
+### `meg/tests/test_multisubject_discovery.py`
+
+- Exercise the external multisubject discovery and source-lineage contracts without reading or writing the mounted raw dataset.
+- Exercise Each supported selector resolves its unique external subNN_* folder; A missing participant folder must fail before downstream discovery; Two subNN_* directories are unsafe and must not be guessed; Condition and identity settings come from the selected profile.
+
+### `meg/tests/test_pipeline_config.py`
+
+- Cover the matching staged configuration contracts using synthetic profiles and temporary paths; no participant dataset is used.
+
+### `meg/tests/test_preprocessing_stage_utils.py`
+
+- Validate shared stage safety, acquisition-run lineage, and tuning persistence.
+- Exercise Accepted decisions are outputs and must never enter the raw tree; A real NumPy ICA-duration value must not break the final ocular SAVE; Saving a stale GUI must retain other runs and remove old same-run fields; Real independent processes must serialize read/merge/write, not lose runs; A failed save must leave readable previous acceptance and no temp debris.
+
+### `meg/tests/test_trial_preparation.py`
+
+- Test Stage 2 scientific accounting and protection of accepted inputs.
+- Exercise Both incomplete candidates remain visible; a later complete trial survives; An edited key stops preparation, even if a neighboring trial is valid; An accepted interrupted trial stays excluded if the generic ESC rule changes; Only observed onsets become candidates, with a reviewed final exclusion; A generic missing trigger cannot justify the reviewed cutoff exclusion.
+
+### `meg/tests/test_trigger_parser.py`
+
+- Validate transition resolution, runtime-specific CSV parsing, replay metadata, and behavioral-segment alignment for `code/preprocessing_basic/02_trigger_extraction_custom.py`.
+- Exercise Keep expected code for both contiguous transition orders; Keep both manually confirmed trigger windows and align them in order; A reviewed correction must not become a general exception for code 150; Stop extraction if an exact review rule disagrees with the saved CSV; Export a later reviewed pair without losing metadata or failing on CSV keys.
+
+Suggested commit message:
+`feat(meg): extend cohort discovery and add reviewed trial accounting`
+
 # 19 Nov 2026 17:20
 
 ## feat(experiment): add scheduled onset guards and immediate dot offset

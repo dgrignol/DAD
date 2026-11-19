@@ -1,0 +1,34 @@
+# sub-37.yaml
+# Purpose: select P37, retain both reviewed pulses, and exclude the final partial.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-37.yaml \
+#   --preflight-only
+# Stage 2 usage: python meg/code/preprocessing_basic/trial_preparation.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-37.yaml
+# Data flow: profile + reviewed trigger exceptions + exact incomplete-onset
+# exclusion -> auditable trial accounting, with no invented events or timing.
+subject:
+  id: "37"
+
+# The final recorded onset belongs to the reviewed incomplete B1/R3/trial-3
+# boundary. Stage 2 also requires matching canonical unavailable-tail evidence.
+epoching:
+  accepted_trial_exclusions:
+    - source_fif: "sub37_run01_051026.fif"
+      raw_sample_frame: 562193
+      condition_code: 91
+      reason: "stage1_incomplete_recording_tail"
+      require_recording_tail_evidence: true
+      decision_reference: "PREPROCESSING_DECISIONS.md#p37-unavailable-recording-tail"
+
+# Human review of transition-warning plots confirmed these adjacent STI101
+# windows were two valid triggers despite their one-sample boundary. Match the
+# source filename and absolute raw samples exactly before retaining both.
+trigger_parser:
+  reviewed_keep_both_transitions:
+    - source_fif: "sub37_run01_051026.fif"
+      first_code: 20
+      first_sample_raw: 285665
+      second_code: 150
+      second_sample_raw: 285666
+      reason: "Visual review confirmed both align_row 134 and 135 triggers are valid."

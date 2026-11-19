@@ -1,0 +1,8 @@
+# sub-12.yaml
+# Purpose: select participant 12 for the shared DAD MEG pipeline.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-12.yaml \
+#   --preflight-only
+# Data flow: this selector chooses the verified profile in pipeline_default.yaml.
+subject:
+  id: "12"

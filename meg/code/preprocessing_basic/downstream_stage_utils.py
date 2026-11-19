@@ -52,6 +52,9 @@ Safety and scientific assumptions
   reportable evidence and can exclude their owning trial by policy.
 - Trigger-150 rejection is a trial-level behavioral rule and is independent of
   physiological annotations handled by MNE ``reject_by_annotation``.
+- Accepted source/sample exclusions are applied before identity validation.
+  Stage 2 can retain ambiguous candidates for review with ``strict=False``;
+  neither these candidates nor unresolved condition onsets disappear silently.
 """
 
 from __future__ import annotations
@@ -321,6 +324,8 @@ def build_trial_decisions(
     event_id_map: Mapping[str, int],
     identity_range: Iterable[int],
     exclusion_policy: Mapping[str, Any],
+    accepted_exclusions: Iterable[Mapping[str, Any]] = (),
+    strict: bool = True,
 ) -> list[dict[str, Any]]:
     """
     Convert one run's canonical events into explicit epoch trial decisions.
@@ -329,7 +334,10 @@ def build_trial_decisions(
     acquisition run; the last interval ends at the run boundary supplied by
     the caller. Included trials require exactly one resolved identity trigger.
     An explicitly excluded partial trial may have no identity because gaze or
-    ESC termination can occur before the identity frame is presented.
+    ESC termination can occur before the identity frame is presented. Exact
+    source/sample exclusions are independent of the configurable trial policy.
+    With ``strict=False``, ambiguous identities become visible review-required
+    rows instead of stopping ledger construction; they are never eligible.
     """
     run_rows = sorted(
         (dict(row) for row in rows if str(row["source_fif"]) == source_fif),
@@ -345,13 +353,12 @@ def build_trial_decisions(
     identity_min = min(identity_values)
     identity_max = max(identity_values)
 
-    # Unresolved condition rows cannot define trustworthy epochs. Resolved
-    # transition-warning condition rows remain valid scientific events.
+    # Every observed condition candidate must be accounted for. In particular,
+    # an unresolved onset still bounds its preceding trial and owns a ledger row.
     condition_rows = [
         row
         for row in run_rows
         if int(row["trigger_code"]) in condition_by_code
-        and not csv_bool(row["unresolved_transition"])
     ]
     if not condition_rows:
         raise RuntimeError(f"No resolved condition onsets found for {source_fif}.")
@@ -368,6 +375,14 @@ def build_trial_decisions(
             int(value) for value in exclusion_policy["esc_termination_codes"]
         ),
     }
+    source_exclusions = {
+        int(item["raw_sample_frame"]): item
+        for item in accepted_exclusions if item["source_fif"] == source_fif
+    }
+    onset_samples = {int(row["sample_start_raw"]) for row in condition_rows}
+    missing_keys = set(source_exclusions).difference(onset_samples)
+    if missing_keys:
+        raise RuntimeError(f"Accepted exclusion onset missing in {source_fif}: {sorted(missing_keys)}")
     decisions: list[dict[str, Any]] = []
     for index, condition_row in enumerate(condition_rows):
         start = int(condition_row["sample_start_raw"])
@@ -380,6 +395,20 @@ def build_trial_decisions(
             raise RuntimeError(
                 f"Invalid trial interval in {source_fif}: start={start}, end={end}"
             )
+        # A behavioral run or replay/warm-up boundary must not lend evidence to
+        # the preceding trial even when no new condition has been observed yet.
+        for row in run_rows:
+            sample = int(row["sample_start_raw"])
+            if not start < sample < end:
+                continue
+            context_changed = any(
+                str(condition_row.get(key, "")) and str(row.get(key, ""))
+                and str(condition_row[key]) != str(row[key])
+                for key in ("behavioral_block", "behavioral_run")
+            )
+            if context_changed or int(row["trigger_code"]) in {151, 153}:
+                end = sample
+                break
         interval_rows = [
             row
             for row in run_rows
@@ -417,24 +446,40 @@ def build_trial_decisions(
         ):
             exclusion_reasons.append("unresolved_transition")
 
+        accepted = source_exclusions.get(start)
+        if accepted:
+            if int(accepted["condition_code"]) != int(condition_row["trigger_code"]):
+                raise RuntimeError(f"Accepted exclusion code mismatch: {source_fif}@{start}")
+            marker = accepted.get("required_boundary_marker")
+            if marker and not any(int(row["trigger_code"]) == marker["code"]
+                                  and int(row["sample_start_raw"]) == marker["raw_sample_frame"]
+                                  for row in interval_rows):
+                raise RuntimeError(f"Accepted partial-trial boundary marker missing: {source_fif}@{start}")
+            exclusion_reasons.append(str(accepted["reason"]))
+
         # Multiple identities are ambiguous even when another trigger excludes
         # the trial. A missing identity is acceptable only for an already
         # excluded partial trial; candidates sent to MNE always have one.
-        if len(identity_rows) > 1 or (
+        identity_ambiguous = len(identity_rows) > 1 or (
             not identity_rows and not exclusion_reasons
-        ):
+        )
+        if identity_ambiguous and strict:
             raise RuntimeError(
                 "Expected one resolved trial identity inside the run-isolated "
                 f"interval for {source_fif} at sample {start}; found "
                 f"{[(row['trigger_code'], row['sample_start_raw']) for row in identity_rows]}"
             )
-        identity_row = identity_rows[0] if identity_rows else None
+        identity_row = identity_rows[0] if len(identity_rows) == 1 else None
+        review_reasons = ["ambiguous_or_missing_identity"] if identity_ambiguous else []
         decision = {
             "source_fif": source_fif,
             "source_fif_path": str(condition_row.get("source_fif_path", "")),
             "acquisition_run": int(condition_row["acquisition_run"]),
             "raw_sample_frame": start,
             "sample_start_raw": start,
+            "condition_event_index": str(condition_row.get("event_index", "")),
+            "reported_source_csv": str(condition_row.get("reported_source_csv", "")),
+            "reported_alignment_status": str(condition_row.get("reported_alignment_status", "")),
             "trial_interval_end_raw_exclusive": end,
             "condition_name": condition_by_code[int(condition_row["trigger_code"])],
             "condition_code": int(condition_row["trigger_code"]),
@@ -447,7 +492,7 @@ def build_trial_decisions(
             "identity_mapping_status": (
                 "resolved_numeric_profile_range"
                 if identity_row
-                else "missing_excluded_before_identity"
+                else ("review_required" if identity_ambiguous else "missing_excluded_before_identity")
             ),
             "behavioral_block": _trial_value(condition_row, "behavioral_block"),
             "behavioral_run": _trial_value(condition_row, "behavioral_run"),
@@ -480,8 +525,14 @@ def build_trial_decisions(
             "esc_termination_evidence": bool(evidence["esc_termination"]),
             "unresolved_transition_count": int(unresolved_count),
             "evidence_trigger_codes": ",".join(str(code) for code in evidence_codes),
+            "evidence_event_indices": ",".join(str(row.get("event_index", "")) for row in interval_rows),
+            "evidence_samples_raw": ",".join(str(row["sample_start_raw"]) for row in interval_rows),
             "exclusion_reasons": ",".join(exclusion_reasons),
-            "included_by_trial_policy": not exclusion_reasons,
+            "accepted_exclusion_reason": str(accepted["reason"]) if accepted else "",
+            "decision_reference": str(accepted.get("decision_reference", "")) if accepted else "",
+            "accepted_boundary_marker": json.dumps(accepted.get("required_boundary_marker", {}), sort_keys=True) if accepted else "",
+            "review_reasons": ",".join(review_reasons),
+            "included_by_trial_policy": not exclusion_reasons and not review_reasons,
             "annotation_rejection_policy": "handled_by_mne_reject_by_annotation",
         }
         decisions.append(decision)

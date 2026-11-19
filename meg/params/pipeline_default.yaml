@@ -1,9 +1,10 @@
 # pipeline_default.yaml
 #
 # Purpose:
-#   Define shared MEG pipeline settings and the verified profiles for all seven
-#   participants in the external read-only dataset. Subject YAML files contain
-#   only the selected subject ID; pipeline_config.py derives labels, trigger
+#   Define shared MEG pipeline settings and the verified profiles for all 39
+#   participants in the external read-only dataset. Subject YAML files select
+#   the subject and may carry reviewed source-specific exceptions.
+#   pipeline_config.py derives labels, trigger
 #   ranges, condition maps, ocular settings, and discovery globs from the
 #   selected profile.
 #
@@ -33,7 +34,17 @@ project:
   params_root: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params"
 
 subject:
-  id: "01"
+  id: "04"
+
+# Working scientific cohort (2026-11-07). Historical profiles and accepted
+# 36-participant Stage 1-3 evidence stay readable; P15 data are retained.
+analysis_cohort:
+  included_subjects: &analysis_subjects ["04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36", "37", "38", "39"]
+  excluded_subjects:
+    "01": "Experiment version differed too much from the analysis cohort."
+    "02": "Experiment version differed too much from the analysis cohort."
+    "03": "Experiment version differed too much from the analysis cohort."
+    "15": "Participant-specific insufficient remaining trial coverage; excluded 2026-11-07. Data/provenance retained; no general threshold."
 
 # Verified participant facts live here once. Do not copy these facts into stage
 # settings or subject selector files; pipeline_config.py derives stage fields.
@@ -129,7 +140,7 @@ subject_profiles:
       stimuli: "V30"
       schedule: "v23"
       runtime: "v20"
-    condition_triggers:
+    condition_triggers: &condition_triggers_v30
       always_visible: 71
       occluded_nondeviant: 81
       occluded_deviant: 91
@@ -144,7 +155,7 @@ subject_profiles:
       esc_termination_code: 152
     iti_sec_range: [1.0, 1.5]
     visual_content_variant: "V30"
-    ocular_modalities:
+    ocular_modalities: &ocular_modalities_v30
       eog_channels_in_fif: []
       saved_edf: true
       online_gaze_trigger_code: 150
@@ -231,6 +242,568 @@ subject_profiles:
     known_exceptions:
       - "The raw tree and FIF filenames use 270526; prior migration notes listed 260527. Prefix discovery plus the raw folder date is authoritative."
 
+  # Cohort extension: source names and block counts were checked against the
+  # read-only raw tree. Session notes are attached in preflight for review.
+  # P24 acquisition differences are handled by a separate adapter.
+  "08":
+    external_folder:
+      expected_name: "sub08_210826"
+      acquisition_date_label: "210826"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: &trigger_policy_v25
+      required_subject_codes: [71, 81, 91]
+      allowed_fixed_codes: [111, 112, 113, 114, 115, 116, 117, 118, 150, 151, 152, 153, 201, 202]
+      optional_event_codes: [113, 116, 117, 118, 150, 151, 152, 153, 201, 202]
+      gaze_break_code: 150
+      replay_start_code: 151
+      esc_termination_code: 152
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+    # Only block 1 used v24; later blocks used v25.
+    runtime_by_block: {1: "v24_allTrialGuard", 2: "v25_dotOffsetBlank", 3: "v25_dotOffsetBlank", 4: "v25_dotOffsetBlank", 5: "v25_dotOffsetBlank"}
+  "09":
+    external_folder:
+      expected_name: "sub09_240826"
+      acquisition_date_label: "240826"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "10":
+    external_folder:
+      expected_name: "sub10_240826"
+      acquisition_date_label: "240826"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "11":
+    external_folder:
+      expected_name: "sub11_310826"
+      acquisition_date_label: "310826"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "12":
+    external_folder:
+      expected_name: "sub12_010926"
+      acquisition_date_label: "010926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "13":
+    external_folder:
+      expected_name: "sub13_020926"
+      acquisition_date_label: "020926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "14":
+    external_folder:
+      expected_name: "sub14_030926"
+      acquisition_date_label: "030926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "15":
+    external_folder:
+      expected_name: "sub15_030926"
+      acquisition_date_label: "030926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "16":
+    external_folder:
+      expected_name: "sub16_040926"
+      acquisition_date_label: "040926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "17":
+    external_folder:
+      expected_name: "sub17_040926"
+      acquisition_date_label: "040926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "18":
+    external_folder:
+      expected_name: "sub18_070926"
+      acquisition_date_label: "070926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "19":
+    external_folder:
+      expected_name: "sub19_070926"
+      acquisition_date_label: "070926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "20":
+    external_folder:
+      expected_name: "sub20_080926"
+      acquisition_date_label: "080926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "21":
+    external_folder:
+      expected_name: "sub21_090926"
+      acquisition_date_label: "090926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "22":
+    external_folder:
+      expected_name: "sub22_090926"
+      acquisition_date_label: "090926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "23":
+    external_folder:
+      expected_name: "sub23_090926"
+      acquisition_date_label: "090926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "24":
+    external_folder:
+      expected_name: "sub24_100926"
+      acquisition_date_label: "100926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "25":
+    external_folder:
+      expected_name: "sub25_100926"
+      acquisition_date_label: "100926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6]
+    known_exceptions: []
+  "26":
+    external_folder:
+      expected_name: "sub26_110926"
+      acquisition_date_label: "110926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "27":
+    external_folder:
+      expected_name: "sub27_110926"
+      acquisition_date_label: "110926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "28":
+    external_folder:
+      expected_name: "sub28_150926"
+      acquisition_date_label: "150926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "29":
+    external_folder:
+      expected_name: "sub29_150926"
+      acquisition_date_label: "150926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6]
+    known_exceptions: []
+  "30":
+    external_folder:
+      expected_name: "sub30_210926"
+      acquisition_date_label: "210926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "31":
+    external_folder:
+      expected_name: "sub31_210926"
+      acquisition_date_label: "210926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "32":
+    external_folder:
+      expected_name: "sub32_220926"
+      acquisition_date_label: "220926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "33":
+    external_folder:
+      expected_name: "sub33_220926"
+      acquisition_date_label: "220926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "34":
+    external_folder:
+      expected_name: "sub34_230926"
+      acquisition_date_label: "230926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "35":
+    external_folder:
+      expected_name: "sub35_280926"
+      acquisition_date_label: "280926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6]
+    known_exceptions: []
+  "36":
+    external_folder:
+      expected_name: "sub36_280926"
+      acquisition_date_label: "280926"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+  "37":
+    external_folder:
+      expected_name: "sub37_051026"
+      acquisition_date_label: "051026"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6]
+    # User-confirmed recording loss: disk full in acquisition 1; subsequent
+    # recordings and behavioral block 6 were acquired after freeing disk space.
+    # This reviewed association constrains alignment; filenames alone do not.
+    acquisition_block_map: {1: [1], 2: [2], 3: [3], 4: [4], 5: [5], 6: [6]}
+    truncated_acquisition_runs: [1]
+    known_exceptions:
+      - "Acquisition 1 ended early when the MEG computer disk filled. The behavioral log continued; preserve missing tail as unavailable MEG."
+  "38":
+    external_folder:
+      expected_name: "sub38_051026"
+      acquisition_date_label: "051026"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5, 6]
+    known_exceptions: []
+  "39":
+    external_folder:
+      expected_name: "sub39_061026"
+      acquisition_date_label: "061026"
+    versions:
+      stimuli: "V30"
+      schedule: "v23"
+      runtime: "v25_dotOffsetBlank"
+    condition_triggers: *condition_triggers_v30
+    identity_range: [1, 40]
+    reported_trigger_csv_pattern: "output_files/debug_actual_triggers_occlusion_v*_sub{subject_id}_block*_run*.csv"
+    trigger_policy: *trigger_policy_v25
+    iti_sec_range: [1.0, 1.5]
+    visual_content_variant: "V30"
+    ocular_modalities: *ocular_modalities_v30
+    completed_behavioral_blocks: [1, 2, 3, 4, 5]
+    known_exceptions: []
+
 layout:
   subject_bids_id: "sub-01"
   session_bids_id: "ses-01"
@@ -243,7 +816,7 @@ data_discovery:
   task_meg_fif_glob_template: "meg/sub{subject_id}_run*.fif"
   trajectory_mat_glob_template: "input_files/MovDot_Sub{subject_id}_V*_rescueTraject.mat"
   trial_struct_mat_glob_template: "input_files/Sub{subject_id}_TrialStruct_v*_rescueTraject.mat"
-  behavioral_mat_glob_template: "output_files/MoveDot1_occlusion_v*_rescueTraject_SUB{subject_id}_BLOCK*.mat"
+  behavioral_mat_glob_template: "output_files/MoveDot1_occlusion_v*_SUB{subject_id}_BLOCK*.mat"
   reported_trigger_csv_glob_template: "output_files/debug_actual_triggers*_sub{subject_id}_block*_run*.csv"
   eyetracker_edf_glob_template: "eyetracker/*.edf"
   empty_room_fif_glob_template: "empty_room_{subject_folder_date}.fif"
@@ -348,6 +921,10 @@ ica_auto:
 
 epoching:
   enabled: true
+  # Production step 04 consumes the reviewed Stage-2 accounting. A changed
+  # policy or trigger input requires explicit Stage-2 regeneration and review.
+  require_stage2_ledger: true
+  accepted_trial_exclusions: []
   tmin_sec: -0.5
   tmax_sec: 2.667
   baseline_sec: null
@@ -397,7 +974,7 @@ matlab_drsa:
   smooth_window_samples: 15
   smoothing_plots: false
   plot_smoothing_window: 9
-  group_average_subjects: ["01", "02", "03", "04", "05", "06", "07"]
+  group_average_subjects: *analysis_subjects
   # 1-based stimulus frame indices converted to seconds as (frame - 1) / Hz.
   occlusion_timing:
     frame_frequency_hz: 120.0

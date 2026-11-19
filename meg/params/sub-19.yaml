@@ -1,0 +1,20 @@
+# sub-19.yaml
+# Purpose: select participant 19 for the shared DAD MEG pipeline.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-19.yaml \
+#   --preflight-only
+# Data flow: this selector chooses the verified profile in pipeline_default.yaml.
+subject:
+  id: "19"
+
+# Human review of transition-warning plots confirmed these adjacent STI101
+# windows were two valid triggers despite their one-sample boundary. Match the
+# source filename and absolute raw samples exactly before retaining both.
+trigger_parser:
+  reviewed_keep_both_transitions:
+    - source_fif: "sub19_run04_070926.fif"
+      first_code: 16
+      first_sample_raw: 25103
+      second_code: 150
+      second_sample_raw: 25104
+      reason: "Visual review confirmed both align_row 2163 and 2164 triggers are valid."

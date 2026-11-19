@@ -8,6 +8,7 @@ and behavioral-segment alignment for
 
 Coverage
 - expected-trigger-first symmetric transition handling,
+- exact reviewed overrides that retain both valid adjacent triggers,
 - v18 and v20 runtime-specific CSV filename/schema parsing,
 - identity code 40,
 - gaze break 150, replay start 151, and ESC 152,
@@ -37,6 +38,7 @@ Assumptions
 from __future__ import annotations
 
 import importlib.util
+import csv
 from pathlib import Path
 import sys
 
@@ -197,6 +199,147 @@ def test_expected_trigger_first_is_symmetric_for_transition_orders():
     ]
     assert [row["dropped_code"] for row in transition_warnings] == [10, 10]
     assert decision_counts.get("expected_trigger", 0) == 2
+
+
+@pytest.mark.parametrize("first_code, first_sample", [(16, 25103), (20, 285665)])
+def test_reviewed_transition_override_retains_both_expected_codes(
+    first_code, first_sample
+):
+    """Keep both manually confirmed trigger windows and align them in order."""
+    observed_windows = [
+        _window(1, first_code, first_sample, first_sample + 1),
+        _window(2, 150, first_sample + 1, first_sample + 3),
+        _window(3, 71, first_sample + 10, first_sample + 12),
+    ]
+    expected_sequence = [
+        _expected(1, first_code),
+        _expected(2, 150),
+        _expected(3, 71),
+    ]
+    override = {
+        "source_fif": "SUB01_block01_meg.fif",
+        "first_code": first_code,
+        "first_sample_raw": first_sample,
+        "second_code": 150,
+        "second_sample_raw": first_sample + 1,
+        "reason": "manual review confirmed both codes",
+    }
+
+    events, warnings, decisions = STEP02.resolve_observed_windows_to_events(
+        observed_windows=observed_windows,
+        expected_sequence=expected_sequence,
+        transition_max_samples=1,
+        seq_min=1,
+        seq_max=40,
+        reviewed_keep_both_transitions=[override],
+    )
+
+    assert [event["trigger_code"] for event in events] == [first_code, 150, 71]
+    assert [event["expected_trigger_code"] for event in events] == [first_code, 150, 71]
+    assert [event["sample_start_raw"] for event in events[:2]] == [
+        first_sample, first_sample + 1
+    ]
+    assert [event["is_transition_warning"] for event in events] == [True, True, False]
+    assert warnings[0]["retained_both"] is True
+    assert warnings[0]["retained_codes"] == [first_code, 150]
+    assert decisions["reviewed_keep_both"] == 1
+
+    segment = STEP02.ReportedSegment(
+        segment_index=1,
+        block=1,
+        run=1,
+        source_csv=Path("reviewed_triggers.csv"),
+        events=expected_sequence,
+    )
+    aligned_events, alignment, _summary = STEP02.align_reported_segments_to_events(
+        events,
+        [segment],
+    )
+    assert [row["status"] for row in alignment] == [
+        "MATCH_WARNING",
+        "MATCH_WARNING",
+        "MATCH",
+    ]
+    assert [row.get("reported_only_reason") for row in alignment] == [None] * 3
+    assert aligned_events[1]["is_gaze_break"] is True
+
+
+@pytest.mark.parametrize(
+    "changed_field, changed_value",
+    [("source_fif", "another_recording.fif"), ("first_sample_raw", 25102)],
+)
+def test_reviewed_override_does_not_apply_to_another_source_or_sample(
+    changed_field, changed_value
+):
+    """A reviewed correction must not become a general exception for code 150."""
+    rule = {
+        "source_fif": "SUB01_block01_meg.fif",
+        "first_code": 16,
+        "first_sample_raw": 25103,
+        "second_code": 150,
+        "second_sample_raw": 25104,
+        "reason": "reviewed exact pair",
+    }
+    rule[changed_field] = changed_value
+    events, warnings, decisions = STEP02.resolve_observed_windows_to_events(
+        [_window(1, 16, 25103, 25104), _window(2, 150, 25104, 25106)],
+        [_expected(1, 16), _expected(2, 150)],
+        1, 1, 40,
+        reviewed_keep_both_transitions=[rule],
+    )
+    assert [row["trigger_code"] for row in events] == [16]
+    assert warnings[0]["retained_both"] is False
+    assert decisions.get("reviewed_keep_both", 0) == 0
+
+
+def test_reviewed_override_requires_consecutive_reported_codes():
+    """Stop extraction if an exact review rule disagrees with the saved CSV."""
+    rule = {
+        "source_fif": "SUB01_block01_meg.fif",
+        "first_code": 16,
+        "first_sample_raw": 25103,
+        "second_code": 150,
+        "second_sample_raw": 25104,
+        "reason": "reviewed exact pair",
+    }
+    with pytest.raises(ValueError, match="two consecutive reported triggers"):
+        STEP02.resolve_observed_windows_to_events(
+            [_window(1, 16, 25103, 25104), _window(2, 150, 25104, 25106)],
+            [_expected(1, 16), _expected(2, 5), _expected(3, 150)],
+            1, 1, 40,
+            reviewed_keep_both_transitions=[rule],
+        )
+
+
+def test_mixed_transition_warnings_export_review_metadata(tmp_path):
+    """Export a later reviewed pair without losing metadata or failing on CSV keys."""
+    # An ordinary rising-edge transition precedes the exact reviewed pair,
+    # matching the heterogeneous warning order in the participant reports.
+    _, warnings, _ = STEP02.resolve_observed_windows_to_events(
+        [
+            _window(1, 128, 10, 11), _window(2, 150, 11, 13),
+            _window(3, 16, 25103, 25104), _window(4, 150, 25104, 25106),
+        ],
+        [_expected(1, 150), _expected(2, 16), _expected(3, 150)],
+        1, 1, 40,
+        reviewed_keep_both_transitions=[{
+            "source_fif": "SUB01_block01_meg.fif",
+            "first_code": 16, "first_sample_raw": 25103,
+            "second_code": 150, "second_sample_raw": 25104,
+            "reason": "reviewed exact pair",
+        }],
+    )
+    assert set(warnings[0]) == set(warnings[1])
+    output = tmp_path / "02_transition_warnings.csv"
+    with output.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(warnings[0]))
+        writer.writeheader()
+        writer.writerows(warnings)
+    with output.open(newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert [row["retained_both"] for row in rows] == ["False", "True"]
+    assert rows[1]["review_reason"] == "reviewed exact pair"
+    assert rows[1]["retained_codes"] == "[16, 150]"
 
 
 def test_fallback_resolution_uses_width_then_unresolved_deterministic():

@@ -13,7 +13,7 @@ Usage examples
    python -m pytest /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/tests -q
 
 Coverage
-- exact subject-folder matching for participants 01-07,
+- exact subject-folder matching for participants 01-39,
 - zero and ambiguous folder failures,
 - profile-derived trigger and identity settings,
 - sub01 irregular acquisition filenames,
@@ -40,14 +40,11 @@ import dataset_inventory  # noqa: E402
 import pipeline_config  # noqa: E402
 
 
+# The profile's date is an independently selected expected folder label in
+# the synthetic tree; this test checks exact subject matching, not raw dates.
 SUBJECT_DATES = {
-    "01": "150426",
-    "02": "130526",
-    "03": "200526",
-    "04": "220526",
-    "05": "260526",
-    "06": "260526",
-    "07": "270526",
+    subject_id: profile["external_folder"]["acquisition_date_label"]
+    for subject_id, profile in yaml.safe_load(DEFAULT_CONFIG.read_text())["subject_profiles"].items()
 }
 
 

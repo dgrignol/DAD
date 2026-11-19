@@ -14,10 +14,14 @@ Data flow
 4. Resolve one-sample non-zero transition pulses using nearby reported codes
    as QC evidence, with width and deterministic fallbacks.
 5. Align each saved behavioral block/run CSV segment in chronological order to
-   the remaining observed event stream.
+   the remaining observed event stream. Explicitly reviewed acquisition/block
+   boundaries constrain both transition resolution and alignment when present.
 6. Attach block/run/trial/replay metadata where alignment supports it; infer
    block/run for observed-only events only from unambiguous same-FIF context.
-7. Write observed events, full alignment QC, source associations, reports, and
+7. Render the deep Stage 1 report from the canonical alignment, keeping raw
+   alignment statuses while separately marking next-frame matched gaze-break
+   trials that the configured exclusion policy removes.
+8. Write observed events, full alignment QC, source associations, reports, and
    an optional source-manifest update outside the read-only raw tree.
 
 Usage examples
@@ -38,6 +42,8 @@ Key assumptions
   segment, matching the runtime implementation that appends replay trials.
 - Alignment metadata is QC/provenance. Observed STI101 events remain present
   even when no CSV row aligns to them.
+- P37 has a user-confirmed truncated first acquisition. Its profile explicitly
+  maps recordings to blocks so the unrecorded tail cannot consume later FIFs.
 """
 
 from __future__ import annotations
@@ -251,6 +257,7 @@ def load_reported_trigger_segments(
     *,
     subject_id: str,
     runtime_version: str,
+    runtime_by_block: Optional[Mapping[int, str]] = None,
     replay_start_code: int = 151,
     esc_termination_code: int = 152,
 ) -> list[ReportedSegment]:
@@ -260,11 +267,12 @@ def load_reported_trigger_segments(
     Files are not treated as interchangeable chunks. Each unique block/run
     pair becomes one segment, filename runtime/subject tokens are verified, and
     every actual saved row is retained. Replay state begins after trigger 151
-    within a segment. Trigger 152 marks an ESC-terminated segment.
+    within a segment. Trigger 152 marks an ESC-terminated segment. A block
+    runtime mapping supports sessions that changed experiment version mid-run.
     """
     filename_re = re.compile(
-        rf"^debug_actual_triggers_occlusion_{re.escape(runtime_version)}"
-        rf"_rescueTraject_sub{re.escape(subject_id)}_block"
+        rf"^debug_actual_triggers_occlusion_(?P<runtime>v\d+_[A-Za-z0-9]+)"
+        rf"_sub{re.escape(subject_id)}_block"
         r"(?P<block>\d+)_run(?P<run>\d+)\.csv$",
         flags=re.IGNORECASE,
     )
@@ -281,6 +289,22 @@ def load_reported_trigger_segments(
             )
         block = int(match.group("block"))
         run = int(match.group("run"))
+        selected_runtime = (
+            runtime_by_block.get(block, runtime_version)
+            if runtime_by_block is not None
+            else runtime_version
+        )
+        expected_runtime = (
+            f"{selected_runtime}_rescueTraject"
+            if re.fullmatch(r"v\d+", selected_runtime, flags=re.IGNORECASE)
+            else selected_runtime
+        )
+        if match.group("runtime").lower() != expected_runtime.lower():
+            raise ValueError(
+                "Debug trigger CSV runtime differs from the selected subject "
+                f"profile for block {block}: expected {expected_runtime}, "
+                f"found {match.group('runtime')} in {csv_path.name}."
+            )
         key = (block, run)
         if key in seen:
             raise ValueError(
@@ -737,19 +761,24 @@ def resolve_observed_windows_to_events(
     condition_triggers: Optional[Mapping[str, int]] = None,
     gaze_break_code: int = 150,
     esc_termination_code: int = 152,
+    reviewed_keep_both_transitions: Optional[list[Mapping[str, Any]]] = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int]]:
     """
     Collapse contiguous non-zero transition pairs without synthesizing events.
 
     Reported codes are used first to choose which observed pulse to retain.
     Width evidence is the fallback. Ambiguous pairs keep the first pulse and
-    remain explicitly unresolved.
+    remain explicitly unresolved. Exact, manually reviewed source/sample
+    overrides can retain both members of a transition pair. All warnings use
+    the same CSV schema; ``retained_both`` distinguishes these reviewed pairs
+    from an actual drop despite the legacy kept/dropped field names.
     """
     events: list[dict[str, Any]] = []
     warnings: list[dict[str, Any]] = []
     decisions: Counter[str] = Counter()
     observed_index = 0
     expected_index = 0
+    reviewed_keep_both_transitions = reviewed_keep_both_transitions or []
 
     while observed_index < len(observed_windows):
         current = observed_windows[observed_index]
@@ -801,6 +830,83 @@ def resolve_observed_windows_to_events(
         expected_code = (
             expected_sequence[matched].trigger if matched is not None else None
         )
+
+        # Keep both pulses only for an exact human-reviewed source/sample
+        # override, and require the behavior log to contain them consecutively.
+        keep_both_rule = next(
+            (
+                rule
+                for rule in reviewed_keep_both_transitions
+                if str(rule.get("source_fif")) == current.source_fif
+                and int(rule.get("first_code", -1)) == current.trigger
+                and int(rule.get("second_code", -1)) == following.trigger
+                and int(rule.get("first_sample_raw", -1)) == current.start_sample_raw
+                and int(rule.get("second_sample_raw", -1)) == following.start_sample_raw
+            ),
+            None,
+        )
+        if keep_both_rule is not None:
+            if (
+                matched is None
+                or matched + 1 >= len(expected_sequence)
+                or expected_sequence[matched].trigger != current.trigger
+                or expected_sequence[matched + 1].trigger != following.trigger
+            ):
+                raise ValueError(
+                    "Reviewed keep-both transition no longer matches two "
+                    "consecutive reported triggers: "
+                    f"{current.source_fif} samples "
+                    f"{current.start_sample_raw}/{following.start_sample_raw}."
+                )
+            for window, partner, expected in (
+                (current, following.trigger, expected_sequence[matched]),
+                (following, current.trigger, expected_sequence[matched + 1]),
+            ):
+                events.append(
+                    _event_row(
+                        window,
+                        event_index=len(events) + 1,
+                        seq_min=seq_min,
+                        seq_max=seq_max,
+                        condition_triggers=condition_triggers,
+                        transition_partner_code=partner,
+                        expected_trigger_code=expected.trigger,
+                        transition_decision_source="reviewed_keep_both",
+                        transition_resolution_confidence=1.0,
+                        unresolved_transition=False,
+                        gaze_break_code=gaze_break_code,
+                        esc_termination_code=esc_termination_code,
+                    )
+                )
+            decisions["reviewed_keep_both"] += 1
+            warnings.append(
+                {
+                    "warning_index": len(warnings) + 1,
+                    "source_fif": current.source_fif,
+                    "source_fif_path": current.source_fif_path,
+                    "acquisition_run": current.acquisition_run,
+                    "order_pattern": f"{current.trigger}_then_{following.trigger}",
+                    "dropped_code": following.trigger,
+                    "kept_code": current.trigger,
+                    "retained_both": True,
+                    "retained_codes": [current.trigger, following.trigger],
+                    "expected_trigger_code": current.trigger,
+                    "decision_source": "reviewed_keep_both",
+                    "unresolved_transition": False,
+                    "transition_resolution_confidence": 1.0,
+                    "dropped_start_sample_raw": following.start_sample_raw,
+                    "dropped_end_sample_raw": following.end_sample_raw,
+                    "dropped_width_samples": following.width_samples,
+                    "kept_start_sample_raw": current.start_sample_raw,
+                    "kept_end_sample_raw": current.end_sample_raw,
+                    "kept_width_samples": current.width_samples,
+                    "review_reason": str(keep_both_rule["reason"]),
+                }
+            )
+            expected_index = matched + 2
+            observed_index += 2
+            continue
+
         keep, drop = current, following
         source = "deterministic_fallback"
         confidence = 0.0
@@ -855,6 +961,10 @@ def resolve_observed_windows_to_events(
                 "order_pattern": f"{current.trigger}_then_{following.trigger}",
                 "dropped_code": drop.trigger,
                 "kept_code": keep.trigger,
+                # Keep the export schema identical to reviewed-pair warnings,
+                # including when the first reviewed pair appears later in a FIF.
+                "retained_both": False,
+                "retained_codes": [keep.trigger],
                 "expected_trigger_code": expected_code,
                 "decision_source": source,
                 "unresolved_transition": unresolved,
@@ -865,6 +975,7 @@ def resolve_observed_windows_to_events(
                 "kept_start_sample_raw": keep.start_sample_raw,
                 "kept_end_sample_raw": keep.end_sample_raw,
                 "kept_width_samples": keep.width_samples,
+                "review_reason": "",
             }
         )
         observed_index += 2
@@ -884,13 +995,17 @@ def semiglobal_align_codes(
     score_match: int = 3,
     score_mismatch: int = -3,
     score_gap: int = -2,
+    allow_trailing_reported_gap: bool = False,
 ) -> tuple[list[AlignmentOp], int, int]:
     """
     Align one complete reported segment to any observed subsequence.
 
     Leading observed events are free because acquisition files can begin before
     a behavioral segment. Reported gaps are retained as QC rows and never
-    create observed events.
+    create observed events. At a confirmed truncated recording's end, a free
+    reported suffix allows the recorded prefix to end at the actual cutoff.
+    This prevents repeated later codes from pulling a missing tail into the
+    middle of an otherwise matching prefix.
     """
     n_reported = len(reported_codes)
     n_observed = len(observed_codes)
@@ -915,9 +1030,14 @@ def semiglobal_align_codes(
             scores[row, column] = best
             moves[row, column] = 1 if best == diagonal else (2 if best == up else 3)
 
-    end_column = int(np.argmax(scores[n_reported, :]))
-    best_score = int(scores[n_reported, end_column])
-    row, column = n_reported, end_column
+    if allow_trailing_reported_gap:
+        end_row = int(np.argmax(scores[:, n_observed]))
+        end_column = n_observed
+    else:
+        end_row = n_reported
+        end_column = int(np.argmax(scores[n_reported, :]))
+    best_score = int(scores[end_row, end_column])
+    row, column = end_row, end_column
     reversed_ops: list[AlignmentOp] = []
     while row > 0:
         move = int(moves[row, column])
@@ -938,6 +1058,8 @@ def semiglobal_align_codes(
                 f"Unexpected alignment backtrack at row={row}, column={column}."
             )
     reversed_ops.reverse()
+    reversed_ops.extend(AlignmentOp("REPORTED_ONLY", index, None)
+                        for index in range(end_row, n_reported))
     return reversed_ops, best_score, end_column
 
 
@@ -946,6 +1068,7 @@ def align_reported_segments_to_events(
     segments: list[ReportedSegment],
     *,
     alignment_slack_events: int = 250,
+    recording_truncated: bool = False,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """
     Align each actual saved CSV segment to the remaining observed event stream.
@@ -954,7 +1077,8 @@ def align_reported_segments_to_events(
     naturally receive multiple segment associations. A partial final segment
     consumes only its saved rows. An observed ESC 152 missing from the saved
     CSV remains OBSERVED_ONLY but can inherit an unambiguous preceding segment
-    label from the same FIF.
+    label from the same FIF. ``recording_truncated`` permits a free reported
+    suffix only when fewer observed events remain than reported segment rows.
     """
     alignment_rows: list[dict[str, Any]] = []
     observed_cursor = 0
@@ -972,6 +1096,7 @@ def align_reported_segments_to_events(
         operations, score, end_index = semiglobal_align_codes(
             [item.trigger for item in reported],
             [int(item["trigger_code"]) for item in observed_slice],
+            allow_trailing_reported_gap=(recording_truncated and len(observed_slice) < len(reported)),
         )
 
         matched_count = 0
@@ -1259,6 +1384,109 @@ def align_reported_segments_to_events(
     }
 
 
+def process_trigger_windows(
+    windows: list[ObservedWindow],
+    segments: list[ReportedSegment],
+    *,
+    trigger_config: Mapping[str, Any],
+    subject_profile: Mapping[str, Any],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, int],
+           list[dict[str, Any]], dict[str, Any]]:
+    """Resolve transitions and align within explicit acquisition boundaries.
+
+    With no ``acquisition_block_map`` the existing subject-wide behavior is
+    retained, including multi-block FIFs. A reviewed map associates each
+    acquisition run with a disjoint list of behavioral blocks. Both the
+    expected-code cursor and the alignment cursor restart at each boundary.
+    Missing reported rows never create observed events. A known truncated
+    acquisition labels only the reported suffix after its last observed event
+    as unavailable recording tail; internal missing rows remain unexplained.
+    Raw sample frames and source paths pass through unchanged.
+    """
+    block_map = subject_profile.get("acquisition_block_map")
+    truncated = set(subject_profile.get("truncated_acquisition_runs", []))
+    if block_map:
+        observed_runs = {window.acquisition_run for window in windows}
+        if observed_runs != set(block_map):
+            raise ValueError(
+                "Acquisition/block map must exactly cover recorded runs; "
+                f"configured={sorted(block_map)}, observed={observed_runs}."
+            )
+        configured_blocks = [block for blocks in block_map.values() for block in blocks]
+        if len(set(configured_blocks)) != len(configured_blocks) or set(configured_blocks) != {s.block for s in segments}:
+            raise ValueError("Acquisition/block map must cover each saved behavioral block exactly once.")
+        groups = [
+            (run, [window for window in windows if window.acquisition_run == run],
+             [segment for segment in segments if segment.block in blocks])
+            for run, blocks in sorted(block_map.items())
+        ]
+    else:
+        groups = [(None, windows, segments)]
+
+    # Each group produces canonical events, not synthetic fillers. Reindex
+    # before alignment so references remain unique across all source FIFs.
+    events: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    decisions: Counter[str] = Counter()
+    alignment_rows: list[dict[str, Any]] = []
+    summaries: list[dict[str, Any]] = []
+    boundaries: list[dict[str, Any]] = []
+    paired_count = 0
+    seq_min, seq_max = [int(value) for value in subject_profile["identity_range"]]
+    for run, selected_windows, selected_segments in groups:
+        selected_events, selected_warnings, selected_decisions = resolve_observed_windows_to_events(
+            selected_windows, flatten_reported_segments(selected_segments),
+            int(trigger_config.get("transition_max_samples", 1)), seq_min, seq_max,
+            int(trigger_config.get("expected_lookahead", 6)),
+            subject_profile["condition_triggers"],
+            int(trigger_config["gaze_break_code"]), int(trigger_config["esc_termination_code"]),
+            trigger_config.get("reviewed_keep_both_transitions", []),
+        )
+        for index, row in enumerate(selected_events, start=len(events) + 1):
+            row["event_index"] = index
+        for index, row in enumerate(selected_warnings, start=len(warnings) + 1):
+            row["warning_index"] = index
+        selected_events, selected_alignment, summary = align_reported_segments_to_events(
+            selected_events, selected_segments,
+            alignment_slack_events=int(trigger_config.get("alignment_slack_events", 250)),
+            recording_truncated=run in truncated,
+        )
+
+        # Classification follows the observed stream's end, independently of
+        # expected trial counts. It does not explain an earlier isolated gap.
+        tail_count = 0
+        if run is not None:
+            last_observed = max((index for index, row in enumerate(selected_alignment)
+                                 if row["observed_event_index"] is not None), default=-1)
+            for index, row in enumerate(selected_alignment):
+                row["constrained_acquisition_run"] = run
+                is_tail = run in truncated and index > last_observed and row["status"] == "REPORTED_ONLY"
+                row["reported_only_reason"] = "recording_tail_unavailable" if is_tail else None
+                tail_count += int(is_tail)
+            boundaries.append({
+                "acquisition_run": run,
+                "behavioral_blocks": list(block_map[run]),
+                "declared_truncated": run in truncated,
+                "recording_tail_unavailable_count": tail_count,
+                "alignment_status_counts": summary["status_counts"],
+            })
+        for index, row in enumerate(selected_alignment, start=len(alignment_rows) + 1):
+            row["alignment_index"] = index
+        events.extend(selected_events)
+        warnings.extend(selected_warnings)
+        decisions.update(selected_decisions)
+        alignment_rows.extend(selected_alignment)
+        summaries.extend(summary["segments"])
+        paired_count += summary["paired_observed_event_count"]
+    return events, warnings, dict(decisions), alignment_rows, {
+        "segments": summaries,
+        "status_counts": dict(Counter(row["status"] for row in alignment_rows)),
+        "paired_observed_event_count": paired_count,
+        "unpaired_observed_event_count": len(events) - paired_count,
+        "acquisition_boundaries": boundaries,
+    }
+
+
 def build_source_associations(
     events: list[dict[str, Any]],
     alignment_summary: Mapping[str, Any],
@@ -1414,6 +1642,8 @@ def build_report(
                 "reported_trigger_csv_pattern"
             ],
             "trigger_policy": policy,
+            "acquisition_block_map": profile.get("acquisition_block_map"),
+            "truncated_acquisition_runs": profile.get("truncated_acquisition_runs", []),
         },
         "inventory": {
             "task_fif_count": len(fif_summaries),
@@ -1439,6 +1669,7 @@ def build_report(
             "trigger_code_counts": dict(observed_codes),
             "transition_decision_counts": dict(decision_counts),
             "segment_alignment": alignment_summary["segments"],
+            "acquisition_boundaries": alignment_summary.get("acquisition_boundaries", []),
         },
         "files": {
             "fif_summaries": fif_summaries,
@@ -1491,6 +1722,16 @@ def report_markdown(
     ]
     lines.extend(f"- warning: {item}" for item in validation["warnings"])
     lines.extend(f"- error: {item}" for item in validation["errors"])
+    boundaries = report.get("stats", {}).get("acquisition_boundaries", [])
+    if boundaries:
+        lines.extend(["", "## Reviewed Acquisition Boundaries"])
+        for boundary in boundaries:
+            lines.append(
+                f"- acquisition {boundary['acquisition_run']} -> behavioral blocks "
+                f"{boundary['behavioral_blocks']}; alignment "
+                f"`{boundary['alignment_status_counts']}`; logged rows beyond "
+                f"recording end: {boundary['recording_tail_unavailable_count']}."
+            )
     lines.extend(
         [
             "",
@@ -1672,11 +1913,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             csv_paths,
             subject_id=subject_id,
             runtime_version=profile["versions"]["runtime"],
+            runtime_by_block={
+                int(block): str(version)
+                for block, version in profile.get("runtime_by_block", {}).items()
+            },
             replay_start_code=int(trigger_cfg["replay_start_code"]),
             esc_termination_code=int(trigger_cfg["esc_termination_code"]),
         )
-        expected = flatten_reported_segments(segments)
-
         all_windows: list[ObservedWindow] = []
         fif_summaries: list[dict[str, Any]] = []
         sample_offset = 0
@@ -1696,27 +1939,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             sample_offset += int(summary["n_samples"])
             time_offset += float(summary["duration_sec"])
 
-        seq_min, seq_max = [int(value) for value in profile["identity_range"]]
-        events, transition_warnings, decision_counts = (
-            resolve_observed_windows_to_events(
-                all_windows,
-                expected,
-                int(trigger_cfg.get("transition_max_samples", 1)),
-                seq_min,
-                seq_max,
-                int(trigger_cfg.get("expected_lookahead", 6)),
-                profile["condition_triggers"],
-                int(trigger_cfg["gaze_break_code"]),
-                int(trigger_cfg["esc_termination_code"]),
-            )
-        )
-        events, alignment_rows, alignment_summary = (
-            align_reported_segments_to_events(
-                events,
-                segments,
-                alignment_slack_events=int(
-                    trigger_cfg.get("alignment_slack_events", 250)
-                ),
+        events, transition_warnings, decision_counts, alignment_rows, alignment_summary = (
+            process_trigger_windows(
+                all_windows, segments, trigger_config=trigger_cfg, subject_profile=profile,
             )
         )
         associations = build_source_associations(events, alignment_summary)
@@ -1782,6 +2007,9 @@ def main(argv: Optional[list[str]] = None) -> int:
             trigger_cfg.get("enable_deep_confrontation_report", True)
         ) and not args.disable_deep_trigger_report
         if deep_report_enabled:
+            trial_exclusion = cfg.get("epoching", {}).get(
+                "trial_exclusion", {}
+            )
             deep_report_result = generate_legacy_deep_report(
                 subject_id=subject_id,
                 raw_root=raw_root,
@@ -1797,6 +2025,13 @@ def main(argv: Optional[list[str]] = None) -> int:
                 ),
                 transition_window_ms=float(
                     trigger_cfg.get("deep_report_transition_window_ms", 3.0)
+                ),
+                gaze_break_codes=trial_exclusion.get(
+                    "gaze_break_codes",
+                    [profile["trigger_policy"]["gaze_break_code"]],
+                ),
+                gaze_break_exclusion_enabled=bool(
+                    trial_exclusion.get("exclude_gaze_break", False)
                 ),
             )
         else:
@@ -1869,6 +2104,7 @@ __all__ = [
     "load_expected_trigger_sequence",
     "load_reported_trigger_segments",
     "main",
+    "process_trigger_windows",
     "reconstruct_observed_windows_for_fif",
     "resolve_observed_windows_to_events",
     "semiglobal_align_codes",

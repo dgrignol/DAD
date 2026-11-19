@@ -1,0 +1,27 @@
+# sub-30.yaml
+# Purpose: select P30 and carry the accepted incomplete-sequence exclusions.
+# Usage: python meg/code/preprocessing_basic/run_pipeline.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-30.yaml \
+#   --preflight-only
+# Stage 2 usage: python meg/code/preprocessing_basic/trial_preparation.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-30.yaml
+# Data flow: profile selection + exact accepted exclusions -> trial ledger and
+# later epoching. Raw and Stage-1 events remain read-only; no times are inferred.
+subject:
+  id: "30"
+
+# Accepted Stage-1 exclusions, keyed by exact FIF and absolute original onset.
+# Executable transcription of docs/PREPROCESSING_DECISIONS.md; these candidates
+# remain in Stage 2 and step-04 ledgers and can never become epochs.
+epoching:
+  accepted_trial_exclusions:
+    - source_fif: "sub30_run02_210926.fif"
+      raw_sample_frame: 60099
+      condition_code: 71
+      reason: "stage1_unreported_incomplete_sequence"
+      decision_reference: "PREPROCESSING_DECISIONS.md#p30-unreported-incomplete-sequences"
+    - source_fif: "sub30_run02_210926.fif"
+      raw_sample_frame: 64694
+      condition_code: 71
+      reason: "stage1_unreported_incomplete_sequence"
+      decision_reference: "PREPROCESSING_DECISIONS.md#p30-unreported-incomplete-sequences"
