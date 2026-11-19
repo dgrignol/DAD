@@ -2,6 +2,11 @@
 """
 06_export_neural_for_drsa.py
 
+Processing runs
+Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for
+Stage 04. Analysis/reports use the matching processing_runs/LABEL directory.
+Labelled resume verifies input/settings contracts and artifact bindings.
+
 Purpose
 Export condition-specific DAD MEG tensors for dRSA from the configured step-04
 epochs. Epochs are averaged by subject-specific trajectory identity on a fixed
@@ -60,6 +65,9 @@ from scipy.io import savemat
 
 from downstream_stage_utils import discover_trajectory_models, identity_coverage
 from pipeline_config import load_and_resolve_config
+from continuous_cleaning import file_hash, file_stamp
+from epoch_input_preparation import (export_contract, processing_manifest,
+    verify_epoch_artifacts, verify_export_artifacts)
 from preprocessing_stage_utils import (
     ensure_output_directory,
     guarded_path,
@@ -203,13 +211,11 @@ def run_export(
         raise FileNotFoundError(
             f"Step-04 machine report not found: {paths['epoch_report_json']}"
         )
-    epoch_report = json.loads(
-        paths["epoch_report_json"].read_text(encoding="utf-8")
-    )
+    epoch_report = verify_epoch_artifacts(cfg)
     if epoch_report.get("status") != "completed":
         raise RuntimeError("Step-04 report does not have status='completed'.")
 
-    manifest_path = Path(source_manifest).expanduser().resolve()
+    manifest_path = processing_manifest(cfg, source_manifest)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     epoch_lineage = (
         manifest.get("derivative_lineage", {})
@@ -233,6 +239,8 @@ def run_export(
 
     setup = {
         "stage": "export_drsa",
+        "epoch_contract_sha256": epoch_report.get("preparation_contract", {}).get("sha256"),
+        "export_contract_sha256": export_contract(cfg, epoch_report, canonical_channels, trajectory_models),
         "status": "validated" if validate_only else "running",
         "generated_utc": utc_now(),
         "subject_bids_id": cfg["layout"]["subject_bids_id"],
@@ -272,6 +280,10 @@ def run_export(
         print(json.dumps(setup, indent=2, sort_keys=True))
     if validate_only:
         return setup
+
+    if cfg["epoching"].get("processing_run") and (paths["report_json"].exists()
+            or any(path.exists() for pair in condition_paths.values() for path in pair)):
+        raise RuntimeError("Labelled exports already exist; resume matching outputs or use a new run label.")
 
     ensure_output_directory(paths["output_dir"], raw_root)
     ensure_output_directory(paths["report_json"].parent, raw_root)
@@ -480,6 +492,7 @@ def run_export(
         **setup,
         "status": "completed",
         "finished_utc": utc_now(),
+        "artifact_bindings": [],
         "channel_axis": {
             "ordered_channel_labels": canonical_channels,
             "n_channels": len(canonical_channels),
@@ -491,6 +504,12 @@ def run_export(
         },
         "conditions": condition_reports,
     }
+    # Bind all condition files after shared storage exposes stable timestamps.
+    from review_final_ica import settle_review_outputs
+    output_files = [path for pair in condition_paths.values() for path in pair]
+    settle_review_outputs(output_files)
+    report["artifact_bindings"] = [{"stamp": file_stamp(path),
+        "sha256": file_hash(path) if path.suffix == ".json" else None} for path in output_files]
     write_json(paths["report_json"], report, raw_root=raw_root, overwrite=True)
     write_simple_html_report(
         paths["report_html"],
@@ -573,6 +592,11 @@ def main() -> int:
         print(json.dumps({"configuration_warnings": warnings}, indent=2))
     paths = export_paths(cfg)
     if args.resume and paths["report_json"].is_file():
+        if cfg["epoching"].get("processing_run"):
+            current = run_export(cfg, source_manifest=args.source_manifest, overwrite=False, validate_only=True)
+            previous = verify_export_artifacts(cfg)
+            if previous["export_contract_sha256"] != current["export_contract_sha256"]:
+                raise RuntimeError("Export inputs/settings changed; use a new processing-run label.")
         print(f"Resumed existing dRSA export report: {paths['report_json']}")
         return 0
     run_export(

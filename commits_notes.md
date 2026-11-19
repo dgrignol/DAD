@@ -1,3 +1,214 @@
+# 19 Nov 2026 17:26
+
+## feat(meg): add isolated inline epoch runs and participant recovery variants
+
+### `meg/code/maintenance/report_p24_edf_comparison.py`
+
+- Render a measured EDF-versus-original-analog P24 run-5 comparison report.
+- Behavior and boundaries: Pearson correlation is undefined for an empty or constant trace; Write an honest measured comparison and explicitly describe limitations.
+
+### `meg/code/maintenance/review_identity_epochs.py`
+
+- Render native MEG evidence for every occurrence of one condition/identity.
+- Behavior and boundaries: Return evidence for one acquisition and write its review figures only; Select one identity and publish review evidence without changing decisions.
+
+### `meg/code/maintenance/review_p23_processing_stages.py`
+
+- Compare P23 rejected trials in acquisition, SSS and epoch preparation.
+- Behavior and boundaries: Reproduce spectrum-fit using complete native good stretches, not crops; Produce paired raw-to-epoch evidence for one acquisition process; Generate paired evidence without applying the new no-amplitude policy.
+
+### `meg/code/preprocessing_basic/04_epoching.py`
+
+- Create condition-locked DAD MEG epochs for one configured subject from the lineage-matched manual-ICA apply outputs and canonical step-02 trigger events. The stage preserves acquisition-run identity until each run has been epoched, then concatenates the surviving epochs into one global epoch sample frame.
+- Behavior and boundaries: Create the noninteractive epoching command-line parser; Return canonical guarded inputs and outputs for one subject; Validate lineage, create per-run epochs, concatenate, and write reports; Resolve configuration and execute the epoching stage.
+
+### `meg/code/preprocessing_basic/06_export_neural_for_drsa.py`
+
+- Processing runs Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for Stage 04. Analysis/reports use the matching processing_runs/LABEL directory. Labelled resume verifies input/settings contracts and artifact bindings.
+- Behavior and boundaries: Return canonical epoch input, dRSA directory, and report paths; Validate the epoch contract and write one identity tensor per condition; Resolve configuration and execute the dRSA export stage.
+
+### `meg/code/preprocessing_basic/07_run_matlab_drsa.py`
+
+- Processing runs Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for Stage 04. Analysis/reports use the matching processing_runs/LABEL directory. Labelled resume verifies input/settings contracts and artifact bindings.
+- Behavior and boundaries: Validate Stage-06 outputs and assemble one MATLAB handoff payload; Validate inputs, optionally launch MATLAB, and record outputs.
+
+### `meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py`
+
+- Update documented cohort examples to the current P04-P14/P16-P39 working set without changing the plotting calculations.
+
+### `meg/code/preprocessing_basic/09_plot_drsa_sliding_lag_surfaces.py`
+
+- Update documented cohort examples to the current P04-P14/P16-P39 working set without changing the plotting calculations.
+
+### `meg/code/preprocessing_basic/10_drsa_stats.py`
+
+- Generate optional group-level statistical tests from existing Stage-07 dRSA result MAT files and Stage-08-compatible line summaries. This script does not run MATLAB, does not recompute dRSA, and does not modify raw data. It reads saved subject-level dRSA matrices, assembles matched subject stacks, runs cluster-permutation tests, and writes machine-readable statistics plus a static HTML report:
+- Behavior and boundaries: Resolve configuration, run requested Stage-10 stats, and exit.
+
+### `meg/code/preprocessing_basic/XX_ERF_manual.py`
+
+- Provide an optional interactive ERF inspection workflow that uses the same resolved subject, epoch path, and condition definitions as production epoching. This script is not a required scientific stage and writes no files.
+- Behavior and boundaries: Create the optional inspection parser.
+
+### `meg/code/preprocessing_basic/audit_ica_application.py`
+
+- Audit existing ICA application and final epoch identities without accepting them.
+- Behavior and boundaries: Accumulate the same native samples in every view with no new trial rule; Save matched condition means, sensor-type changes and a compact RMS plot; Check exact-model application, filter contract and native preservation; Reconcile epoch identities/drops and exported tensor axes/counts/NaN masks.
+
+### `meg/code/preprocessing_basic/epoch_annotation_trims.py`
+
+- Apply exact user-approved annotation end trims in a new epoch variant.
+- Behavior and boundaries: Validate exact native annotation rows and return bound shortening plans; Shorten only the approved durations on the disposable epoch input Raw; Reject stale/mistyped source, behavioral trial or corrected-onset keys.
+
+### `meg/code/preprocessing_basic/epoch_input_preparation.py`
+
+- Guarded continuous preparation for epoching without permanent cleaned FIFs.
+- Behavior and boundaries: Return the accepted upstream path view without changing scientific settings; Use a derived manifest for scoped runs, retaining immutable upstream ancestry; Remove mount prefixes from runtime evidence, retaining file/identity fields; Bind every native split part, annotation and acquisition coordinate.
+
+### `meg/code/preprocessing_basic/p24_auxiliary_reconstruction.py`
+
+- Prepare and apply P24's explicit EDF auxiliary-channel reconstruction.
+- Behavior and boundaries: Read six valid-eye EDF fields without compressing recording-off gaps; Place measured samples on native MEG coordinates; preserve every gap; Resolve only an explicit derivative-root-relative reconstruction plan; Validate all plan/array/source bindings before any participant processing.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+
+- Add labelled saved/inline epoch preparation, isolated analysis/report paths, environment overrides, rejection controls and guarded participant-specific recovery settings.
+
+### `meg/code/sanity_checks/01_dot_side_decoding.py`
+
+- Run a MEG sanity check that decodes dot horizontal side (left vs right half of screen) with centered sliding windows for one neural condition and trajectory model source, using either the historical posterior-gradiometer feature set or a named Stage-07 sensor group, and generate a 3-panel figure: 1) baseline-corrected contra/ipsi ERFs from posterior ROIs (auto-selected or explicitly overridden by user-provided magnetometer channel names), 2) ipsi-minus-contra waveform, 3) time-resolved sliding-window decoding accuracy curves for unbalanced and class-balanced (undersampled) decoding....
+- Behavior and boundaries: Create CLI parser for dot-side decoding sanity checks.
+
+### `meg/code/sanity_checks/02_dot_side_group_report.py`
+
+- Build a combined group-level report for the optional dot-side decoding sanity check. The script consumes completed per-subject outputs from ``01_dot_side_decoding.py``, tests each requested neural-condition/model-source analysis against chance with a 1D sign-flip cluster permutation test, writes group figures and machine-readable JSON, and builds an HTML report for one decoder sensor group containing all group analyses before any participant-specific figures. Occluded-condition accuracy plots mark the configured complete-occlusion and reappearance frames, and each participant section starts...
+- Behavior and boundaries: Create the group dot-side decoding report command-line parser; Resolve requested analysis keys into validated ordered specifications; Load configuration using sub-04 only as a shared path resolver; Resolve configuration and build or validate the group report.
+
+### `meg/code/sanity_checks/03_dot_side_time_generalization.py`
+
+- Run a MEG dot-side time-generalization sanity check for one participant, neural condition, and trajectory model source. The workflow trains the same regularized LDA classifier used by ``01_dot_side_decoding.py`` at each centered sliding-window train time and tests that classifier at every other test time, producing a train-time x test-time accuracy matrix.
+- Behavior and boundaries: Create the participant time-generalization command-line parser.
+
+### `meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py`
+
+- 04_dot_side_time_generalization_group_report.py
+- Behavior and boundaries: Resolve configuration and build or validate the group report.
+
+### `meg/code/sanity_checks/05_dot_erf_analysis.py`
+
+- Run a WORK_IN_PROGRESS event-related field (ERF) sanity-check workflow for the DAD dot-visibility conditions. The workflow consumes completed Stage-04 epoched FIF files, computes per-subject condition ERFs on one explicit MEG sensor type and one or more Stage-07 MEGIN sensor groups, averages those ERFs at group level, and runs paired subject-level cluster permutation tests with MNE. The primary test remains a spatio-temporal sensor x time test; a second channel-average 1-D temporal cluster test is also saved for each contrast.
+- Behavior and boundaries: Load one subject and preserve reviewed tuning for labelled epochs; Load a representative config used only for shared group/report paths; Return the normalized sensor-group tag used in filenames and reports; Return per-subject ERF sanity-check output paths.
+
+### `meg/code/sanity_checks/06_line_noise_filter_comparison.py`
+
+- Create a reproducible, presentation-ready comparison of residual 50-Hz line noise in DAD MEG data after three processing choices:
+- Behavior and boundaries: Parse command-line options for source selection and figure generation; Reject missing inputs and parameter values that cannot support the PSD; Load at most ``duration`` seconds while preserving Raw metadata; Return independent Raw objects for the three compared processing paths.
+
+### `meg/docs/DAD_ANALYSIS_TODO.md`
+
+- Editable task list for the moving-dot MEG analyses. Each prompt is intended for a new chat in this project, so it only repeats task-specific context.
+- Document DAD analysis todo; 1. [TODO] P0 — Model autocorrelation and cross-correlation · Difficulty 4/5; 2. [TODO] P1 — Recheck contrasts after the dependence diagnostics · Difficulty 3/5; 3. [TODO] P1 — Reduce statistical job runtime · Difficulty 3/5; 4. [TODO] P2 — Improve the ERF analysis and discussion · Difficulty 4/5; 5. [TODO] P2 — Test regression controls for model dependence · Difficulty 5/5.
+
+### `meg/docs/INLINE_EPOCHING_HANDOFF_20261112.md`
+
+- **2026-11-17 update:** production job 11699 completed P37 and stopped elsewhere. The approved short-fragment guard is now implemented. Use the current [retry command](SHORT_FRAGMENT_RETRY_20261117.md), with a new run label and P10 pending its separate all-rejected-recording diagnostic. The commands and local preflight status below describe the earlier v1 handoff.
+- Document Continuous preparation during epoching - 2026-11-12; Next executable step; Settings and space; Output and restart contract; Join and inspect before analyses; Later ICA-enabled run.
+
+### `meg/docs/P24_EDF_AUXILIARY_RECOVERY_20261117.md`
+
+- The user requested EDF-derived eye channels in **all five acquisitions**, zeros where EDF samples are unavailable, and omission of MISC008 from the new run-5 epoch input. Original acquisition/SSS/annotated FIFs, EDFs, accepted annotations, visual timing and `noica-20261117-v2` outputs remain unchanged. No jobs have been submitted, no deployment has been performed, and no new epochs have been made.
+- Document P24 EDF auxiliary reconstruction - 2026-11-17; Prepared inputs; Validation and comparison report; Subsequent execution.
+
+### `meg/docs/POSTER_ANALYSIS_RUNBOOK_20261117.md`
+
+- Updated 2026-11-17 after user-approved consolidation of P21/P23/P24 into `noica-20261117-v2`. All 30 participants now use the same run folder and ordinary participant selectors. No analysis job was submitted by Codex.
+- Document Poster analysis: settings, readiness and cluster commands; Current cohort and inputs; Existing job outcomes and rerun; Recommended initial settings; Actual versus predicted equality; Deployment status.
+
+### `meg/docs/SHORT_FRAGMENT_RETRY_20261117.md`
+
+- The approved fix leaves intervals of eight native samples or fewer untouched by line-noise removal. Other intervals receive the same continuous 50/100 Hz, 10-second spectrum-fit operation. Empty intervals are also bypassed. Samples, annotations, timing, epoch selection and ICA choices are preserved. ICA remains off for the current run; future selected ICA still runs before line removal. No new continuous FIF files are saved.
+- Document Epoch/export retry after the short-fragment fix - 2026-11-17; Submit the retry; Expected output and next check; Evidence and implementation.
+
+### `meg/params/epoch_recovery_20261117/sub-21.yaml`
+
+- Select participant 21 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/epoch_recovery_20261117/sub-23.yaml`
+
+- Select participant 23 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/epoch_recovery_20261117/sub-24.yaml`
+
+- Select participant 24 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/pipeline_default.yaml`
+
+- Add labelled saved/inline epoch preparation, isolated analysis/report paths, environment overrides, rejection controls and guarded participant-specific recovery settings.
+
+### `meg/params/sub-21.yaml`
+
+- Select participant 21 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-23.yaml`
+
+- Select participant 23 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-24-edf-aux.yaml`
+
+- Select participant 24 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/params/sub-24.yaml`
+
+- Select participant 24 through the shared verified profile. Carry explicit epoching overrides keyed to the reviewed processing/recovery variant.
+
+### `meg/tests/test_epoch_export_smoke.py`
+
+- Run a small synthetic Chat-4 workflow through epoching and dRSA MAT export. The test verifies run lineage, explicit trigger exclusions, epoch metadata, stable MEG channel order, bad-channel NaNs, non-MEG omission, and manifest updates without reading or writing participant data.
+- Exercise Tiny FIF data completes epoching/export with stable metadata contracts.
+
+### `meg/tests/test_epoch_recovery.py`
+
+- Verify the three-participant epoch recovery without participant writes/jobs.
+- Exercise trim changes only approved duration and retains exact mne epoch; trim refuses stale masks wrong boundaries and wrong trial keys; disabled amplitude keeps bad and trial policy rejection; recovery selectors disable only p23 amplitude screen; epoch and export wrapper share selected recovery config.
+
+### `meg/tests/test_epoch_short_fragments.py`
+
+- Regression tests of the native short-fragment line-removal guard.
+- Exercise Compare with independent Raw-level exclusion of the tiny filter island; Check both small DPSS limits and the long-window overlap/tail cases.
+
+### `meg/tests/test_inline_epoch_preparation.py`
+
+- Synthetic storage-saving epoch tests; no participant data or jobs are used.
+- Exercise Continuous ordering, native preservation, trial identity and FIF parity; inline guards and contract changes; inline ica blocks changed exact model; Config overrides isolate only downstream paths and reject unsafe labels; ERF variants cannot reuse another epoch cohort, baseline or permutation set.
+
+### `meg/tests/test_matlab_drsa_stage.py`
+
+- Validate the optional Stage-07 MATLAB dRSA handoff/orchestration contract without launching MATLAB. The tests use tiny fake sidecars and trajectory-file placeholders so they exercise path construction, metadata validation, and expected output naming.
+- Exercise MATLAB commands pass the handoff explicitly instead of rebuilding paths; A participant cannot silently use more MATLAB threads than allocated CPUs; MATLAB keeps its JVM while Linux uses the validated software renderer.
+
+### `meg/tests/test_p24_auxiliary_reconstruction.py`
+
+- Verify P24 EDF reconstruction without touching participant data or jobs.
+- Exercise Zero fill stays distinct from measured zero in the validity mask; Replace only authorized auxiliaries, with consistent data across runs; Optional adapter has no effect unless an explicit P24 plan is selected; Regress the actual fifth-run nchan failure using all 306 MEG sensors.
+
+### `meg/tests/test_trial_preparation.py`
+
+- Refresh the synthetic event-consumer fixture for the runs/preparation/model input contract and separate continuous-preparation boundary.
+- Keep the independent assertion that P30's accepted exclusions never reach MNE's event array.
+
+### `meg/tests/test_visual_timing.py`
+
+- Refresh the synthetic event-consumer fixture for the runs/preparation/model input contract and separate continuous-preparation boundary.
+- Keep the independent 67519 event sample versus 67500 original anchor and unchanged trial-key assertions.
+
+### `meg/tests/test_visual_timing_application.py`
+
+- Refresh the synthetic event-consumer fixture for the runs/preparation/model input contract and separate continuous-preparation boundary.
+- Supply a synthetic canonical table for contract hashing and retain original-versus-final eligibility/reason assertions at the real MNE event boundary.
+
+Suggested commit message:
+`feat(meg): add isolated inline epoch runs and participant recovery variants`
+
 # 19 Nov 2026 17:25
 
 ## feat(meg): add final ICA review and convergence reconciliation

@@ -1,0 +1,16 @@
+# Purpose: explicitly select P24's new EDF auxiliary reconstruction variant.
+# Usage: python meg/code/preprocessing_basic/04_epoching.py \
+#   --config meg/params/pipeline_default.yaml --subject-config meg/params/sub-24-edf-aux.yaml \
+#   --tuning-config /path/to/derivatives/reports/sub-24/ses-01/03_tuning_choices.yaml \
+#   --source-manifest /path/to/derivatives/reports/sub-24/ses-01/source_manifest.json \
+#   --timing-review /path/to/derivatives/visual_timing/s3-v002/reviews/sub-24_review.json \
+#   --validate-only
+# Data flow: unchanged accepted SSS/masks/timing -> existing line removal ->
+# EDF pupil/x/y for both eyes (zeros where unavailable) -> epoch construction.
+# This selector neither changes rejection thresholds nor reuses a partial label.
+subject:
+  id: "24"
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-p24-edf-20261117-v1
+  auxiliary_reconstruction_manifest: auxiliary_reconstruction/p24-edf-20261117-v1/manifest.json

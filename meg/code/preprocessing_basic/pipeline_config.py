@@ -47,6 +47,13 @@ Historical source profiles and accepted 36-participant Stage 2/3 validation stay
 readable; WORKING_SUBJECT_IDS supplies current downstream defaults separately.
 
 Key safety contract
+Optional DAD_EPOCH_PREPARATION (saved_ica/inline_no_ica/inline_ica) and
+DAD_PROCESSING_RUN select an explicit downstream processing run. Inline modes
+require a new run label. Analysis/report outputs are scoped beneath
+processing_runs/LABEL; upstream preprocessing, accepted reports and raw inputs
+remain at their original paths. These environment values are resolved into the
+configuration and participate in epoch reuse checks.
+
 The configured raw-data root is read-only. All output paths must pass
 `assert_output_path_outside_raw()` before a script creates directories or
 writes files.
@@ -823,6 +830,30 @@ def validate_config(
                         errors.append(f"Duplicate accepted trial exclusion: {key}")
                     seen_exclusions.add(key)
             _expect_type(tmin, (int, float), "epoching.tmin_sec", errors)
+            mode = epoching.get("preparation_mode", "saved_ica")
+            label = epoching.get("processing_run")
+            if mode not in ("saved_ica", "inline_no_ica", "inline_ica"):
+                errors.append("Unknown epoching.preparation_mode.")
+            if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", label)):
+                errors.append("epoching.processing_run must be a simple nonempty label (up to 80 characters).")
+            if mode != "saved_ica" and not label:
+                errors.append("Inline epoch preparation requires epoching.processing_run.")
+            _expect_type(epoching.get("amplitude_rejection_enabled", True), bool,
+                         "epoching.amplitude_rejection_enabled", errors)
+            trims = epoching.get("annotation_end_trims", [])
+            if not isinstance(trims, list) or any(not isinstance(row, Mapping) for row in trims):
+                errors.append("epoching.annotation_end_trims must be a list of explicit source/trial rules.")
+            elif trims and (str(cfg.get("subject", {}).get("id", "")).zfill(2) != "21" or mode != "inline_no_ica" or not label):
+                errors.append("Annotation end trims require a labelled P21 inline_no_ica variant.")
+            # An auxiliary repair is source-specific and must remain a new,
+            # explicit P24 no-ICA variant rather than altering accepted inputs.
+            auxiliary = epoching.get("auxiliary_reconstruction_manifest")
+            if auxiliary is not None:
+                if (not isinstance(auxiliary, str) or not auxiliary or Path(auxiliary).is_absolute()
+                        or ".." in Path(auxiliary).parts):
+                    errors.append("epoching.auxiliary_reconstruction_manifest must be a derivative-root-relative path.")
+                if str(cfg.get("subject", {}).get("id", "")).zfill(2) != "24" or mode != "inline_no_ica" or not label:
+                    errors.append("Auxiliary reconstruction requires a labelled P24 inline_no_ica variant.")
             # Stage 3 review routing is outside the frozen Stage 2 selection
             # policy, but malformed flags/paths must still fail configuration.
             _expect_type(epoching.get("require_stage3_timing", False), bool,
@@ -1594,6 +1625,21 @@ def build_resolved_paths(cfg: Mapping[str, Any]) -> dict[str, str]:
         ),
     }
 
+    # Downstream run isolation keeps accepted upstream files in their canonical
+    # locations and gives every analysis consumer the same scoped output paths.
+    label = cfg.get("epoching", {}).get("processing_run")
+    mode = cfg.get("epoching", {}).get("preparation_mode", "saved_ica")
+    if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,79}", label)):
+        raise ValueError("Invalid processing-run label; use letters, digits, underscores or hyphens.")
+    if mode not in ("saved_ica", "inline_no_ica", "inline_ica") or mode != "saved_ica" and not label:
+        raise ValueError("Invalid epoch preparation mode or missing processing-run label.")
+    if label:
+        run_root = derivatives_root / "processing_runs" / label
+        resolved["processing_run_root"] = str(run_root)
+        for key, directory in (("derivatives_analysis_dir", "analysis"), ("derivatives_reports_dir", "reports")):
+            resolved["upstream_" + key] = resolved[key]
+            resolved[key] = str(run_root / directory / format_vars["subject_bids_id"] / format_vars["session_bids_id"])
+
     for key in (
         "derivatives_root",
         "derivatives_preprocessing_dir",
@@ -1657,6 +1703,12 @@ def load_and_resolve_config(
     if tuning_config_path is not None:
         tuning_path = Path(tuning_config_path).expanduser().resolve()
         merged = deep_merge_dicts(merged, read_yaml_mapping(tuning_path))
+
+    # Batch wrappers export the same selection for epoching, export and group
+    # analyses. Never persist this operational choice into accepted tuning.
+    for variable, key in (("DAD_EPOCH_PREPARATION", "preparation_mode"), ("DAD_PROCESSING_RUN", "processing_run")):
+        if variable in os.environ:
+            merged.setdefault("epoching", {})[key] = os.environ[variable]
 
     merged = apply_subject_profile(merged)
     errors, warnings = validate_config(

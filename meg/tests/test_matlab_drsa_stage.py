@@ -20,6 +20,7 @@ from pathlib import Path
 import sys
 
 import numpy as np
+import pytest
 from scipy.io import savemat
 
 
@@ -243,6 +244,24 @@ def test_matlab_batch_uses_handoff_and_selected_script(tmp_path):
     assert "A_dRSA.m" in source
     assert "doSmoothingPlots=true" in source
     assert "plotSmoothingWindow=7" in source
+
+
+def test_matlab_batches_obey_allocated_compute_threads(tmp_path, monkeypatch):
+    """A participant cannot silently use more MATLAB threads than allocated CPUs."""
+    cfg = _fake_cfg(tmp_path)
+    kwargs = dict(handoff_path=tmp_path / "handoff.json", analyses=["real"],
+        drsa_type="corr", conditions=["always_visible"], sensor_groups=["wholeBrain"],
+        model_source="observed", smoothing_plots=False)
+    monkeypatch.setenv("DAD_MATLAB_MAX_THREADS", "2")
+    monkeypatch.setenv("SLURM_CPUS_PER_TASK", "2")
+    batches = STAGE07._build_matlab_batches(cfg, **kwargs)
+    assert "maxNumCompThreads(2);" in batches[0][1]
+    monkeypatch.setenv("DAD_MATLAB_MAX_THREADS", "3")
+    with pytest.raises(ValueError, match="exceeds"):
+        STAGE07._build_matlab_batches(cfg, **kwargs)
+    monkeypatch.setenv("DAD_MATLAB_MAX_THREADS", "0")
+    with pytest.raises(ValueError, match="positive"):
+        STAGE07._build_matlab_batches(cfg, **kwargs)
 
 
 def test_matlab_batch_command_uses_validated_headless_flags():

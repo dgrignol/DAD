@@ -2,6 +2,11 @@
 """
 07_run_matlab_drsa.py
 
+Processing runs
+Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for
+Stage 04. Analysis/reports use the matching processing_runs/LABEL directory.
+Labelled resume verifies input/settings contracts and artifact bindings.
+
 Purpose
 Run the optional MATLAB dRSA analysis layer from the same resolved
 configuration and lineage contracts used by the Python MEG pipeline. This
@@ -44,14 +49,19 @@ Usage examples
 
    python .../07_run_matlab_drsa.py --config .../pipeline_default.yaml \
      --subject-config .../sub-01.yaml --group-average-only \
-     --group-subjects 01 02 03 04 05 06 07 --smoothing-plots
+     --group-subjects {04..39} --smoothing-plots
 
 6) Run from the cluster through site paths and an explicit MATLAB binary:
 
-   DAD_MATLAB_BIN=/usr/local/MATLAB/R2020a/bin/matlab \
+   DAD_MATLAB_BIN=/usr/local/MATLAB/R2020a/bin/matlab DAD_MATLAB_MAX_THREADS=4 \
    python .../07_run_matlab_drsa.py --config .../pipeline_default.yaml \
      --site-config .../pipeline_cluster.yaml --subject-config .../sub-04.yaml \
      --source-manifest .../source_manifest.json --analyses real --resume
+
+Cluster wrappers set DAD_MATLAB_MAX_THREADS to the allocated CPU count; generated
+batches enforce it with maxNumCompThreads before analysis. An explicit limit
+must be positive and cannot exceed SLURM_CPUS_PER_TASK. This affects resources,
+not the dRSA model, identity, smoothing or statistical settings.
 
 Inputs
 - Completed Stage-06 condition MAT files and JSON sidecars under the configured
@@ -103,6 +113,8 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from downstream_stage_utils import discover_trajectory_models
+from continuous_cleaning import digest, file_hash, file_stamp
+from epoch_input_preparation import processing_manifest, verify_export_artifacts
 from drsa_result_utils import (
     analysis_family_from_path,
     model_source_from_path,
@@ -610,7 +622,9 @@ def build_handoff(
     """
     paths = _analysis_paths(cfg)
     raw_root = Path(cfg["resolved_paths"]["data_root"])
-    manifest_path = Path(source_manifest).expanduser().resolve()
+    manifest_path = processing_manifest(cfg, source_manifest)
+    if cfg.get("epoching", {}).get("processing_run"):
+        verify_export_artifacts(cfg)
     manifest = _load_json(manifest_path)
     export_lineage = (
         manifest.get("derivative_lineage", {})
@@ -917,6 +931,16 @@ def _build_matlab_batches(
         f"doSmoothingPlots={smoothing_plots_literal};"
         f"plotSmoothingWindow={plot_smoothing_window_literal};"
     )
+    # One participant MATLAB process must respect its scheduler CPU allocation;
+    # library environment variables alone do not cap MATLAB's compute threads.
+    thread_limit = os.environ.get("DAD_MATLAB_MAX_THREADS")
+    if thread_limit is not None:
+        if not thread_limit.isdigit() or int(thread_limit) < 1:
+            raise ValueError("DAD_MATLAB_MAX_THREADS must be a positive integer.")
+        allocated = os.environ.get("SLURM_CPUS_PER_TASK")
+        if allocated and int(thread_limit) > int(allocated):
+            raise ValueError("MATLAB thread limit exceeds allocated SLURM CPUs.")
+        shared_runtime = f"maxNumCompThreads({int(thread_limit)});" + shared_runtime
     batches: list[tuple[str, str]] = []
 
     if "real" in analyses:
@@ -2119,6 +2143,23 @@ def run_stage(
         }
 
     paths["reports_dir"].mkdir(parents=True, exist_ok=True)
+    # Bind resume to the neural variant, requested settings and MATLAB sources.
+    # Output MATs use file stamps; large raw recordings are never hashed here.
+    analysis_contract = None
+    previous = None
+    if cfg.get("epoching", {}).get("processing_run"):
+        export_evidence = verify_export_artifacts(cfg)
+        analysis_contract = digest({"export": export_evidence["export_contract_sha256"],
+            "settings": [analyses, conditions, sensor_groups, drsa_type, model_sources,
+                smoothing_plots, plot_smoothing_window, cfg.get("matlab_drsa", {})],
+            "scripts": {key: file_hash(paths[key]) for key in ("real_script", "alt_script", "simulations_script")}})
+        if paths["report_json"].is_file():
+            previous = _load_json(paths["report_json"])
+            if previous.get("analysis_contract_sha256") != analysis_contract:
+                raise RuntimeError("MATLAB inputs/settings changed; use a new processing-run label.")
+            for binding in previous.get("artifact_bindings", []):
+                if file_stamp(Path(cfg["resolved_paths"]["derivatives_analysis_dir"]) / binding["relative_path"]) != binding["stamp"]:
+                    raise RuntimeError("Stored MATLAB output changed.")
     write_json(
         paths["handoff_json"],
         handoff,
@@ -2135,7 +2176,10 @@ def run_stage(
         model_sources,
         smoothing_plots=smoothing_plots,
     )
-    if args.resume and expected_outputs and all(path.is_file() for path in expected_outputs):
+    if analysis_contract is not None and previous is None and any(path.exists() for path in expected_outputs):
+        raise RuntimeError("Unbound MATLAB outputs already exist; preserve them and use a new processing-run label.")
+    if (args.resume and expected_outputs and all(path.is_file() for path in expected_outputs)
+            and (analysis_contract is None or previous is not None and previous.get("status") == "completed")):
         matlab_records: list[dict[str, Any]] = [
             {
                 "analysis": ",".join(analyses),
@@ -2192,6 +2236,15 @@ def run_stage(
         smoothing_plots=smoothing_plots,
         plot_smoothing_window=plot_smoothing_window,
     )
+    if analysis_contract is not None:
+        from review_final_ica import settle_review_outputs
+        present = [path for path in expected_outputs if path.is_file()]
+        settle_review_outputs(present)
+        analysis_root = Path(cfg["resolved_paths"]["derivatives_analysis_dir"])
+        report["analysis_contract_sha256"] = analysis_contract
+        report["artifact_bindings"] = [{"relative_path": str(path.relative_to(analysis_root)),
+            "stamp": file_stamp(path)} for path in present]
+        write_json(paths["report_json"], report, raw_root=raw_root, overwrite=True)
     if status == "completed":
         records = [
             {
@@ -2206,7 +2259,7 @@ def run_stage(
             for item in handoff["condition_outputs"]
         ]
         update_source_manifest_stage(
-            manifest_path=args.source_manifest,
+            manifest_path=processing_manifest(cfg, args.source_manifest),
             raw_root=raw_root,
             stage_name="matlab_drsa",
             processing_pass="apply",

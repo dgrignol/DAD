@@ -10,11 +10,11 @@ centered sliding-window train time and tests that classifier at every other
 test time, producing a train-time x test-time accuracy matrix.
 
 Usage examples
-1) Default run for sub-01, ses-01, always-visible observed labels:
+1) Default run for sub-04, ses-01, always-visible observed labels:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/03_dot_side_time_generalization.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml \
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-04.yaml \
      --subject 01 --condition always_visible --model-source observed --overwrite
 
 2) Run occluded-deviant epochs against their expected/predicted path:
@@ -123,7 +123,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Subject selector YAML; defaults from --subject.",
     )
     parser.add_argument("--tuning-config", default=None)
-    parser.add_argument("--subject", type=str, default="01")
+    parser.add_argument("--subject", type=str, default="04")
     parser.add_argument("--session", type=str, default="01")
     parser.add_argument("--condition", type=str, default="always_visible")
     parser.add_argument(

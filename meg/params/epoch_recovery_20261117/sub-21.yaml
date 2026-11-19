@@ -1,0 +1,32 @@
+# Purpose: apply the two approved P21 annotation end trims in a new run.
+# Usage: DAD_SUBJECT_CONFIG_DIR="$PWD/meg/params/epoch_recovery_20261117" \
+#   DAD_EPOCH_PREPARATION=inline_no_ica DAD_PROCESSING_RUN=noica-recovery-20261117-v1 \
+#   sbatch --array=21 meg/cluster/submit_epoch_export.sh
+# Data flow: accepted native SSS/mask -> exact end trims -> line removal ->
+# existing epoch, amplitude and annotation rejection -> identity export.
+subject:
+  id: "21"
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-recovery-20261117-v1
+  annotation_end_trims:
+    - source_fif: sub21_run03_090926.fif
+      trial_key: "sub-21:sub21_run03_090926.fif:860216"
+      behavioral_run: 3
+      behavioral_trial: 30
+      epoch_event_sample_raw: 860234
+      original_annotations_sha256: 8e2192735bc88b02041a8a6ff667cebb334c8f7f7db8cb38eb7ff2ab568c3e96
+      annotation_description: BAD_blink_auto
+      annotation_onset_sec: 859.398010
+      annotation_duration_sec: 0.5009765625
+      new_end_sample_raw: 859733
+    - source_fif: sub21_run04_090926.fif
+      trial_key: "sub-21:sub21_run04_090926.fif:809408"
+      behavioral_run: 3
+      behavioral_trial: 34
+      epoch_event_sample_raw: 809427
+      original_annotations_sha256: 611b56de614a92ef95bfe9f8c8cb5efa66ce49ba44885a6e36721b9085dd9145
+      annotation_description: BAD_blink_auto
+      annotation_onset_sec: 808.521973
+      annotation_duration_sec: 0.50103759765625
+      new_end_sample_raw: 808926

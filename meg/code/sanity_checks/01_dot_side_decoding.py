@@ -19,10 +19,10 @@ This script is intended for the DAD MEG sanity-check workflow and writes all
 outputs into a dedicated sanity-check derivatives folder.
 
 Usage examples
-1) Default run for sub-01, ses-01, always_visible:
+1) Default run for sub-04, ses-01, always_visible:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/01_dot_side_decoding.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-01.yaml
+     --subject-config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/sub-04.yaml
 
 2) Run another subject/session:
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/01_dot_side_decoding.py \
@@ -216,7 +216,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Subject selector YAML; defaults from --subject.",
     )
     parser.add_argument("--tuning-config", default=None)
-    parser.add_argument("--subject", type=str, default="01", help="Subject id without 'sub-' prefix.")
+    parser.add_argument("--subject", type=str, default="04", help="Subject id without 'sub-' prefix.")
     parser.add_argument("--session", type=str, default="01", help="Session id without 'ses-' prefix.")
     parser.add_argument(
         "--condition",

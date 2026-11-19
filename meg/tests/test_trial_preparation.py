@@ -238,7 +238,12 @@ def test_production_epoching_never_sends_p30_exclusions_to_mne(tmp_path, monkeyp
     source = cfg["epoching"]["accepted_trial_exclusions"][0]["source_fif"]
     raw_path = Path(cfg["resolved_paths"]["subject_data_dir"]) / "meg" / source
     runs = [SimpleNamespace(cleaned_path=str(raw_path), source=SimpleNamespace(source_filename=source))]
-    monkeypatch.setattr(epoching, "resolve_manual_ica_apply_runs", lambda *args: (runs, {"status": "passed"}))
+    # Isolate continuous preparation while exercising the real ledger-to-event
+    # consumer. The preparation contract now also returns an optional ICA model.
+    monkeypatch.setattr(epoching, "resolve_epoch_inputs", lambda *args: (
+        runs, {"status": "passed", "preparation": {"mode": "saved_ica"}}, None))
+    monkeypatch.setattr(epoching, "prepare_run", lambda cfg, run, *args: (
+        mne.io.read_raw_fif(run.cleaned_path, verbose="ERROR"), None))
 
     class ReachedEpochBoundary(Exception):
         """Stop after checking the actual prospective MNE events."""

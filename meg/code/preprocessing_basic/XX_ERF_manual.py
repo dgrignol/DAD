@@ -69,7 +69,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--site-config", default=None)
     parser.add_argument(
         "--subject-config",
-        default=str(project_root / "params" / "sub-01.yaml"),
+        default=str(project_root / "params" / "sub-04.yaml"),
     )
     parser.add_argument("--tuning-config", default=None)
     return parser

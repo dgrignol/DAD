@@ -264,7 +264,12 @@ def test_actual_epoch_consumer_uses_overlay_without_changing_trial_identity(tmp_
     source=row["source_fif"]
     raw_path=Path(cfg["resolved_paths"]["subject_data_dir"])/"meg"/source
     runs=[SimpleNamespace(cleaned_path=str(raw_path),source=SimpleNamespace(source_filename=source))]
-    monkeypatch.setattr(epoching,"resolve_manual_ica_apply_runs",lambda *args:(runs,{"status":"passed"}))
+    # Continuous preparation is covered separately; retain the actual timing
+    # overlay and MNE event boundary with the current three-value input contract.
+    monkeypatch.setattr(epoching,"resolve_epoch_inputs",lambda *args:(
+        runs,{"status":"passed","preparation":{"mode":"saved_ica"}},None))
+    monkeypatch.setattr(epoching,"prepare_run",lambda cfg,run,*args:(
+        epoching.mne.io.read_raw_fif(run.cleaned_path,verbose="ERROR"),None))
     class ReachedBoundary(Exception):pass
     def inspect(raw,events,**kwargs):
         assert events[:,0].tolist()==[67519]

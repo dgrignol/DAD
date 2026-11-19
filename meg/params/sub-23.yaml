@@ -6,3 +6,11 @@
 # Data flow: this selector chooses the verified profile in pipeline_default.yaml.
 subject:
   id: "23"
+
+# Approved recovered epochs are now published in the common cohort run.
+# Original recovery selector and scientific settings remain recorded in
+# the consolidation receipt; this changes storage/default selection only.
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-20261117-v2
+  amplitude_rejection_enabled: false

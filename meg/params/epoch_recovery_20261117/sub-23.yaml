@@ -1,0 +1,12 @@
+# Purpose: disable the amplitude screen for P23 in this explicit new run.
+# Usage: DAD_SUBJECT_CONFIG_DIR="$PWD/meg/params/epoch_recovery_20261117" \
+#   DAD_EPOCH_PREPARATION=inline_no_ica DAD_PROCESSING_RUN=noica-recovery-20261117-v1 \
+#   sbatch --array=23 meg/cluster/submit_epoch_export.sh
+# Data flow: unchanged accepted SSS/annotations/timing -> line removal ->
+# epoching with reject=None, while reject_by_annotation stays enabled -> export.
+subject:
+  id: "23"
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-recovery-20261117-v1
+  amplitude_rejection_enabled: false

@@ -251,11 +251,21 @@ def test_production_epoch_event_boundary_uses_final_eligibility(tmp_path,monkeyp
     spec=importlib.util.spec_from_file_location('application_real_event_boundary',CODE/'04_epoching.py')
     epoching=importlib.util.module_from_spec(spec);spec.loader.exec_module(epoching)
     runs=[SimpleNamespace(cleaned_path='unused-synthetic-path',source=SimpleNamespace(source_filename='one.fif'))]
-    monkeypatch.setattr(epoching,'resolve_manual_ica_apply_runs',lambda *a:(runs,{'status':'passed'}))
+    # Stub the current preparation boundary, preserving the real eligibility
+    # application and prospective event/metadata assertions below.
+    monkeypatch.setattr(epoching,'resolve_epoch_inputs',lambda *a:(
+        runs,{'status':'passed','preparation':{'mode':'saved_ica'}},None))
     monkeypatch.setattr(epoching,'load_trigger_event_rows',lambda *a:[dict(prepared[0],trigger_code=81,event_index=1)])
     monkeypatch.setattr(epoching,'load_prepared_decisions',lambda *a:copy.deepcopy(prepared))
+    # The epoch preparation contract binds the canonical table's bytes even
+    # when this event-boundary fixture supplies its parsed rows directly.
+    events_path=epoching.epoching_paths(cfg)['events_csv']
+    events_path.parent.mkdir(parents=True,exist_ok=True)
+    events_path.write_text(csv_text([dict(prepared[0],trigger_code=81,event_index=1)]))
     # Native inputs always carry annotations, including an explicit empty set.
     monkeypatch.setattr(epoching.mne.io,'read_raw_fif',lambda *a,**k:SimpleNamespace(first_samp=0,n_times=10000,info={'sfreq':1000.},annotations=epoching.mne.Annotations([],[],[])))
+    monkeypatch.setattr(epoching,'prepare_run',lambda cfg,run,*a:(
+        epoching.mne.io.read_raw_fif(run.cleaned_path),None))
     class ReachedEventBoundary(Exception):pass
     def inspect(raw,events,**kwargs):
         assert events.tolist()==[[1019,0,81]]

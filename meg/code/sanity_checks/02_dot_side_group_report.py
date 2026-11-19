@@ -15,29 +15,29 @@ section starts with source-trial counts by identity for all three neural
 conditions.
 
 Usage examples
-1) Build the default group report locally after subjects 01-07 have completed:
+1) Build the default group report locally after subjects 04-39 have completed:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/02_dot_side_group_report.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --overwrite
 
 2) Validate inputs without writing outputs:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/02_dot_side_group_report.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --validate-only --print-summary
 
 3) Use SEM instead of the default 95% confidence interval display band:
 
    python .../02_dot_side_group_report.py --analyses all \
-     --group-subjects 01 02 03 04 05 06 07 --interval sem --overwrite
+     --group-subjects {04..39} --interval sem --overwrite
 
 4) Smooth each participant's time series before group statistics:
 
    python .../02_dot_side_group_report.py --analyses all \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --smooth-sigma-samples 1.0 --overwrite
 
 5) Run against cluster paths from the deployed DAD directory:
@@ -45,7 +45,7 @@ Usage examples
    python meg/code/sanity_checks/02_dot_side_group_report.py \
      --config meg/params/pipeline_default.yaml \
      --site-config meg/params/pipeline_cluster.yaml \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --sensor-group occipital --interval sem \
      --overwrite
 
@@ -84,6 +84,8 @@ Statistical policy
   within each subject's finite contiguous time segments before group statistics
   and plotting. NaN windows remain NaN so clusters cannot bridge skipped
   windows.
+Current default cohort is P04-P14/P16-P39 (2026-11-07 P15 coverage decision);
+explicit historical inputs remain readable for provenance.
 """
 
 from __future__ import annotations
@@ -106,12 +108,12 @@ from scipy import ndimage, stats
 PREPROCESSING_DIR = Path(__file__).resolve().parents[1] / "preprocessing_basic"
 sys.path.insert(0, str(PREPROCESSING_DIR))
 
-from pipeline_config import load_and_resolve_config  # noqa: E402
+from pipeline_config import WORKING_SUBJECT_IDS, load_and_resolve_config  # noqa: E402
 from drsa_result_utils import occlusion_timing_from_config  # noqa: E402
 from preprocessing_stage_utils import guarded_path, utc_now, write_json  # noqa: E402
 
 
-DEFAULT_SUBJECTS = ["01", "02", "03", "04", "05", "06", "07"]
+DEFAULT_SUBJECTS = list(WORKING_SUBJECT_IDS)
 DEFAULT_METRIC = "accuracy_balanced_undersampled_sets"
 DECODING_SENSOR_GROUPS = ("posterior", "wholebrain", "occipital", "parietal", "frontal", "temporal")
 ANALYSIS_COLORS = {
@@ -179,7 +181,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Subject selector YAML used only to resolve shared paths. Defaults "
-            "to sub-01."
+            "to sub-04."
         ),
     )
     parser.add_argument("--tuning-config", default=None)
@@ -342,12 +344,12 @@ def resolve_analysis_specs(args: argparse.Namespace) -> list[dict[str, str]]:
 
 
 def resolve_config(args: argparse.Namespace) -> tuple[dict[str, Any], list[str]]:
-    """Load configuration using sub-01 only as a shared path resolver."""
+    """Load configuration using sub-04 only as a shared path resolver."""
     meg_root = Path(__file__).resolve().parents[2]
     subject_config = (
         Path(args.subject_config).expanduser().resolve()
         if args.subject_config
-        else meg_root / "params" / "sub-01.yaml"
+        else meg_root / "params" / "sub-04.yaml"
     )
     cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
         args.config,

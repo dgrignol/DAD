@@ -18,7 +18,7 @@ Usage examples
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/08_plot_drsa_line_summaries.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 \
+     --subjects {04..39} \
      --group-only --overwrite --print-summary
 
 2) Build only smoothed-display group summaries for the configured subjects:
@@ -34,21 +34,21 @@ Usage examples
 4) Restrict to occipital sensor-group Stage-07 outputs and a +/-0.5 s lag range:
 
    python .../08_plot_drsa_line_summaries.py --config .../pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 --group-only \
+     --subjects {04..39} --group-only \
      --sensor-groups occipital --lag-window-sec 0.5 --overwrite
 
 5) Override the default across-subject SEM shading with descriptive
    within-subject diagonal-SD shading for group interval lag curves:
 
    python .../08_plot_drsa_line_summaries.py --config .../pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 --group-only \
+     --subjects {04..39} --group-only \
      --shading within-subject-diagonal-sd --overwrite --print-summary
 
 6) Use strict same-interval square support for interval lag curves, so both the
    model-time row and neural-time column must fall inside the named interval:
 
    python .../08_plot_drsa_line_summaries.py --config .../pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 --group-only \
+     --subjects {04..39} --group-only \
      --interval-lag-mode same-interval-square --overwrite --print-summary
 
 Inputs

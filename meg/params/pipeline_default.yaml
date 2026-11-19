@@ -970,6 +970,11 @@ ica_auto:
   production_enabled: false
 
 epoching:
+  # saved_ica preserves the historical completed-FIF route. Set the explicit
+  # environment pair DAD_EPOCH_PREPARATION=inline_no_ica (or inline_ica) and
+  # DAD_PROCESSING_RUN=NEW-LABEL for continuous preparation in memory.
+  preparation_mode: "saved_ica"
+  processing_run: null
   enabled: true
   # Production step 04 consumes the reviewed Stage-2 accounting. A changed
   # policy or trigger input requires explicit Stage-2 regeneration and review.

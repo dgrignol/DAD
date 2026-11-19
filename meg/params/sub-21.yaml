@@ -6,3 +6,31 @@
 # Data flow: this selector chooses the verified profile in pipeline_default.yaml.
 subject:
   id: "21"
+
+# Approved recovered epochs are now published in the common cohort run.
+# Original recovery selector and scientific settings remain recorded in
+# the consolidation receipt; this changes storage/default selection only.
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-20261117-v2
+  annotation_end_trims:
+  - source_fif: sub21_run03_090926.fif
+    trial_key: sub-21:sub21_run03_090926.fif:860216
+    behavioral_run: 3
+    behavioral_trial: 30
+    epoch_event_sample_raw: 860234
+    original_annotations_sha256: 8e2192735bc88b02041a8a6ff667cebb334c8f7f7db8cb38eb7ff2ab568c3e96
+    annotation_description: BAD_blink_auto
+    annotation_onset_sec: 859.39801
+    annotation_duration_sec: 0.5009765625
+    new_end_sample_raw: 859733
+  - source_fif: sub21_run04_090926.fif
+    trial_key: sub-21:sub21_run04_090926.fif:809408
+    behavioral_run: 3
+    behavioral_trial: 34
+    epoch_event_sample_raw: 809427
+    original_annotations_sha256: 611b56de614a92ef95bfe9f8c8cb5efa66ce49ba44885a6e36721b9085dd9145
+    annotation_description: BAD_blink_auto
+    annotation_onset_sec: 808.521973
+    annotation_duration_sec: 0.50103759765625
+    new_end_sample_raw: 808926

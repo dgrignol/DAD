@@ -15,19 +15,23 @@ The analysis is intentionally separate from the dot-side decoding and
 time-generalization workflows. It does not derive trajectory labels and it
 does not modify any decoding outputs.
 
+For labelled processing runs, each subject's original Stage-03 tuning YAML is
+loaded automatically unless --tuning-config is explicit. This preserves the
+reviewed exact-source filtering exceptions when checking saved epoch contracts.
+
 Usage examples
 1) Validate inputs and resolved outputs without writing files:
 
    python /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/code/sanity_checks/05_dot_erf_analysis.py \
      --config /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/params/pipeline_default.yaml \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --validate-only --print-summary
 
 2) Build the default magnetometer ERF sanity-check report locally:
 
    python /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/code/sanity_checks/05_dot_erf_analysis.py \
      --config /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/params/pipeline_default.yaml \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --sensor-type mag --sensor-groups wholebrain occipital \
      --baseline -0.300 -0.100 --tmin -1 --tmax 2.667 \
      --analysis-sfreq 200 --overwrite
@@ -36,14 +40,14 @@ Usage examples
 
    python /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/code/sanity_checks/05_dot_erf_analysis.py \
      --config /Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/params/pipeline_default.yaml \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --sensor-type grad --sensor-groups wholebrain occipital \
      --analysis-sfreq 200 --overwrite
 
 4) Tune topomap latencies in seconds and include the verbose cluster table:
 
    python .../05_dot_erf_analysis.py --config .../pipeline_default.yaml \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --sensor-type mag --sensor-groups occipital \
      --topomap-times 0.100 0.200 0.500 0.750 0.900 \
      --include-cluster-table --overwrite
@@ -53,7 +57,7 @@ Usage examples
    python meg/code/sanity_checks/05_dot_erf_analysis.py \
      --config meg/params/pipeline_default.yaml \
      --site-config meg/params/pipeline_cluster.yaml \
-     --group-subjects 01 02 03 04 05 06 07 --overwrite
+     --group-subjects {04..39} --overwrite
 
 6) Read Stage-04 epoch FIFs from a local manual cache while still writing
    outputs to the configured derivatives tree. Copy the seven
@@ -61,7 +65,7 @@ Usage examples
    directory first:
 
    python .../05_dot_erf_analysis.py --config .../pipeline_default.yaml \
-     --group-subjects 01 02 03 04 05 06 07 \
+     --group-subjects {04..39} \
      --sensor-type mag --sensor-groups wholebrain occipital \
      --local-epoch-cache-dir /Users/damiano/MEG_epoch_cache/dot_erf_stage04 \
      --overwrite
@@ -117,12 +121,18 @@ Scientific policy
   usual sqrt(n) approximation, while avoiding unnecessary resampling for the
   currently modest imbalances.
 
+Processing runs
+Export DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN as in Stage 04. All ERF
+outputs/reports are isolated under that run, with bound epoch/settings resume.
+
 WORK_IN_PROGRESS interpretation warning
 The generated report labels the analysis as WORK_IN_PROGRESS because
 stimulus/path locations may differ across conditions, location imbalance may
 drive ERF differences, path/location distributions need future plots and
 comparisons, and inferential interpretation should remain cautious until those
 checks exist.
+Current default cohort is P04-P14/P16-P39 (2026-11-07 P15 coverage decision);
+explicit historical inputs remain readable for provenance.
 """
 
 from __future__ import annotations
@@ -154,7 +164,10 @@ PREPROCESSING_DIR = Path(__file__).resolve().parents[1] / "preprocessing_basic"
 sys.path.insert(0, str(PREPROCESSING_DIR))
 
 from drsa_result_utils import occlusion_timing_from_config  # noqa: E402
+from continuous_cleaning import digest  # noqa: E402
+from epoch_input_preparation import verify_epoch_artifacts  # noqa: E402
 from pipeline_config import (  # noqa: E402
+    WORKING_SUBJECT_IDS,
     assert_output_path_outside_raw,
     load_and_resolve_config,
 )
@@ -167,7 +180,7 @@ CONDITION_ORDER = (
     "occluded_combined",
 )
 SOURCE_CONDITIONS = CONDITION_ORDER[:3]
-DEFAULT_SUBJECTS = ("01", "02", "03", "04", "05", "06", "07")
+DEFAULT_SUBJECTS = WORKING_SUBJECT_IDS
 FALLBACK_TOPOMAP_TIMES = (0.200, 0.975, 1.175, 1.783)
 DEFAULT_SENSOR_GROUPS = ("wholebrain", "occipital")
 KNOWN_SENSOR_GROUPS = ("wholebrain", "occipital", "parietal", "frontal", "temporal")
@@ -497,7 +510,13 @@ def load_subject_config(
     subject_label: str,
     n_requested_subjects: int,
 ) -> tuple[dict[str, Any], list[str]]:
-    """Load resolved pipeline configuration for one requested subject."""
+    """Load one subject and preserve reviewed tuning for labelled epochs.
+
+    An explicit tuning file takes precedence. Otherwise processing-run inputs
+    reuse the participant's original Stage-03 tuning, as epoching did. This is
+    necessary for exact-source exceptions such as P38's short first recording;
+    the saved epoch contract must be checked against the same settings.
+    """
     subject_config = _subject_config_path(
         args,
         subject_label=subject_label,
@@ -510,6 +529,20 @@ def load_subject_config(
         site_config_path=args.site_config,
         required_sections=("epoching",),
     )
+    # Resolve the original reports root first; processing-run reports contain
+    # epoch outputs, while the reviewed participant choices remain upstream.
+    if args.tuning_config is None and cfg["epoching"].get("processing_run"):
+        tuning_path = (
+            Path(cfg["resolved_paths"]["derivatives_root"])
+            / "reports" / str(cfg["layout"]["subject_bids_id"])
+            / str(cfg["layout"]["session_bids_id"]) / "03_tuning_choices.yaml"
+        )
+        if not tuning_path.is_file():
+            raise FileNotFoundError(f"Reviewed participant tuning is missing: {tuning_path}")
+        cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
+            args.config, subject_config, tuning_path,
+            site_config_path=args.site_config, required_sections=("epoching",),
+        )
     return cfg, warnings
 
 
@@ -519,7 +552,7 @@ def load_shared_config(args: argparse.Namespace) -> tuple[dict[str, Any], list[s
     subject_config = (
         Path(args.subject_config).expanduser().resolve()
         if args.subject_config
-        else meg_root / "params" / "sub-01.yaml"
+        else meg_root / "params" / "sub-04.yaml"
     )
     cfg, warnings, _config_path, _subject_path = load_and_resolve_config(
         args.config,
@@ -727,7 +760,7 @@ def subject_output_paths(
     sensor_group: str,
 ) -> dict[str, Path]:
     """Return per-subject ERF sanity-check output paths."""
-    derivatives_root = Path(cfg["resolved_paths"]["derivatives_root"])
+    derivatives_root = Path(cfg["resolved_paths"].get("processing_run_root", cfg["resolved_paths"]["derivatives_root"]))
     subject = str(cfg["layout"]["subject_bids_id"])
     session = str(cfg["layout"]["session_bids_id"])
     out_dir = derivatives_root / "sanity_checks" / subject / session / "dot_erf"
@@ -748,7 +781,7 @@ def group_output_paths(
     sensor_group: str,
 ) -> dict[str, Path]:
     """Return group-level ERF sanity-check output paths."""
-    derivatives_root = Path(cfg["resolved_paths"]["derivatives_root"])
+    derivatives_root = Path(cfg["resolved_paths"].get("processing_run_root", cfg["resolved_paths"]["derivatives_root"]))
     session = str(cfg["layout"]["session_bids_id"])
     out_dir = derivatives_root / "sanity_checks" / "group" / session / "dot_erf"
     report_dir = derivatives_root / "reports" / "group" / session / "dot_erf"
@@ -886,6 +919,8 @@ def validate_stage04_epoching_contract(
         )
     return {
         "source_manifest": str(source_manifest),
+        "preparation_contract_sha256": (verify_epoch_artifacts(cfg).get("preparation_contract", {}).get("sha256")
+            if cfg["epoching"].get("processing_run") else None),
         "stage04_status": str(epoching_stage.get("status")),
         "manifest_epochs_fif": str(manifest_epochs),
         "consumed_epochs_fif": str(epochs_fif),
@@ -1436,6 +1471,11 @@ def load_subject_erfs_from_outputs(
         )
 
     summary = json.loads(paths["summary_json"].read_text(encoding="utf-8"))
+    if header["cfg"]["epoching"].get("processing_run"):
+        if summary["stage04_validation"].get("preparation_contract_sha256") != header["stage04_validation"].get("preparation_contract_sha256"):
+            raise RuntimeError("Saved subject ERFs belong to different epochs.")
+        if not np.isclose(float(summary["analysis_sfreq_hz"]), float(args.analysis_sfreq)):
+            raise RuntimeError("Saved subject ERFs use a different sampling rate.")
     trial_count_rows = pd.read_csv(paths["trial_counts_csv"]).to_dict("records")
     return {
         "header": header,
@@ -3139,6 +3179,7 @@ def build_group_outputs(
 
     summary = {
         "stage": "dot_erf_group",
+        "analysis_contract_sha256": erf_resume_contract(args, subject_headers, channel_names, sensor_group),
         "analysis_status": "WORK_IN_PROGRESS",
         "work_in_progress_warning": WORK_IN_PROGRESS_TEXT,
         "sensor_group": sensor_group_output_tag(sensor_group),
@@ -3407,6 +3448,10 @@ def main() -> None:
             sensor_group=sensor_group,
         )
         if args.resume and all(path.is_file() for path in expected_outputs):
+            if shared_cfg["epoching"].get("processing_run"):
+                previous = json.loads(group_paths["group_summary_json"].read_text())
+                if previous.get("analysis_contract_sha256") != erf_resume_contract(args, subject_headers, channel_names, sensor_group):
+                    raise RuntimeError("ERF inputs/settings changed; use a new output run or rebuild ERF explicitly.")
             print(
                 f"Dot ERF outputs already exist for {sensor_group}; "
                 "resume mode reuses them."
@@ -3462,6 +3507,17 @@ def main() -> None:
         print("Configuration warnings:")
         for warning in shared_warnings:
             print(f"- {warning}")
+
+
+def erf_resume_contract(args, headers, channels, sensor_group):
+    """Bind an ERF result to its cohort epoch variants and analysis options."""
+    ignored = {"resume", "overwrite", "validate_only", "print_summary", "n_jobs",
+        "config", "site_config", "subject_config", "subject_config_dir", "tuning_config",
+        "local_epoch_cache_dir"}
+    settings = {key: value for key, value in vars(args).items() if key not in ignored}
+    return digest({"settings": settings, "channels": list(channels), "sensor_group": sensor_group,
+        "epochs": {header["subject"]: header["stage04_validation"].get("preparation_contract_sha256") for header in headers}})
+
 
 
 if __name__ == "__main__":

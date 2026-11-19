@@ -112,6 +112,9 @@ def test_synthetic_epoching_and_drsa_export(tmp_path):
     raw = mne.io.RawArray(data, info, verbose=False)
     raw.info["bads"] = ["MEG0112"]
     raw.save(source_path, overwrite=True, verbose=False)
+    # The historical edge category must not remove eligible trials when the
+    # actual Stage 5 function creates epochs, even with annotation rejection on.
+    raw.set_annotations(mne.Annotations([0.], [9.], ["BAD_filter_edge"]))
     raw.save(cleaned_path, overwrite=True, verbose=False)
 
     observed_model = input_files / "MovDot_Sub01_Vtest_rescueTraject.mat"
@@ -277,6 +280,7 @@ def test_synthetic_epoching_and_drsa_export(tmp_path):
         "gaze_break": 1
     }
     assert epoch_report["baseline_correction_applied"] is False
+    assert epoch_report["filter_edge_policy"] == "informational_only_keep_eligible_epochs"
 
     export_report = EXPORT.run_export(
         cfg,

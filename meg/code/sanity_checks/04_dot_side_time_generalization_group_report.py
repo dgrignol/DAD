@@ -15,24 +15,24 @@ Usage examples
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 --overwrite
+     --analyses all --group-subjects {04..39} --overwrite
 
 2) Validate inputs without writing outputs:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --validate-only --print-summary
 
 3) Smooth each participant matrix before group statistics:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --smooth-sigma-samples 1.0 --overwrite
 
 4) Include the detailed 2D cluster table in the HTML report:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 \
+     --analyses all --group-subjects {04..39} \
      --include-cluster-table --overwrite
 
 5) Run against cluster paths from the deployed DAD directory:
@@ -40,7 +40,7 @@ Usage examples
    python meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py \
      --config meg/params/pipeline_default.yaml \
      --site-config meg/params/pipeline_cluster.yaml \
-     --analyses all --group-subjects 01 02 03 04 05 06 07 --overwrite
+     --analyses all --group-subjects {04..39} --overwrite
 
 Inputs
 - Per-subject summary JSON from ``03_dot_side_time_generalization.py``.
@@ -62,7 +62,7 @@ Statistical policy
 - Clusters are connected components on the 2D train/test lattice with
   4-neighbor adjacency. The default test is directional greater-than-chance,
   cluster-forming p=0.05, cluster alpha=0.05, and exact sign flips for
-  subjects 01-07.
+  subjects 04-39.
 - Optional ``--smooth-sigma-samples`` applies isotropic Gaussian smoothing
   separately inside each subject's finite connected train/test components
   before group statistics and plotting. NaN cells remain NaN so clusters

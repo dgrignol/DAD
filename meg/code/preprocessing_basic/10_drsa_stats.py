@@ -23,31 +23,31 @@ HTML report:
       sample = matrix[model_time_index, model_time_index + lag]
 
 Usage examples
-1) Run the default group stats for subjects 01-07 from the configured
+1) Run the default group stats for subjects 04-39 from the configured
    derivative tree:
 
    python /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/code/preprocessing_basic/10_drsa_stats.py \
      --config /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/params/pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 \
+     --subjects {04..39} \
      --overwrite --print-summary
 
 2) Run only occipital A_dRSA_alt line-summary stats with a +/-0.5 s lag range:
 
    python .../10_drsa_stats.py --config .../pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 \
+     --subjects {04..39} \
      --stats-targets line-summaries --analysis-families A_dRSA_alt \
      --sensor-groups occipital --line-lag-window-sec 0.5 --overwrite
 
 3) Include display-smoothed matrices as explicitly labeled additional inputs:
 
    python .../10_drsa_stats.py --config .../pipeline_default.yaml \
-     --subjects 01 02 03 04 05 06 07 \
+     --subjects {04..39} \
      --include-smoothed --plot-smoothing-window 9 --overwrite
 
 4) Run on the mounted MORWUR derivative tree with a site override:
 
    python .../10_drsa_stats.py --config .../pipeline_default.yaml \
-     --site-config .../pipeline_cluster.yaml --subjects 01 02 03 04 05 06 07 \
+     --site-config .../pipeline_cluster.yaml --subjects {04..39} \
      --resume --print-summary
 
 Inputs
@@ -82,6 +82,8 @@ Safety and assumptions
 - MNE cluster functions are preferred when available and the data have complete
   finite support. A documented NumPy/SciPy sign-flip implementation is used for
   NaN-containing stacks or when MNE is unavailable.
+Current default cohort is P04-P14/P16-P39 (2026-11-07 P15 coverage decision);
+explicit historical inputs remain readable for provenance.
 """
 
 from __future__ import annotations
@@ -126,12 +128,12 @@ from drsa_result_utils import (
     utc_now,
     write_embedded_html_copy,
 )
-from pipeline_config import load_and_resolve_config
+from pipeline_config import WORKING_SUBJECT_IDS, load_and_resolve_config
 from preprocessing_stage_utils import guarded_path
 
 
 DEFAULT_SAMPLING_RATE_HZ = 120.0
-DEFAULT_SUBJECTS = tuple(f"sub-{index:02d}" for index in range(1, 8))
+DEFAULT_SUBJECTS = tuple(f"sub-{subject_id}" for subject_id in WORKING_SUBJECT_IDS)
 STATS_TARGETS = ("matrices", "line-summaries")
 TAIL_CHOICES = ("two-sided", "positive", "negative")
 DEFAULT_LINE_INTERVALS = ("pre_occlusion", "during_occlusion", "post_occlusion")
@@ -447,7 +449,7 @@ def _subject_config_for_id(args: argparse.Namespace, subject_label: str) -> Path
 
 
 def _subjects_from_args_or_config(args: argparse.Namespace, cfg: Mapping[str, Any]) -> list[str]:
-    """Resolve group subjects; defaults to the configured group or 01..07."""
+    """Resolve group subjects; defaults to the configured group or 04..39."""
     if args.subjects:
         return [normalize_subject_label(value) for value in args.subjects]
     configured = cfg.get("matlab_drsa", {}).get("group_average_subjects")

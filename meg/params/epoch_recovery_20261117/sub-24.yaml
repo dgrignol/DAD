@@ -1,0 +1,12 @@
+# Purpose: select the prepared six-channel EDF reconstruction for all P24 runs.
+# Usage: DAD_SUBJECT_CONFIG_DIR="$PWD/meg/params/epoch_recovery_20261117" \
+#   DAD_EPOCH_PREPARATION=inline_no_ica DAD_PROCESSING_RUN=noica-recovery-20261117-v1 \
+#   sbatch --array=24 meg/cluster/submit_epoch_export.sh
+# Data flow: accepted SSS/annotations/timing -> line removal -> EDF auxiliaries
+# in all five runs, with MISC008 omitted -> existing epoch rejection -> export.
+subject:
+  id: "24"
+epoching:
+  preparation_mode: inline_no_ica
+  processing_run: noica-recovery-20261117-v1
+  auxiliary_reconstruction_manifest: auxiliary_reconstruction/p24-edf-20261117-v1/manifest.json
