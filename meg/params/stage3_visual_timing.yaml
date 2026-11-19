@@ -1,0 +1,26 @@
+# Stage 3 candidate method. Usage: visual_timing.py --method-config THIS_FILE
+# These settings produce review proposals, never accepted calibrations. They
+# are separate from the hashed Stage 2 accounting policy. Change the version
+# whenever method/code/input changes; retain all previous proposal bundles.
+method_id: fractional_first_response_candidate_v1
+window_ms: [-75.0, 175.0]
+baseline_ms: [-50.0, -5.0]
+search_ms: [-20.0, 80.0]
+# Use only when accepted event history places a warm-up immediately before the
+# retained onset. It excludes the preceding physical warm-up rise explicitly.
+post_warmup_trough_ms: [0.0, 30.0]
+post_warmup_max_gap_ms: 150.0
+threshold_fractions: [0.10, 0.25, 0.50, 0.75, 0.90]
+primary_fraction: 0.50
+first_response_peak_ms: 8.0
+sustained_ms: 2.0
+minimum_amplitude_v: 0.005
+minimum_snr: 8.0
+maximum_sensitivity_ms: 3.0
+pulse_tolerance_ms: 4.0
+minimum_donor_events_per_code: 10
+bootstrap_resamples: 2000
+random_seed: 20261020
+estimator: condition_specific_block_balanced_median
+rounding: nearest_integer_half_away_from_zero
+approval: proposal_only

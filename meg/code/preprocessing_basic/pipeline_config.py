@@ -803,6 +803,13 @@ def validate_config(
                         errors.append(f"Duplicate accepted trial exclusion: {key}")
                     seen_exclusions.add(key)
             _expect_type(tmin, (int, float), "epoching.tmin_sec", errors)
+            # Stage 3 review routing is outside the frozen Stage 2 selection
+            # policy, but malformed flags/paths must still fail configuration.
+            _expect_type(epoching.get("require_stage3_timing", False), bool,
+                         "epoching.require_stage3_timing", errors)
+            if epoching.get("timing_review_path") is not None:
+                _expect_type(epoching["timing_review_path"], str,
+                             "epoching.timing_review_path", errors)
             _expect_type(tmax, (int, float), "epoching.tmax_sec", errors)
             if (
                 isinstance(tmin, (int, float))

@@ -1,3 +1,87 @@
+# 19 Nov 2026 17:25
+
+## feat(meg): add reviewed photodiode timing and immutable handoffs
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+
+- Add the accepted Stage-3 timing gate while keeping the Stage-2 accounting contract and source eligibility separate.
+
+### `meg/code/preprocessing_basic/visual_timing.py`
+
+- Measure/propose Stage 3 cohort visual timing without changing Stage 1/2.
+- Behavior and boundaries: Require the documented detector contract; all values remain proposals; Resolve a safe, non-traversing immutable version directory; Read the single shared decisions record, never create a workspace copy; Resolve saved runtime/patch settings by exact saved behavioral block.
+
+### `meg/code/preprocessing_basic/visual_timing_application.py`
+
+- Stage a hash-bound post-Stage-3 eligibility and restricted-donor application.
+- Behavior and boundaries: Return the complete supported policy for immutable application records; Canonical saved context; replay is an identity dimension, not row order; Saved lab paths use Windows separators; mounted ledger paths use POSIX; Read only finite scalar MAT metadata; never interpret an array as a class.
+
+### `meg/code/preprocessing_basic/visual_timing_report.py`
+
+- Build explained, offline Stage 3 participant review reports from observations.
+- Behavior and boundaries: Return a finite numeric value, preserving missing/undefined values; Copy table rows; numeric conversion never changes the source tables; Use an explicit unavailable marker rather than inventing a zero; Describe observations; sample SD needs at least two finite observations.
+
+### `meg/code/preprocessing_basic/visual_timing_task2.py`
+
+- Build the coordinated Stage 3 cohort timing proposal from sealed Task 1.
+- Behavior and boundaries: Parse a saved CSV byte stream without changing its original bytes; Collect each genuine measured onset once, bound to its source hashes; Resume only from the hash-bound donor evidence produced by this run; Apply native-sample-rounded medians only to the five target participants.
+
+### `meg/code/preprocessing_basic/visual_timing_utils.py`
+
+- Stage 3 visual-timing measurement and immutable epoching handoff helpers.
+- Behavior and boundaries: Convert a finite signed sample shift without Python's ties-to-even rule; Keep scheduled, unscheduled and diagnostic paths distinct; Select using a verified final overlay while retaining original policy; Return a clipped native-grid interval plus whether it was truncated.
+
+### `meg/code/preprocessing_basic/visual_timing_validation.py`
+
+- Bounded historical regression and independent cached participant-pilot checks.
+- Behavior and boundaries: Resolve exact catalog inputs and choose cases from existing measurements; Locate the steepest positive sample increment without fractional logic; Publish bounded validation evidence; no participant FIFs are reopened; Run the fixed validation scope and write a new guarded evidence bundle.
+
+### `meg/docs/STAGE3_REVIEW_APPLICATION.md`
+
+- The Task-1 application and Task-2 onset method are implemented and published as one coherent `s3-v002` for all 36 participants. Scientific acceptance was recorded separately on 2026-10-21 in the formal decisions file and 36 hash-bound review records. The implementation flow below documents how the version was produced; do not rerun it to recreate the accepted application.
+- Document Stage 3 review application: implementation and accepted s3-v002 handoff; Run and output boundary; Exact policy and independent donor membership; Immutable fields and staged products; Completed Task 2 handoff; Supported consumer and acceptance gate.
+
+### `meg/docs/STAGE3_VISUAL_TIMING.md`
+
+- The cohort Stage 3 review was accepted on 2026-10-21 for the exact `s3-v002` proposals and separately hash-bound eligibility applications. The original `s3-v001` bundles and accepted Stage 2 ledgers remain immutable. Thirty-six accepted review JSONs in `s3-v002/reviews/` bind each participant manifest hash, application hash, assignment bases and mandatory scopes. Scientific acceptance is recorded separately from the proposal manifests. The shared `PREPROCESSING_DECISIONS.md` is the formal acceptance authority.
+- Document Stage 3: cohort visual timing implementation and review; Scope and preservation; Candidate detector and scientific limitations; Restricted estimates and fallbacks; Versioned outputs; Participant reports and report-only rebuilding.
+
+### `meg/params/pipeline_default.yaml`
+
+- Add the accepted Stage-3 timing gate while keeping the Stage-2 accounting contract and source eligibility separate.
+
+### `meg/params/stage3_visual_timing.yaml`
+
+- Configure the standalone native-grid photodiode candidate method, segment polarity, timing estimates and immutable Stage-3 handoff.
+
+### `meg/tests/test_visual_timing.py`
+
+- Verify Stage 3 measurement, donor restrictions and immutable handoffs.
+- Exercise Native offsets/polarity are preserved without resampling or 1-kHz assumptions; A missing or truncated response cannot become a zero-lag measurement; The diagnostic search exposes negative timing, not forced nonnegative lags; Cadence handling must not mistake a previous plateau for a new onset; Known cadence contamination must not assign the preceding warm-up rise.
+
+### `meg/tests/test_visual_timing_application.py`
+
+- Check the restricted Stage-3 eligibility/donor application and consumer gate.
+- Exercise only saved occlusion type2 can waive one reason; every exact sequence exclusion overrides catch inclusion; missing metadata and question evidence never create inclusion; wrong saved condition or duplicate context is rejected; saved reader ignores empty planned runs and normalizes lab paths.
+
+### `meg/tests/test_visual_timing_interval_reports.py`
+
+- Verify added Stage 3 interval views against independent sample expectations.
+- Exercise native sample frame context and descriptive counts; contradictory interval evidence is rejected; violin retains every value including constant and tail; original bars retained and new left coordinates match; supplemental values category order and stable jitter.
+
+### `meg/tests/test_visual_timing_report.py`
+
+- Check Stage 3 report statistics, categorical plots and immutable presentation.
+- Exercise statistics use sample sd and preserve missing; lag summary never pools codes recordings runtimes or flags; bar trigger positions are factors and sd is sample dispersion; sparse constant and missing groups do not invent violin density; lag display limits use group spread and retain all finite tails.
+
+### `meg/tests/test_visual_timing_task2.py`
+
+- Check the Stage 3 cohort-median overlay and plot using synthetic rows only.
+- Exercise pooled median uses native grid and only changes designated target; pooled plot treats trigger code as factor and reports spread; pooled consumer rejects wrong bound method.
+
+Suggested commit message:
+`feat(meg): add reviewed photodiode timing and immutable handoffs`
+
 # 19 Nov 2026 17:23
 
 ## feat(meg): extend cohort discovery and add reviewed trial accounting

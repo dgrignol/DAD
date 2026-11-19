@@ -924,6 +924,9 @@ epoching:
   # Production step 04 consumes the reviewed Stage-2 accounting. A changed
   # policy or trigger input requires explicit Stage-2 regeneration and review.
   require_stage2_ledger: true
+  # Stage 3 overlays preserve the Stage 2 policy/hash contract. P04-P39 may
+  # reach epoching only with a separate accepted, hash-bound timing review.
+  require_stage3_timing: true
   accepted_trial_exclusions: []
   tmin_sec: -0.5
   tmax_sec: 2.667
