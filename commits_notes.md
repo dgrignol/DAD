@@ -1,3 +1,19 @@
+# 19 Nov 2026 17:19
+
+## chore(repo): ignore temporary folders and document cohort execution
+
+### `.gitignore`
+
+- Ignore tmp-prefixed directories at any depth and the repository-root Rplots.pdf output without deleting local files.
+
+### `AGENTS.md`
+
+- Require parallel independent participant work with bounded numerical-library threads and disjoint outputs.
+- Preserve ordered validation/publication barriers, manual review, immutable outputs and explicit worker/resource controls.
+
+Suggested commit message:
+`chore(repo): ignore temporary folders and document cohort execution`
+
 # 30 Jul 2026 18:04
 
 ## Ignore repository temporary files

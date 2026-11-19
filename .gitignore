@@ -36,6 +36,8 @@ control-center/mock_presentation/figures/
 **/~$*.pptx
 
 # Generated analysis/test artifacts
+tmp*/
+/Rplots.pdf
 simulations/scripts/tests/RDMs_snapshots/
 simulations/scripts/tests/derivatives/
 simulations/report/**/*.pdf

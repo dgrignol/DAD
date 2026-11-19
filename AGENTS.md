@@ -1,5 +1,19 @@
 # AGENTS.md
 
+## Cohort Execution Policy
+- Run independent participant operations in parallel by default. Submit the
+  whole eligible cohort together and use the available allocated CPU/memory
+  resources; do not silently process a parallelizable cohort sequentially.
+- Use separate participant processes or scheduler array tasks with disjoint
+  outputs. Limit nested numerical-library threads to avoid oversubscription.
+- Keep genuine dependencies and shared final publication ordered. In particular,
+  complete whole-table choice validation before any bulk import writes, and join
+  participant results before publishing cohort summaries or scientific reviews.
+- Preserve manual work, source/model validation, review gates and immutable
+  outputs. Scientific acceptance does not follow from parallel job completion.
+- Expose worker/resource controls, document unavoidable serial steps, and print
+  participant/run progress. This policy also applies to future cohort workflows.
+
 ## Documentation and Commenting Requirements
 - Add extensive documentation at the start of every script with example of usage.
 - When adding or modifying code, include section-level comments that explain the purpose of each major block and how data flows through it.
