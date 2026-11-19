@@ -4,18 +4,18 @@
 % Purpose:
 %   One-command launcher for sharing this experiment outside the lab.
 %   The script runs the full pipeline in this folder copy only:
-%     1) Generate one-dot trajectories (V30) at the detected display refresh.
-%     2) Build schedule/catch-plan inputs (v23).
-%     3) Launch runtime presentation (v20) in laptop-safe profile.
+%     1) Generate
+%     2) Build   s  chedu1le/catch-plan inputs (v23).
+%     3) Launch r 1untime presentation (v20) in laptop-safe profile.
 %
 % Why t his launcher exists:
 %   - Lab members can try a local test with only MATLAB + Psychtoolbox.
-%   - No edits are required in the original lab scripts.
+%   - No edits are re quired in the or                                      iginal lab scripts.
 %   - Refresh-rate-dependent generation is handled automatically per
 %   machine. Unless impossible to detect, then a user input is required.
 %
 % Usage example (interactive):
-%   1) Open MATLAB.
+%   1) Op©©\<\  \\          \en MATLAB.
 %   2) cd into this folder (run_outside_lab).
 %   3) run('RUNME.m')
 %
@@ -65,7 +65,7 @@ addpath(fullfile(scriptDir, 'lib'), '-begin');
 if exist('input_files', 'dir') ~= 7
     mkdir('input_files');
 end
-if exist('output_files', 'dir') ~= 7
+if exist('output_file©©©xq  a<Q 1\\11\1\    1©©     s', 'dir') ~= 7
     mkdir('output_files');
 end
 

@@ -1,3 +1,160 @@
+# 19 Nov 2026 17:20
+
+## feat(experiment): add scheduled onset guards and immediate dot offset
+
+### `experiment/MEG_lab_procedure.md`
+
+- Document the v25 acquisition target, separate 120 Hz display setup, measured refresh tolerance, PTB sync preferences and one-time code-153 warm-up.
+- Explain photodiode placement, all-trial onset-guard diagnostics, immediate dot-offset checks, recording order and saved timing evidence.
+
+### `experiment/MoveDot1_experiment_occlusion_v22_scheduledOnset.m`
+
+- Schedule trial-condition codes 71/81/91 from the measured-IFI fixation/ITI loop and add one code-153 warm-up per launch with saved onset diagnostics.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/MoveDot1_experiment_occlusion_v23_boundaryPhaseGuard.m`
+
+- Add invisible run-boundary renderer preflight and a minimum 3 ms arm lead; permit two low-patch rollovers and abort before a late retained condition marker.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/MoveDot1_experiment_occlusion_v24_allTrialGuard.m`
+
+- Apply the onset lead guard to every retained trial, permit six low-patch retries, and save exhaustion/continued-acquisition diagnostics without aborting acquisition.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/MoveDot1_experiment_occlusion_v25_dotOffsetBlank.m`
+
+- Replace the last motion image with a fixation-only, low-photodiode frame on the next VBL, before EyeLink/next-trial preparation; save dot-offset timing while retaining the full ITI and inherited onset guard.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/TODO.md`
+
+- Promote the active runtime/config references to v25 and record completion of scheduled onset, boundary/all-trial guards and the dot-offset baseline.
+- Keep the short real-EyeLink visual and saved dot-offset diagnostic check explicitly pending before acquisition.
+
+### `experiment/lib/Config_runtime_v22_scheduledOnset.m`
+
+- Provide the version-22 runtime preset and documented timing/refresh/photodiode controls.
+- Keep the development photodiode geometry and expose validated runtime overrides without changing historical presets.
+
+### `experiment/lib/Config_runtime_v23_boundaryPhaseGuard.m`
+
+- Provide the version-23 runtime preset and documented timing/refresh/photodiode controls.
+- Keep the development photodiode geometry and expose validated runtime overrides without changing historical presets.
+
+### `experiment/lib/Config_runtime_v24_allTrialGuard.m`
+
+- Provide the version-24 runtime preset and documented timing/refresh/photodiode controls.
+- Keep the development photodiode geometry and expose validated runtime overrides without changing historical presets.
+
+### `experiment/lib/Config_runtime_v25_dotOffsetBlank.m`
+
+- Provide the version-25 runtime preset and documented timing/refresh/photodiode controls.
+- Keep the development photodiode geometry and expose validated runtime overrides without changing historical presets.
+
+### `experiment/runExpReadable.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/runExperiment.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/runTestExperiment.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/run_MEG_lab/MEG_lab_procedure.md`
+
+- Update the standalone laboratory procedure for v25, the physically validated photodiode patch, real EyeLink and the 120 Hz acquisition path.
+- Retain laboratory-specific acquisition settings and add warm-up, onset-guard, dot-offset and stop/resume checks.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v22_scheduledOnset.m`
+
+- Schedule trial-condition codes 71/81/91 from the measured-IFI fixation/ITI loop and add one code-153 warm-up per launch with saved onset diagnostics.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v23_boundaryPhaseGuard.m`
+
+- Add invisible run-boundary renderer preflight and a minimum 3 ms arm lead; permit two low-patch rollovers and abort before a late retained condition marker.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v24_allTrialGuard.m`
+
+- Apply the onset lead guard to every retained trial, permit six low-patch retries, and save exhaustion/continued-acquisition diagnostics without aborting acquisition.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/run_MEG_lab/MoveDot1_experiment_occlusion_v25_dotOffsetBlank.m`
+
+- Replace the last motion image with a fixation-only, low-photodiode frame on the next VBL, before EyeLink/next-trial preparation; save dot-offset timing while retaining the full ITI and inherited onset guard.
+- Retain earlier runtime versions and preserve the standalone laboratory copy of this version.
+
+### `experiment/run_MEG_lab/README_RUN_MEG_LAB.md`
+
+- Document the active V30/v23/v25 lab stack, physical photodiode geometry, scheduled condition markers, one-time warm-up, onset guard and PTB sync settings.
+- Add the immediate dot-offset/readiness checks and preserve the existing block-resume and prepared-input protections.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v22_scheduledOnset.m`
+
+- Provide the version-22 runtime preset and documented timing/refresh/photodiode controls.
+- Retain real EyeLink, patch placement and fixation/replay defaults specific to the laboratory.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v23_boundaryPhaseGuard.m`
+
+- Provide the version-23 runtime preset and documented timing/refresh/photodiode controls.
+- Retain real EyeLink, patch placement and fixation/replay defaults specific to the laboratory.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v24_allTrialGuard.m`
+
+- Provide the version-24 runtime preset and documented timing/refresh/photodiode controls.
+- Retain real EyeLink, patch placement and fixation/replay defaults specific to the laboratory.
+
+### `experiment/run_MEG_lab/lib/Config_runtime_v25_dotOffsetBlank.m`
+
+- Provide the version-25 runtime preset and documented timing/refresh/photodiode controls.
+- Retain real EyeLink, patch placement and fixation/replay defaults specific to the laboratory.
+
+### `experiment/run_MEG_lab/runExpReadable.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/run_MEG_lab/runExperiment.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/run_MEG_lab/runTestExperiment.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/run_MEG_lab/trigger_codes_occlusion_v10_rescueTraject.md`
+
+- Document the v25 runtime while retaining the digital condition and visual-event code map.
+- Explain code 153 as a one-time warm-up rather than a participant trial, inherited onset guards, and the low-patch dot-offset transition without a new trigger.
+
+### `experiment/run_outside_lab/RUNME.m`
+
+- Update the current v25 runtime/config launch target and carry the matching overrides across generation, scheduling and workspace cleanup.
+- Keep the script's explicit participant/hardware profile and existing input/output protection.
+
+### `experiment/trigger_codes_occlusion_v10_rescueTraject.md`
+
+- Document the v25 runtime while retaining the digital condition and visual-event code map.
+- Explain code 153 as a one-time warm-up rather than a participant trial, inherited onset guards, and the low-patch dot-offset transition without a new trigger.
+
+### `paper/methods.md`
+
+- Describe scheduled onset, code-153 warm-up, the run-boundary/all-trial lead guards, measured v24 timing evidence and v25's immediate dot-offset transition.
+- Distinguish current and historical participant stacks, development/laboratory patch geometry, and variable preparation fixation time from the configured randomized ITI.
+
+Suggested commit message:
+`feat(experiment): add scheduled onset guards and immediate dot offset`
+
 # 19 Nov 2026 17:19
 
 ## chore(repo): ignore temporary folders and document cohort execution

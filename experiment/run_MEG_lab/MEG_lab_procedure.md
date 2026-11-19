@@ -1,7 +1,7 @@
 # MEG protocol CIMeC Ingmar de Vries
 
 -> a double ^^ preceeding text indicate a part in which the text needs updating.
--> The current v21 runtime uses the photodiode. Confirm the physical sensor
+-> The current v25 runtime uses scheduled trial onset, an all-trial onset guard, an immediate dot-offset baseline, and the photodiode. Confirm the physical sensor
    placement against the configured patch before every acquisition.
 
 ## Before subject
@@ -11,29 +11,27 @@
   - Twist dial on speakers to turn on.
   - double check Polhemus is ON.
 - Acquisition PC:
-  - Pword: m3g.
+  - user: `meguser`.
+  - Pword: `meguser`.
   - Click `acquisition` icon on desktop if software not already open.
-  - Under `Settings` and next to `Project` click `Change` and select `ActionPrediction`. For `Subject` select your ethical code e.g. `2019-022`. Then:
-    - File > Load settings, select ^^`Name of saved settings to insert` and click `Apply`.
-    - 1000Hz, ^^N channels (check photodiode in misc is present, check eyetracker is present as ^^tyepToInsert), `upright` position.
-    - IMPORTANT: Check online high pass filter to only DC offset or off or 0.03 Hz.
+  - Under `Settings` and next to `Project` click `Change` and select `dynamo`. For `Subject` select your ethical code: e.g. for FIS-WURM `2025-059`. Then:
+    - File > Load settings, select `Name of saved settings to insert` (e.g. `dynamo_standard`) and click `Apply`.
+    - Check these are correct: sampling freq `1000Hz`; MEG highpass `DC` (better) or `0.03Hz`, not higher than that; photodiode MISC08 is selected; eyetracker MISC01-06 is selected.
+    - Gantry position `upright` position.
   - Press GO! and stop again.
   - Tune (once a day):
     - Tools > Tuner.
-    - Load previous parameters: most recent or similar helium level. If bad pick other previous file.
     - `Measure noise`. Should be 0-4.
     - If necessary click `Tune` and wait till noise levels look better (2-3 min). If a channel is below 0 press ctrl then click on it and heat it with Commands > Heat channel. Then stop the tuning. `Stop measurement` > `Stop collector`.
-    - Save tuning with convention: YYYYMMDDup53.
     - Then File > Exit.
   - Look at channels with empty room, if noisy:
     - Change the scale - typical is 440fT.
     - Select it. Commands > heat sensor (twice) > reset channels.
   - check camera in mangetic shielded room and turn it on if off.
-  - If scanner is acting weird (e.g. dialogue boxes with error messages popping up):
-    - Restart system: `RestartAcqPrograms` icon on desktop. When prompted on the terminal window type confirm with `y`; when asked if reboot or just restart servers, choose servers with `s`. If this fails you have to manually reset the switch for the real-time computers (SCC) in the Electronics cabinet (talk to technician before touching the cabinets).
+
 
 - Prep room:
-  - Start preparation software (follow instructions on desktop. Pword: m3g).
+  - Start preparation software (follow instructions on desktop. Psw: meguser).
   - Load Project and settings as on acq PC.
   - Check 6 clean electrodes and stickers, and headcoils.
   - Check consent forms (MEG, privacy, sensitive data), payment and MRI release forms, and the task instructions.
@@ -50,23 +48,56 @@
 - Stimulation PC:
   - Open Matlab.
   - Confirm the launcher uses
-    `MoveDot1_experiment_occlusion_v21_photodiode.m` with
-    `lib/Config_runtime_v21_photodiode.m`.
+    `MoveDot1_experiment_occlusion_v25_dotOffsetBlank.m` with
+    `lib/Config_runtime_v25_dotOffsetBlank.m`.
+  - Before launching the experiment, run `display_refresh_rate_utility.m`
+    separately and confirm that the projector/DataPixx path is configured for
+    `120 Hz`. The experiment only measures and validates refresh timing; it
+    does not configure the display.
+  - At startup, confirm that the reported Psychtoolbox and DataPixx refresh
+    estimates are both within `0.5 Hz` of the configured `120 Hz`. The v25
+    runtime aborts outside this tolerance by default.
+  - Confirm the startup log reports `SkipSyncTests=0` and the applied lab
+    `SyncTestSettings`: maximum standard deviation `0.0005 s`, 50 samples,
+    maximum deviation `0.1`, and maximum duration `5 s`. These settings are
+    already applied by the lab runtime preset; do not paste separate PTB
+    startup commands or add `Screen('CloseAll')` to the launcher.
   - Check the configured photodiode patch before attaching the sensor:
-    `photodiodePatchSizePx` defaults to `[50 50]` and
-    `photodiodePatchPositionPx` defaults to `[0 0]` from the PTB window
-    top-left. Adjust both values in the runtime config if needed.
+    `photodiodePatchSizePx` defaults to the physically validated `[28 25]`
+    and `photodiodePatchPositionPx` to `[193 0]` from the PTB window top-left.
+    Startup must report `rect=[193 0 221 25]`; place the sensor over that patch.
   - Start a test and verify both the digital triggers and the photodiode
     pulses on the acquisition PC (photodiode channel: MISC 008).
   - Verify that the patch returns to black after each pulse and at experiment
     cleanup. Defaults are four frames for trial-condition markers and two
     frames for marked visual events.
-  - Check and if needed change refresh rate of projector (e.g. if you need 60Hz instead of 120Hz).
+  - In a test recording, verify the one-time trigger-`153` warm-up at the
+    beginning of the MATLAB experiment launch: 10 four-frame high-patch
+    cycles, each followed by an explicit low frame (about `0.42 s` at
+    `120 Hz`). No moving dot or task event should appear during this warm-up.
+    Trigger `153` is a warm-up marker, not a trial-condition marker.
+  - The completed v24 physical audit measured 433 condition onsets at
+    `18.76 +/- 0.47 ms`, with no guard exhaustion, and passed stop/resume.
+    V25 retains that onset path. Before participant acquisition, run a short
+    visual check with the real EyeLink: the dot must disappear immediately
+    after its final motion frame, and each completed run must print a
+    `Dot-offset summary` near one frame with `positiveMissed=0`.
+  - Inspect `trial_onset_guard_*` for every retained trial. A retry produces
+    only an extra low-patch fixation frame and no condition trigger. Up to six
+    retries are allowed. If exhaustion occurs, v25 continues and sets
+    `trial_onset_guard_exhausted` plus
+    `trial_onset_guard_continued_after_exhaustion`; inspect that event's
+    photodiode latency individually. Zero exhausted guards is expected and is
+    not a test failure.
 
 - Eyetracker:
   - Turn on power supply (power plug next to mangetic shielded room).
   - Turn on PC and screen.
   - Check if works.
+
+-Record Empty Room
+
+
 
 ## Prepare subject
 - Explain preparation, scanning and experiment to participant.
@@ -116,10 +147,16 @@
   - Third number of head origin should be 40-50mm. Greater than 60mm is bad. **Note down the number**, the aim is for it to remain constant accross runs. At every run, that window will pop-up again and you can check the number did not change much.
   - If having problems with coils go in the mangetic shielded room and make sure they are attached properly, and that they are in the helmet, that you loaded the correct preparation.
 - Tick `Record raw` before starting calibration.
+- Keep acquisition and raw recording active before confirming the experiment
+  start on the stimulation PC. This ensures that the one-time trigger-`153`
+  warm-up and its photodiode pulses are recorded before the first participant
+  trial.
 - During recording, keep an eye on:
   - MEG signal, especially in your sensors of interest.
   - Note down noisy sensors (can heat them if necessary before next block).
-  - Triggers and photodiode channel (MISC 008), EOC and ECG signals.
+  - Triggers and photodiode channel (MISC 008), EOC and ECG signals. Expect
+    the one-time `153` warm-up sequence, followed by trial-condition triggers
+    `71`, `81`, or `91`; do not score `153` as a trial.
   - Eyetracker monitor to check fixation.
 - At the end of the block click Stop on acq PC and save the file using the proper naming system:
   - Date of birth, 1st and 3rd letter mum's first name and last name, current date plus time rounded to nearest 15 minutes, EC protocol (for us 2009036), run. For example:

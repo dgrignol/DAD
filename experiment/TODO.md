@@ -4,10 +4,14 @@ experiment/lib/Config_stimuli_generation_V30_rescueTraject.m
 experiment/stimuli_generation_V30_rescueTraject.m
 experiment/lib/Config_schedule_CreateInputV23_MoveDotV20_rescueTraject.m
 experiment/CreateInputFiles_v23_rescueTraject.m
-experiment/lib/Config_runtime_v21_photodiode.m
-experiment/MoveDot1_experiment_occlusion_v21_photodiode.m
+experiment/lib/Config_runtime_v25_dotOffsetBlank.m
+experiment/MoveDot1_experiment_occlusion_v25_dotOffsetBlank.m
 
 **Experiment Flow**
+- [ ] Run a short lab visual check of v25 with real EyeLink. Confirm the dot
+      disappears immediately after its final motion frame, each run prints a
+      `Dot-offset summary` near one measured refresh interval with zero positive
+      missed offsets, and the saved `dot_offset_*` fields are populated.
 - [ ] if blink happens in between trials should be fine
 
 - [ ] Test the button that if pressed turn enableFixationAbort = false during runtime
@@ -21,6 +25,39 @@ experiment/MoveDot1_experiment_occlusion_v21_photodiode.m
 
 
 **DONE**
+
+- [x] Add the v25 dot-offset baseline without modifying v24: present a
+      fixation-only, low-photodiode frame on the next VBL after the final
+      retained dot frame, before EyeLink stop/start or next-trial preparation.
+      Save requested/returned PTB offset timestamps and endpoint-hold duration;
+      preserve the full configured ITI and every v24 onset/trigger behavior.
+- [x] Complete the v24 end-to-end MEG/photodiode and stop/resume validation.
+      The valid replacement recording measured 433 trial onsets at
+      `18.76 +/- 0.47 ms`, with 14 rollover frames across seven trials, no
+      exhaustion, and successful restart from block 10.
+
+- [x] Add the v24 all-trial onset guard without modifying v23: retain the
+      run-boundary-only invisible renderer preflight, apply the `3 ms` lead
+      check to every `71`/`81`/`91`, allow six low-patch rollover frames, and
+      continue rather than abort after exhaustion. Save authoritative generic
+      guard fields, continued-after-exhaustion state, run summaries, and v23
+      compatibility aliases; defer exhaustion logging until after playback.
+- [x] Fix `runExpReadable.m` cleanup after the runtime clears launcher variables
+      by reconstructing the deterministic temporary checkpoint path.
+
+- [x] Add the v23 boundary-phase guard without modifying v22: invisibly
+      pre-render/erase frame 1 before each run's first retained trial, require
+      at least `3 ms` of arm lead, allow at most two low-patch rollover frames,
+      and abort before emitting a late retained condition marker. Save
+      preflight, arm/commit, lead, retry, rollover, and failure diagnostics.
+- [x] Keep `SkipSyncTests=0` for lab acquisition and apply the lab-tested PTB
+      `SyncTestSettings(0.0005, 50, 0.1, 5)` through the v23 lab preset. Record
+      and restore the previous global PTB preferences during cleanup.
+
+- [x] Schedule trial-onset markers `71`/`81`/`91` from a continuous
+      measured-IFI fixation/ITI loop. The v22 runtime adds one approximately
+      `0.42 s` code-153 warm-up before the first retained trial, preserves
+      configured randomized ITI durations, and saves onset audit diagnostics.
 
 - [x] Move condition triggers to the fully drawn first-frame presentation
       boundary and add a configurable photodiode patch. The v21 runtime

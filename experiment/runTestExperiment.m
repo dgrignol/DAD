@@ -1,20 +1,20 @@
 % runTestExperiment.m
 %
 % Purpose:
-%   End-to-end local test launcher for the current V30/v23/v21 experiment
+%   End-to-end local test launcher for the current V30/v23/v25 experiment
 %   stack using a laptop-safe runtime profile:
-%     - no 11MEG
+%     - no MEG
 %     - fake eye-tracker mode (no EyeLink hardware required)
-%     - participant 99
+%     - participant 98
 %
 % What this script does:
-%   1) Generates subject-specific trajectories (V30) for participant 99.
-%   2) Builds trial schedule and catch plan (v23) for participant 99.
-%   3) Launches the v21 photodiode runtime with fake eye-tracker enabled.
+%   1) Generates subject-specific trajectories (V30) for participant 98.
+%   2) Builds trial schedule and catch plan (v23) for participant 98.
+%   3) Launches the v25 dot-offset-blank runtime with fake eye-tracker enabled.
 %
 % Usage example (from experiment/):
 %   run('runTestExperiment.m');
-%11
+%
 % Usage example (absolute path, MATLAB batch):
 %   arch -x86_64 /Applications/MATLAB_R2020a.app/bin/matlab -batch ...
 %   "cd('/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/experiment'); ...
@@ -25,9 +25,9 @@
 %   scheduling and only launch the runtime.
 %
 % Outputs:
-%   - input_files/MovDot_Sub99_V30_rescueTraject*.mat
-%   - input_files/Sub99_TrialStruct_v23_rescueTraject.mat
-%   - output_files/MoveDot1_occlusion_v21_photodiode_SUB99_BLOCKXX.mat
+%   - input_files/MovDot_Sub98_V30_rescueTraject*.mat
+%   - input_files/Sub98_TrialStruct_v23_rescueTraject.mat
+%   - output_files/MoveDot1_occlusion_v25_dotOffsetBlank_SUB98_BLOCKXX.mat
 %     (for each completed block)
 %
 % Key assumptions:
@@ -61,7 +61,7 @@ testViewingDistanceMm = 1000;
 practice_mode = 0;
 
 %% Runtime behavior profile (safe local test)
-% Data flow: workspace overrides -> v21 runtime Conf.* fields.
+% Data flow: workspace overrides -> v25 runtime Conf.* fields.
 trackeye = true;
 ignoreEyeTracker = false;
 fakeEyeTracker = true;
@@ -91,6 +91,10 @@ catchBottomRightXFrac = 0.62;
 run1TransitionCountdownEnabled = true;
 debugTriggerMode = 0;
 debugSkipSyncTests = 1; % Local test convenience on non-calibrated displays.
+% A laptop may not expose the acquisition system's 120 Hz mode. Retain the
+% v25 refresh measurement and warning, but reserve hard failure for the
+% production launchers/config where displayRefreshAbortEnabled stays true.
+displayRefreshAbortEnabled = false;
 if ~exist('runtimeDryRunValidateScheduleOnly', 'var')
     runtimeDryRunValidateScheduleOnly = false; % Set true to validate schedule without opening PTB windows.
 end
@@ -131,6 +135,7 @@ launcherCfg.catchBottomRightXFrac = catchBottomRightXFrac;
 launcherCfg.run1TransitionCountdownEnabled = run1TransitionCountdownEnabled;
 launcherCfg.debugTriggerMode = debugTriggerMode;
 launcherCfg.debugSkipSyncTests = debugSkipSyncTests;
+launcherCfg.displayRefreshAbortEnabled = displayRefreshAbortEnabled;
 launcherCfg.runtimeDryRunValidateScheduleOnly = logical(runtimeDryRunValidateScheduleOnly);
 launcherCfg.deleteExistingRuntimeOutput = logical(deleteExistingRuntimeOutput);
 launcherCfg.overwriteExisting = logical(overwriteExisting);
@@ -148,7 +153,7 @@ if ~isempty(scriptDir)
 end
 addpath('lib');
 
-%% Step 1: Generate V30 stimuli for participant 99 (optional)
+%% Step 1: Generate V30 stimuli for participant 98 (optional)
 % Data flow: targetSubjectID + overwriteExisting -> input_files/*.mat
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));
 cfgData = load(launcherCfgPath, 'launcherCfg');
@@ -160,7 +165,7 @@ if launcherCfg.doGenerateStimuli
     run('stimuli_generation_V30_rescueTraject.m');
 end
 
-%% Step 2: Create v23 trial schedule for participant 99 (optional)
+%% Step 2: Create v23 trial schedule for participant 98 (optional)
 % Data flow: iSub/randomSeed/numBlocks -> TrialStruct + CatchPlan MAT.
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));
 cfgData = load(launcherCfgPath, 'launcherCfg');
@@ -173,7 +178,7 @@ if launcherCfg.doGenerateSchedule
     run('CreateInputFiles_v23_rescueTraject.m');
 end
 
-%% Step 3: Launch v21 photodiode runtime experiment
+%% Step 3: Launch v25 dot-offset-blank runtime experiment
 % Data flow: workspace overrides above -> runtime script.
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));
 cfgData = load(launcherCfgPath, 'launcherCfg');
@@ -202,19 +207,20 @@ catchBottomRightXFrac = launcherCfg.catchBottomRightXFrac;
 run1TransitionCountdownEnabled = launcherCfg.run1TransitionCountdownEnabled;
 debugTriggerMode = launcherCfg.debugTriggerMode;
 debugSkipSyncTests = launcherCfg.debugSkipSyncTests;
+displayRefreshAbortEnabled = launcherCfg.displayRefreshAbortEnabled;
 dryRunValidateScheduleOnly = logical(launcherCfg.runtimeDryRunValidateScheduleOnly);
 overwriteExisting = launcherCfg.overwriteExisting;
 deleteExistingRuntimeOutput = launcherCfg.deleteExistingRuntimeOutput;
 
 if deleteExistingRuntimeOutput
     outputMat = fullfile('output_files', sprintf( ...
-        'MoveDot1_occlusion_v21_photodiode_SUB%02d_BLOCK%02d.mat', ...
+        'MoveDot1_occlusion_v25_dotOffsetBlank_SUB%02d_BLOCK%02d.mat', ...
         iSub, iBlock));
     if exist(outputMat, 'file') == 2
         delete(outputMat);
     end
 end
-run('MoveDot1_experiment_occlusion_v21_photodiode.m');
+run('MoveDot1_experiment_occlusion_v25_dotOffsetBlank.m');
 
 % Best-effort cleanup of temporary launcher state.
 launcherCfgPath = fullfile(tempdir, sprintf('runTestExperiment_cfg_pid%d.mat', feature('getpid')));
