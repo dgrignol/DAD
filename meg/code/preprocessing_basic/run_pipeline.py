@@ -402,10 +402,12 @@ def main() -> int:
     resolved = cfg["resolved_paths"]
     raw_root = resolved["data_root"]
     reports_dir = Path(resolved["derivatives_reports_dir"])
+    cleaning_only = bool(args.stages) and set(args.stages) <= {"maxwell_filter", "artifact_annotation", "ica_manual"}
+    snapshot_prefix = "stage4_" if cleaning_only else ""
     resolved_config_out = (
         Path(args.resolved_config_out).expanduser().resolve()
         if args.resolved_config_out
-        else reports_dir / "resolved_config.json"
+        else reports_dir / f"{snapshot_prefix}resolved_config.json"
     )
     inventory_json = None
     if args.inventory_json:
@@ -421,7 +423,7 @@ def main() -> int:
     run_log_path = (
         Path(args.run_log).expanduser().resolve()
         if args.run_log
-        else reports_dir / "pipeline_run.json"
+        else reports_dir / f"{snapshot_prefix}pipeline_run.json"
     )
     source_manifest_path = (
         Path(args.source_manifest).expanduser().resolve()
@@ -469,23 +471,17 @@ def main() -> int:
         # The source manifest is durable provenance. It is independent of the
         # optional inventory reports and never asserts positional alignment
         # between MEG acquisition runs and behavioral blocks.
-        source_manifest = build_source_manifest_payload(
-            cfg,
-            config_path,
-            subject_config_path,
-            warnings,
-        )
-        source_manifest = preserve_durable_manifest_sections(
-            source_manifest,
-            source_manifest_path,
-        )
-        written_manifest = write_source_manifest(
-            source_manifest,
-            source_manifest_path,
-        )
-        run_payload["source_manifest"] = str(written_manifest)
+        if cleaning_only:
+            if not source_manifest_path.is_file():
+                raise RuntimeError("Stage 4 requires the existing accepted source manifest.")
+            run_payload["source_manifest"] = str(source_manifest_path)
+        else:
+            source_manifest = build_source_manifest_payload(cfg, config_path, subject_config_path, warnings)
+            source_manifest = preserve_durable_manifest_sections(source_manifest, source_manifest_path)
+            written_manifest = write_source_manifest(source_manifest, source_manifest_path)
+            run_payload["source_manifest"] = str(written_manifest)
 
-        if not args.skip_preflight:
+        if not args.skip_preflight and not cleaning_only:
             inventory = build_inventory_payload(
                 cfg,
                 config_path,
@@ -511,7 +507,7 @@ def main() -> int:
                     + "; ".join(inventory["validation"]["errors"])
                 )
         else:
-            run_payload["inventory_status"] = "skipped"
+            run_payload["inventory_status"] = "reused_accepted_stage1" if cleaning_only else "skipped"
 
         commands = build_stage_commands(
             config_path=config_path,

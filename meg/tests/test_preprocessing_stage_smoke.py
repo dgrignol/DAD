@@ -219,25 +219,18 @@ def test_maxwell_before_after_qc_uses_existing_fif_outputs(tmp_path):
     filtered._data[:4] *= 0.5
     raw_path = tmp_path / "sub02_run01_130526_raw.fif"
     filtered_path = tmp_path / "sub02_run01_130526_raw_sss.fif"
-    figure_path = tmp_path / "before_after.png"
+    figure_path = tmp_path / "qc_before_after_psd.png"
     raw.save(raw_path, overwrite=True, verbose="ERROR")
     filtered.save(filtered_path, overwrite=True, verbose="ERROR")
-    record = AcquisitionRunRecord(
-        source_path=str(raw_path),
-        source_filename="sub02_run01_130526.fif",
-        source_stem="sub02_run01_130526",
-        acquisition_run_label=1,
-        raw_relative_path="sub02/meg/sub02_run01_130526.fif",
-    )
-
-    result = MAXWELL._save_before_after_qc_figure(
-        record=record,
-        raw_path=raw_path,
-        filtered_path=filtered_path,
-        applied_bads=["MEG0041"],
-        output_path=figure_path,
-        show=False,
-    )
-    assert result == figure_path
+    # Plotting moved to maxwell_qc before SQUID integration; exercise the
+    # current public plot helper using saved FIFs, rather than the removed
+    # private 03_A wrapper. No detector or SSS operation is required.
+    from maxwell_qc import save_psds
+    plots, window = save_psds(raw=mne.io.read_raw_fif(raw_path, verbose="ERROR"),
+        sss=mne.io.read_raw_fif(filtered_path, verbose="ERROR"),
+        source_filename="sub02_run01_130526.fif", detected_bads=["MEG0041"],
+        applied_bads=["MEG0041"], prefix=tmp_path / "qc", raw_root=tmp_path / "protected_raw")
+    assert figure_path.name in [row["filename"] for row in plots]
+    assert "MEG0041" not in window["comparison_channels"]
     assert figure_path.is_file()
     assert figure_path.stat().st_size > 0

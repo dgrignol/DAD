@@ -36,6 +36,23 @@ def test_working_cohort_excludes_p15_without_changing_accepted_accounting_roster
     assert cfg["matlab_drsa"]["group_average_subjects"] == list(pipeline_config.WORKING_SUBJECT_IDS)
 
 
+@pytest.mark.parametrize("cutoff", [None, .01])
+def test_final_highpass_is_optional_and_independent_of_fit_configuration(tmp_path, cutoff):
+    """Null is a supported final setting, while fit settings remain separate."""
+    cfg = _minimal_config(tmp_path)
+    cfg["preprocessing"] = {"highpass_hz": cutoff, "lowpass_hz": None, "resample_sfreq_hz": None}
+    errors, _ = pipeline_config.validate_config(cfg)
+    assert not errors
+
+
+@pytest.mark.parametrize("cutoff", [0, -1, float("nan"), float("inf"), True, "none"])
+def test_invalid_final_highpass_cannot_masquerade_as_omitted(tmp_path, cutoff):
+    cfg = _minimal_config(tmp_path)
+    cfg["preprocessing"] = {"highpass_hz": cutoff}
+    errors, _ = pipeline_config.validate_config(cfg)
+    assert any("preprocessing.highpass_hz" in error for error in errors)
+
+
 def _minimal_config(tmp_path: Path) -> dict:
     """
     Build a valid multisubject core config with isolated raw/output roots.
@@ -288,9 +305,45 @@ def test_subject_selector_rejects_out_of_range_values():
         pipeline_config.normalize_subject_id("40")
 
 
+@pytest.mark.parametrize("field,value", [("n_components", 11), ("n_components", True),
+    ("threshold_std", 0), ("threshold_std", float("nan")), ("min_peak_distance_sec", -1),
+    ("tmin_sec", .25), ("tmax_sec", 0), ("long_peak_width_sec", float("inf"))])
+def test_blink_aid_settings_reject_invalid_values_without_changing_final_ica(tmp_path, field, value):
+    """The supplementary cap/threshold block is independent of final ICA tuning."""
+    cfg = _minimal_config(tmp_path)
+    cfg["artifact_annotation"] = {"enabled": True, "muscle_threshold": 10., "muscle_threshold_by_run": {},
+        "muscle_channel_type": "mag", "muscle_min_length_good_sec": .2, "muscle_filter_freq_hz": [110., 140.],
+        "eog_mode": "disabled", "eog_channel_names": [], "blink_channel": None,
+        "blink_auto": {"n_components": 10, "threshold_std": 5., "min_peak_distance_sec": .25,
+            "tmin_sec": -.25, "tmax_sec": .25, "long_peak_width_sec": .5}}
+    cfg["ica"] = {"n_components": None}
+    errors, _ = pipeline_config.validate_config(cfg, required_sections=("artifact_annotation",))
+    assert errors == []
+    cfg["artifact_annotation"]["blink_auto"][field] = value
+    errors, _ = pipeline_config.validate_config(cfg, required_sections=("artifact_annotation",))
+    assert any("blink_auto." + field in error for error in errors)
+    assert cfg["ica"]["n_components"] is None
+
+
 # -----------------------------------------------------------------------------
 # Optional independent eye-aid settings must leave older configs usable
 # -----------------------------------------------------------------------------
+
+@pytest.mark.parametrize("field,value", [("median_window_sec", 0), ("min_duration_sec", -1),
+    ("threshold_std", float("nan")), ("threshold_std", True), ("merge_gap_sec", -1),
+    ("padding_sec", float("inf")), ("unexpected", 1)])
+def test_eye_settings_validate_without_affecting_blink_contract(tmp_path, field, value):
+    cfg = _minimal_config(tmp_path)
+    cfg["artifact_annotation"] = {"enabled": True, "muscle_threshold": 10., "muscle_threshold_by_run": {},
+        "muscle_channel_type": "mag", "muscle_min_length_good_sec": .2, "muscle_filter_freq_hz": [110., 140.],
+        "eog_mode": "disabled", "eog_channel_names": [], "blink_channel": None}
+    assert pipeline_config.validate_config(cfg, required_sections=("artifact_annotation",))[0] == []
+    cfg["artifact_annotation"]["eye_movement_auto"] = {"merge_gap_sec": 0., "padding_sec": 0.}
+    assert pipeline_config.validate_config(cfg, required_sections=("artifact_annotation",))[0] == []
+    cfg["artifact_annotation"]["eye_movement_auto"][field] = value
+    errors, _ = pipeline_config.validate_config(cfg, required_sections=("artifact_annotation",))
+    assert any("eye_movement_auto" in error for error in errors)
+
 
 def test_tuning_config_is_merged_after_subject_config(tmp_path):
     """Accepted review choices override defaults without replacing the selector."""

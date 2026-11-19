@@ -286,7 +286,9 @@ def test_manual_ica_component_parser_rejects_negative():
 def test_ica_cache_fingerprint_is_mount_independent(tmp_path):
     """Legacy local paths remain compatible with cluster-mounted inputs."""
     input_path = tmp_path / "sub02_run01_130526_ann.fif"
-    input_path.write_bytes(b"annotated-fif-placeholder")
+    import numpy as np
+    raw = mne.io.RawArray(np.zeros((2, 500)), mne.create_info(["MEG0111", "MEG0121"], 100., ["mag", "mag"]), verbose="ERROR")
+    raw.save(input_path, overwrite=True, verbose="ERROR")
     ica_cfg = {
         "method": "fastica",
         "n_components": 30,
@@ -309,6 +311,7 @@ def test_ica_cache_fingerprint_is_mount_independent(tmp_path):
                 ),
                 "size_bytes": input_path.stat().st_size,
                 "mtime_ns": input_path.stat().st_mtime_ns,
+                "annotations": expected["inputs"][0]["annotations"],
             }
         ],
         "fit": expected["fit"],
@@ -333,3 +336,17 @@ def test_auto_ica_is_deprecated_before_optional_dependency_import():
     assert completed.returncode == 2
     assert "deprecated experimental code" in completed.stderr
     assert "mne-icalabel" not in completed.stderr
+
+
+def test_central_run_reports_ties_and_rejects_missing_or_invalid_transforms():
+    """Retained medoid selection is deterministic and fails on unusable headers."""
+    import numpy as np
+    transform = mne.transforms.Transform("meg", "head", np.eye(4))
+    points = np.vstack([np.eye(3), np.zeros(3)])
+    run, details = MAXWELL.select_central_destination_run({2: transform, 1: transform}, head_points=points)
+    assert run == 1 and details["tie_candidates"] == [1, 2]
+    with pytest.raises(RuntimeError, match="no static"):
+        MAXWELL.select_central_destination_run({1: None}, head_points=points)
+    invalid = {"trans": np.full((4, 4), np.nan)}
+    with pytest.raises(RuntimeError, match="invalid"):
+        MAXWELL.select_central_destination_run({1: invalid}, head_points=points)

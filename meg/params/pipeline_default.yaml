@@ -840,13 +840,22 @@ trigger_parser:
 
 preprocessing:
   enable_maxwell_sss: true
-  maxwell_st_duration_sec: 10.0
+  maxwell_st_duration_sec: null  # Legacy mirror; operative setting is maxwell_filter.filter.
   maxwell_origin: "auto"
   enable_ssp: false
   line_freq_hz: 50.0
-  highpass_hz: 0.01
-  lowpass_hz: 40.0
+  highpass_hz: null  # User decision 2026-10-28: preserve acquired low frequencies.
+  lowpass_hz: null  # 40 Hz is only used on ICA fit copies.
   notch_freqs_hz: [50.0, 100.0]
+  notch_method: "spectrum_fit"
+  spectrum_fit_window: "10s"
+  # No margin is required without an additional high-pass. Historical FIR
+  # exposure remains informational; inspect spectrum-fit boundaries separately.
+  filter_edge_margin_sec: null
+  # Historical exact-source skips in subject tuning now protect ONLY a future
+  # additional high-pass, e.g.
+  # final_filter_skip_sources: {sub38_run01_051026.fif: "Reviewed exception"}
+  # Spectrum-fit runs on every source, including P38 run 1 (2026-10-28).
   resample_sfreq_hz: null
   annotate_artifacts: true
   preserve_misc_channels: true
@@ -855,6 +864,19 @@ preprocessing:
 # discovered from any subject raw folder. Bad channels detected in any run are
 # applied to all runs by default. Each static dev_head_t is mapped to the most
 # central actual acquisition run.
+# Stage 4A SQUID review is separate from the operative Maxwell configuration.
+# Installing it does not change existing accepted SSS/4B review identities.
+# New 4A processing requires explicit per-source reviews before SSS; prepare
+# existing accepted channels with review_squid_jumps.py --mode prepare first.
+squid_jumps:
+  enabled: true
+  median_window_sec: 0.009
+  threshold: 10.0  # Robust channel score; candidate sensitivity, not acceptance.
+  merge_gap_sec: 0.1
+  review_padding_sec: 0.5  # Editable proposal extent, not recovery duration.
+  block_sec: 30.0
+  reviews: {}  # Exact-source receipts; saved only by explicit SQUID review.
+
 maxwell_filter:
   enabled: true
   crosstalk_file: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
@@ -879,17 +901,43 @@ maxwell_filter:
     st_duration_sec: null
     st_correlation: 0.98
 
-# Stage 03_B. FLUX's muscle threshold of 10 is retained for noninteractive
-# review runs. `auto` EOG mode becomes diagnostics-only when profile EOG
-# channels exist and disabled otherwise; it never uses EDF files.
+# Stage 03_B. Muscle threshold 10 is a review starting point. Ocular reviews
+# use available MISC/frontal MEG and optional preliminary frontal ICA, never
+# EOG detection. Each exact acquisition requires an explicit saved eye review.
 artifact_annotation:
   enabled: true
   muscle_threshold: 10.0
   muscle_threshold_by_run: {}
+  manual_eye_reviews: {}
+  # Supplementary 4B aid only. Final 4C ICA keeps n_components: null below.
+  # All good left/right frontal mag/grad sensors enter the cached fit; these
+  # detector values are editable review starting points, not cohort acceptance.
+  blink_auto:
+    n_components: 10
+    threshold_std: 5.0
+    min_peak_distance_sec: 0.25
+    tmin_sec: -0.25
+    tmax_sec: 0.25
+    long_peak_width_sec: 0.5
+  # Independent duration aid on the SAME 1-40 Hz/native-grid source cache.
+  # NONE skips only this detector. These values are provisional review aids;
+  # cached high-pass filtering limits sensitivity to long gaze plateaus.
+  eye_movement_auto:
+    median_window_sec: 0.1
+    threshold_std: 4.0
+    min_duration_sec: 0.1
+    merge_gap_sec: 0.1
+    padding_sec: 0.05
+  # Trial-local guidance only. These sidecars never exclude data until a human
+  # edits/reviews the whole source and explicitly promotes retained candidates.
+  edf_blink_candidates:
+    enabled: true
+    long_event_sec: 0.5  # Review flag from the exploration, not a rejection rule.
+    marker_tolerance_sec: 0.02  # Mismatch flag only; no timing correction is fitted.
   muscle_channel_type: "mag"
   muscle_min_length_good_sec: 0.2
   muscle_filter_freq_hz: [110.0, 140.0]
-  eog_mode: "auto"
+  eog_mode: "disabled"  # Legacy fields; Stage 4 never executes EOG handling.
   eog_channel_names: []
   blink_channel: null
   blink_tmin_sec: -0.25

@@ -223,3 +223,71 @@ def test_renderer_refuses_raw_tree_output(tmp_path):
         assert "raw" in str(exc).lower()
     else:
         raise AssertionError("Expected the shared raw-tree guard to reject output")
+
+
+def test_stage4_eyes_do_not_require_legacy_eog_images(tmp_path):
+    """Current 4B rendering needs muscle/manual evidence, never an EOG PNG."""
+    path = tmp_path / "03_B_ArtefactAnnotation_review_source_muscle_zscore.png"
+    _write_png(path)
+    payload = {"scientific_acceptance": "separate_explicit_stage4_review", "runs": [{
+        "source_filename": "source.fif", "acquisition_run_label": 1,
+        "eog_status": "legacy_not_in_stage4", "manual_eye_review": {"status": "reviewed"},
+        "final_filter_preview": {"reviewed_margin_sec": None}}]}
+    sections, figures = RENDERER._artifact_content(payload, tmp_path, "review")
+    assert len(figures) == 1
+    assert any("ocular review" in title for title, body in sections)
+
+
+def test_stage4_apply_reuses_review_component_images(tmp_path):
+    """Applied reports embed exact-model review evidence and new native QC."""
+    for name in ["03_C_ICA_review_sources.png", "03_C_ICA_review_topographies_01.png",
+                 "03_C_ICA_review_ICA000_properties_01.png", "03_C_ICA_apply_source_before_after.png",
+                 "03_C_ICA_apply_source_final_filter_psd.png"]:
+        _write_png(tmp_path / name)
+    sections, figures = RENDERER._ica_content({"n_components_fitted": 1, "runs": []}, tmp_path, "apply")
+    assert len(figures) == 5
+    assert any("Applied continuous" in title for title, body in sections)
+
+
+def test_primary_report_repair_embeds_figures_and_explains_limits(tmp_path):
+    """Repair cluster-style HTML from saved evidence without changing its JSON.
+
+    The raw input tree is empty. Requiring embedded data URLs rather than a
+    machine-specific image path catches the reported cross-machine failure.
+    """
+    import re
+    derivatives_root, raw_root = _build_synthetic_inputs(tmp_path)
+    report_dir = derivatives_root / "reports/sub-02/ses-01"
+    json_path = report_dir / "03_A_MaxFilt_review_report.json"
+    payload = json.loads(json_path.read_text())
+    payload["scientific_acceptance"] = "separate_explicit_stage4_review"
+    payload["destination"].update(
+        metric="summed_pairwise_rms_digitization_displacement_mm",
+        rationale="Synthetic medoid test",
+        pairwise_rms_mm={"run01": {"run01": 0.}},
+        tie_candidates=[1], tie_tolerance_mm=1e-6,
+    )
+    _write_json(json_path, payload)
+    before = json_path.read_bytes()
+    output = report_dir / "03_A_MaxFilt_review_report.html"
+    output.write_text('<img src="/mnt/storage/cluster/figure.png">')
+    assert RENDERER.main([
+        "--derivatives-root", str(derivatives_root), "--raw-root", str(raw_root),
+        "--subjects", "02", "--stages", "maxwell_filter", "--primary-report", "--overwrite",
+    ]) == 0
+    rendered = output.read_text()
+    image_sources = re.findall(r'<img[^>]+src="([^"]+)"', rendered)
+    assert len(image_sources) >= 2
+    assert all(source.startswith("data:image/") for source in image_sources)
+    for phrase in ["first 120 seconds", "1-60 Hz", "cannot verify every transient fault",
+                   "not automatic acceptance", "union", "translation and rotation",
+                   "Synthetic medoid test"]:
+        assert phrase in rendered
+    assert json_path.read_bytes() == before
+    assert not list(raw_root.iterdir())
+
+
+def test_primary_renderer_is_deployed_with_stage_scripts():
+    """Automatic rendering must also work in the minimal cluster deployment."""
+    deployment = (CODE_DIR.parents[1] / "cluster/deploy_review_to_cluster.sh").read_text()
+    assert '"meg/code/preprocessing_basic/render_stage03_mne_reports.py"' in deployment

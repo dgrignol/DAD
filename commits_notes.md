@@ -1,5 +1,197 @@
 # 19 Nov 2026 17:25
 
+## feat(meg): add guarded continuous cleaning and ocular review workflows
+
+### `meg/code/preprocessing_basic/03_A_MaxFilt.py`
+
+- Run configuration-driven bad-channel review and Maxwell filtering for every task MEG acquisition run belonging to one DAD participant. Every run is mapped from its static ``dev_head_t`` to one central actual run's head position.
+- Behavior and boundaries: Validate that MNE exposed enough head-shape points for ``origin="auto"``; Select the actual run minimizing summed pairwise head-point displacement; Select applied bad channels for each run under one explicit policy; Prompt until the operator accepts a policy and manual channel adjustments.
+
+### `meg/code/preprocessing_basic/03_B_ArtefactAnnotation.py`
+
+- Stage 4B: per-acquisition muscle and manual ocular annotation.
+- Behavior and boundaries: Archive superseded temporal-policy reports before refreshing 4B evidence; Resolve a run-specific muscle threshold with a global fallback; Resolve EOG behavior from configuration and channels actually present; Detect EOG events and return annotations in the raw absolute sample frame.
+
+### `meg/code/preprocessing_basic/annotation_triage.py`
+
+- Estimate annotation-only epoch retention without accepting cleaning outputs.
+- Behavior and boundaries: Resolve current subject tuning read-only, including saves made since startup; Use a dedicated namespace; no caller chooses a production output path; Reject descendant symlinks escaping the dedicated output namespace; One resumable component-choice sidecar, separate from scientific tuning.
+
+### `meg/code/preprocessing_basic/blink_annotation.py`
+
+- Prepare frontal ICA and independent blink/eye-movement aids for Stage 4B.
+- Behavior and boundaries: Read the existing artifact section; never change the final ICA dimension; Read optional eye aid settings without changing blink/ICA cache identity; Match both shipped MNE Vectorview frontal regions, including mag and grad; Copy annotations, keeping ocular examples for the supplementary fit only.
+
+### `meg/code/preprocessing_basic/build_ocular_component_reports.py`
+
+- Build offline, navigable ocular-component reports, ONE HTML per participant.
+- Behavior and boundaries: Bind all cache-validation dependencies without repeatedly opening large FIFs; Prefer atomic publication; permit a narrowly scoped locked index repair; Use the same deterministic JSON representation for hashes and publication; Validate the manifest and exact self-contained HTML that was reviewed.
+
+### `meg/code/preprocessing_basic/continuous_cleaning.py`
+
+- Small Stage 4 helpers for coordinates, decisions and protected filtering.
+- Behavior and boundaries: Hash JSON-compatible scientific settings, independent of mount paths; Hash a small resource/model/annotation file without loading it all at once; Identify a large shared FIF across local and cluster mount points; Serialize acquisition-time annotations, including their time origin.
+
+### `meg/code/preprocessing_basic/edf_blink_candidates.py`
+
+- Stage 4B EyeLink guidance: trial-local candidates and disposable EDF traces.
+- Behavior and boundaries: Validate the pinned reader/native runtime without opening a recording; Read messages, blink endpoints and recording blocks in original seconds; Split messages by TRIALID occurrence; repeated numeric trial IDs are valid; Split canonical observed triggers without editing accepted associations.
+
+### `meg/code/preprocessing_basic/import_ocular_component_choices.py`
+
+- Validate and import per-RUN choices made from offline participant reports.
+- Behavior and boundaries: Normalize participant/run labels without guessing condition or source identity; Parse all rows and report missing/duplicate/partial decisions before I/O-heavy checks; Permit idempotent reruns while retaining original save times/provenance verbatim; Validate one participant read-only; no save occurs inside this phase.
+
+### `meg/code/preprocessing_basic/manual_eye_annotations.py`
+
+- Review ocular, muscle and other BAD intervals for one Stage 4 acquisition.
+- Behavior and boundaries: Resolve the annotation data path without introducing another config file; Select the reviewed BAD snapshot, including muscle, in acquisition time; Require a reviewed file with matching source, coordinates and SSS input; Load only current, report-bound provisional muscle annotations for QC.
+
+### `meg/code/preprocessing_basic/maxwell_qc.py`
+
+- Plot per-run Maxwell channel evidence without repeating preprocessing.
+- Behavior and boundaries: Read numeric/string NPZ arrays without allowing pickled Python objects; Return channel names, scores, limits and exact per-cell exceedance mask; Choose a repeatable, uniformly random half-open native sample interval; Save two PSD figures using MNE's individual-channel/sensor-inset layout.
+
+### `meg/code/preprocessing_basic/ocular_component_report.js`
+
+- Provide offline ocular-component report navigation and synthetic DOM checks for run selection, visible windows, saved choices and missing-data gaps.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+
+- Validate native continuous filtering and optional high-pass settings, SQUID decisions, frontal ICA/blink aids, eye-movement duration settings and EDF guidance.
+
+### `meg/code/preprocessing_basic/render_annotation_triage_report.py`
+
+- Render self-contained HTML books from saved annotation-retention tables.
+- Behavior and boundaries: Hash a small report artifact, never an original MEG recording; Reject malformed/fractional/negative counts instead of silently coercing; Require the explicit booleans emitted by the triage CSV writer; Read an empty diagnostic table or a complete CSV without changing it.
+
+### `meg/code/preprocessing_basic/render_stage03_mne_reports.py`
+
+- Render self-contained MNE HTML reports from the JSON metadata and PNG figures already produced by the DAD stage-03 review or apply pass. This is a report-only utility: it does not open raw FIF files, rerun Maxwell filtering, recompute artifact annotations, fit ICA, or modify scientific derivatives.
+- Behavior and boundaries: Render one stage report from existing metadata and figures, without FIF I/O; Build the report-only command-line parser; Join bounded participant renderers before reporting cohort completion.
+
+### `meg/code/preprocessing_basic/review_cleaning.py`
+
+- Record reconciled Stage 4 decisions in the existing subject tuning YAML.
+- Behavior and boundaries: Bind an explicit human decision; no implicit defaults represent review.
+
+### `meg/code/preprocessing_basic/review_ocular_components.py`
+
+- Review cached ocular ICA components across the DAD cohort, with resumable saves.
+- Behavior and boundaries: Parse zero-based components or NONE; DEFER/QUIT are control actions; Retry invalid answers without accepting a blank as reviewed zero; Atomically save only triage choices; reject another writer's intervening edit; Display maps and native cached sources, preserving amplitudes used by detection.
+
+### `meg/code/preprocessing_basic/review_squid_jumps.py`
+
+- Prepare/review Stage 4A SQUID candidates before SSS using accepted channels.
+- Behavior and boundaries: Reuse accepted report lists, or validated fresh pre-SSS channel evidence; Put the chosen event's sensors first, retaining every screened channel; Set common physical scales by type from this displayed window only; Build read-only per-sensor context/edge/difference pages for one flag.
+
+### `meg/code/preprocessing_basic/run_pipeline.py`
+
+- Provide one command-line entrypoint for configuration resolution, automatic dataset preflight, durable source lineage, provenance snapshots, and execution of pipeline stages that have a stable noninteractive CLI.
+- Behavior and boundaries: Build subprocess commands for currently supported pipeline stages; Preserve evidence-derived manifest sections across orchestration runs; Resolve inputs, run preflight, execute selected stages, and log results.
+
+### `meg/code/preprocessing_basic/squid_jumps.py`
+
+- Stage 4A SQUID candidate detection, review storage and SSS application.
+- Behavior and boundaries: Validate configurable detector values; missing settings retain old CLIs; Return only nonempty saved actions, excluding thresholds/GUI/provenance; Return this source's intervals and source/global channel additions; Attach global BAD windows directly in acquisition coordinates once.
+
+### `meg/code/preprocessing_basic/stage4b_adoption.py`
+
+- Adopt current annotation masks under Damiano's explicit 2026-11-07 policy.
+- Behavior and boundaries: Resolve the dedicated adoption namespace outside source data; Store shared resources relative to derivatives, independently of mounts; Refuse escaping/symlinked resource paths in an adoption plan; Remove display-only absolute paths from already hash-bound timing records.
+
+### `meg/docs/STAGE4_CURRENT_MASK_HANDOFF.md`
+
+- For participant-level final component decisions use the [final ICA review guide](FINAL_ICA_COMPONENT_REVIEW_GUIDE.md). The component book is the human interface; the standard HTML records processing evidence.
+- Document Current-mask adoption and final ICA handoff; Current scope and evidence; Implementation and audit boundary; Exact commands; Final fit outputs and next scientific decision.
+
+### `meg/params/pipeline_default.yaml`
+
+- Validate native continuous filtering and optional high-pass settings, SQUID decisions, frontal ICA/blink aids, eye-movement duration settings and EDF guidance.
+
+### `meg/tests/ocular_report_dom_harness.js`
+
+- Provide offline ocular-component report navigation and synthetic DOM checks for run selection, visible windows, saved choices and missing-data gaps.
+
+### `meg/tests/test_annotation_triage.py`
+
+- Synthetic regression checks for bulk ocular selection and annotation retention.
+- Exercise native annotation outcomes match real mne including boundaries and zero spans; accepted overlay and unscored none are not artifact free; reviewed empty muscle replaces auto while legacy review keeps it; manual masks ignore all bulk choices and do not load cache; selection staleness and atomic conflict preserve previous choices.
+
+### `meg/tests/test_annotation_triage_visual_report.py`
+
+- Validate portable retention books with synthetic saved trial/count snapshots.
+- Exercise all identity bars reconcile and share scale with true zeros; malformed or inconsistent cells fail before plotting; overlap reasons are not a unique loss sum; comparison accepts annotation changes but rejects changed windows; render embeds all figures and comparison preserves sources.
+
+### `meg/tests/test_blink_annotation.py`
+
+- Synthetic checks for Stage 4B cached ICA and automatic blink proposals.
+- Exercise cache roundtrip uses all good frontal types and caps only the aid; cache rejects changed source mask or cache file; cache isolation ignores huge samples inside a known bad period; detection merges duplicates and preserves native peak samples; empty or flat detection is not reviewed zero.
+
+### `meg/tests/test_edf_blink_candidates.py`
+
+- Focused EDF guidance tests, entirely on temporary/synthetic evidence.
+- Exercise trial local mapping never bridges gap or applies a fixed offset; mismatched duplicate markers and unknown stops are flagged; missing trial does not shift later unique matches; candidates are non excluding and promotion requires explicit review; browser samples keep nan gaps and original channels.
+
+### `meg/tests/test_manual_eye_annotations.py`
+
+- Synthetic regression checks for the interactive ocular-review workflow.
+- Exercise each none group is disabled and overlap stays separate; redetect changes only chosen group and keeps other edits; back reselects eye only and keeps actual provenance when declined; legacy p04 blink fingerprint and reviewed empty are reused without migration; back none clears only untouched eye proposals without running detector.
+
+### `meg/tests/test_maxwell_qc.py`
+
+- Test channel evidence plots, using only small synthetic data.
+- Exercise Transient crossings and header-excluded NaNs must not change labels; Time is recording-relative; native sample coordinates include first_samp; Selected NaN rows remain visible and detected/applied sets stay separate; All sensors remain visible, including header bads, without normalization; Presence of new metadata selects channel plots, never the old PSD.
+
+### `meg/tests/test_ocular_component_reports.py`
+
+- Synthetic regression checks for participant books and bulk note import.
+- Exercise peak view keeps native peak offsets and short nan gaps; new component choices do not invalidate read only trace exports; final partial bin is not mistaken for missing acquired samples; one participant html contains both runs and resumes without rereading fif; viewer controls in hermetic dom without browser or network.
+
+### `meg/tests/test_participant_parallel.py`
+
+- Real process-concurrency and validation-barrier checks, using temporary data.
+- Exercise actual spawned workers run concurrently and restore parent; worker defaults respect allocation and explicit limits; Exercise both whole-table barriers across two independent participants.
+
+### `meg/tests/test_pipeline_config.py`
+
+- Cover the matching staged configuration contracts using synthetic profiles and temporary paths; no participant dataset is used.
+
+### `meg/tests/test_preprocessing_stage_policies.py`
+
+- test_preprocessing_stage_policies.py
+- Exercise Manual exclusions are explicit, sorted, and de-duplicated; Negative component indices are never silently accepted; Legacy local paths remain compatible with cluster-mounted inputs; Production execution stops with a clear status, not a MEGNet import error; Retained medoid selection is deterministic and fails on unusable headers.
+
+### `meg/tests/test_preprocessing_stage_smoke.py`
+
+- Run lightweight synthetic artifact-annotation and ICA-application checks. These tests validate channel/metadata preservation without Maxwell filtering or full participant computation.
+- Exercise Report comparison plotting must not require rerunning Maxwell filtering.
+
+### `meg/tests/test_render_stage03_mne_reports.py`
+
+- Verify that the report-only stage-03 renderer creates portable MNE HTML from synthetic JSON/PNG inputs and includes reviewed tuning choices when available. No raw data or expensive preprocessing is used.
+- Exercise The shared guard must reject a derivative root nested under raw data; Current 4B rendering needs muscle/manual evidence, never an EOG PNG; Applied reports embed exact-model review evidence and new native QC; Repair cluster-style HTML from saved evidence without changing its JSON; Automatic rendering must also work in the minimal cluster deployment.
+
+### `meg/tests/test_squid_jumps.py`
+
+- Scientific-boundary tests for Stage 4A SQUID screening and review.
+- Exercise persistent and decaying steps across chunks keep single sensor; true acquisition boundary is not a jump and flat is unscored; Native high-frequency/quantized noise needs a raw-MAD scale floor; Staggered sensor events remain local even if their gaps overlap; native annotation roundtrip masks epochs without changing samples.
+
+### `meg/tests/test_stage4_continuous.py`
+
+- Stage 4 scientific-boundary regression tests, using temporary synthetic data.
+- Exercise No FIR call/margin/exposure; real spectrum-fit cannot bridge BAD/EDGE; accepted legacy sss survives final filter change without rewriting history; Refresh ordering depends on operative SSS changes, not candidate/UI state; legacy sss migration rejects unrelated changes; Report refresh preserves old FIR exposure and carries history forward.
+
+### `meg/tests/test_stage4b_adoption.py`
+
+- Test policy adoption on temporary native FIFs without cohort data or jobs.
+- Exercise real adoption resume reconcile and processing acceptance; changed inputs stop before production replacement; missing property diagnostics cannot reuse old pngs; plan discovers new manual save without reseeding automatic intervals; cluster wrapper dispatch and cohort phase barriers.
+
+Suggested commit message:
+`feat(meg): add guarded continuous cleaning and ocular review workflows`
+
+# 19 Nov 2026 17:25
+
 ## feat(meg): add reviewed photodiode timing and immutable handoffs
 
 ### `meg/code/preprocessing_basic/pipeline_config.py`

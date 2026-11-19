@@ -47,7 +47,11 @@ Inputs
 
 Outputs
 - ``<exact-source-stem>_raw_sss.fif`` for every acquisition run.
-- Pass-specific JSON/HTML QC reports and PNG figures.
+- Pass-specific JSON and self-contained MNE HTML QC reports, with embedded
+  PNG figures, explanations and scientific review criteria. Per-run noisy/flat
+  score heatmaps replace the old detection PSD; raw traces highlight detected
+  channels in a reproducible random 20-second window. Use maxwell_qc.py to
+  refresh these displays from existing scores without rerunning detection/SSS.
 - Optional accepted tuning YAML for reuse by ``run_pipeline.py``.
 - Derivative lineage in the shared source manifest when supplied.
 
@@ -57,7 +61,20 @@ central static destination selection -> configured/interactive bad-channel
 policy -> per-run Maxwell filtering -> before/after QC ->
 lineage-preserving SSS FIFs and reports.
 
+SQUID extension (workflow Stage 4A, legacy script ID 03_A)
+Use --squid-prepare-only to prepare candidates from accepted channel evidence
+without changing SSS, reports, tuning or existing 4B manual reviews. Review with
+review_squid_jumps.py --mode review --source EXACT_SOURCE before the next SSS
+pass. Confirmed BAD_squid_jumps windows are explicitly skipped by SSS; channel
+actions default to participant union. Missing reviews stop enabled new 4A
+processing before SSS. Existing accepted 4A/4B work is never migrated merely
+by installing this extension. --overwrite archives changed SSS/evidence first;
+compatible SSS files are reused, retaining their manual-eye review bindings.
+
 Scientific assumptions
+- Final temporal settings belong to 4B/application, independently of SSS.
+  Existing 2026-10-23 report/receipt identities are validated read-only through
+  the explicit legacy projection; this policy update requires no 4A rerun.
 - Acquisition-run identity comes only from each FIF's ``runNN`` token.
 - The default ``union`` policy applies every channel detected in any run to all
   runs. ``reference_run`` and ``per_run`` remain explicit alternatives.
@@ -80,14 +97,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import shutil
 import sys
 from pathlib import Path
 from typing import Any, Mapping
 
-import matplotlib.pyplot as plt
 import mne
 import numpy as np
 from mne.io.constants import FIFF
+
+from continuous_cleaning import (stage_configuration, bind_report, check_preservation, digest, file_hash, file_stamp, filter_design)
 
 from pipeline_config import load_and_resolve_config
 from preprocessing_stage_utils import (
@@ -103,8 +122,15 @@ from preprocessing_stage_utils import (
     update_tuning_file,
     utc_now,
     write_json,
-    write_simple_html_report,
 )
+
+from render_stage03_mne_reports import render_stage_report
+from maxwell_qc import build_run_qc, load_scores, save_heatmaps
+from squid_jumps import (LABEL as SQUID_LABEL, accepted_report, application as squid_application,
+    attach_intervals, channel_basis_configuration, load_review as load_squid_review,
+    parameters as squid_parameters, prepare as prepare_squid, root as squid_root,
+    run_action as squid_run_action, maxwell_filter_with_jumps, remember_channel_basis,
+    read_channel_basis)
 
 
 STAGE_NAME = "maxwell_filter"
@@ -219,7 +245,7 @@ def select_central_destination_run(
     if not dev_head_t_by_run:
         raise ValueError("No static dev_head_t transforms were supplied.")
     points = np.asarray(head_points, dtype=float)
-    if points.ndim != 2 or points.shape[1] != 3:
+    if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all():
         raise ValueError(
             "Head points must have shape (n_points, 3); "
             f"received {points.shape}."
@@ -229,7 +255,15 @@ def select_central_destination_run(
     for run, transform in dev_head_t_by_run.items():
         if transform is None:
             raise RuntimeError(f"run{int(run):02d} has no static dev_head_t.")
-        head_to_device = np.linalg.inv(np.asarray(transform["trans"], dtype=float))
+        matrix = np.asarray(transform["trans"], dtype=float)
+        if matrix.shape != (4, 4) or not np.isfinite(matrix).all():
+            raise RuntimeError(f"run{int(run):02d} has an invalid static transform.")
+        if (int(transform.get("from", 1)) != 1 or int(transform.get("to", 4)) != 4
+                or not np.allclose(matrix[3], [0, 0, 0, 1])
+                or not np.allclose(matrix[:3, :3].T @ matrix[:3, :3], np.eye(3), atol=1e-5)
+                or not np.isclose(np.linalg.det(matrix[:3, :3]), 1., atol=1e-5)):
+            raise RuntimeError(f"run{int(run):02d} has invalid device-to-head frame/rotation.")
+        head_to_device = np.linalg.inv(matrix)
         homogeneous = np.column_stack([points, np.ones(len(points))])
         device_points[int(run)] = (head_to_device @ homogeneous.T).T[:, :3]
 
@@ -244,10 +278,15 @@ def select_central_destination_run(
         pairwise_mm[f"run{run_a:02d}"] = distances
         score_mm[run_a] = float(sum(distances.values()))
 
-    central_run = min(score_mm, key=lambda run: (score_mm[run], run))
+    minimum = min(score_mm.values())
+    tied = [run for run, score in score_mm.items() if abs(score - minimum) <= 1e-6]
+    central_run = min(tied)
     return central_run, {
         "metric": "summed_pairwise_rms_digitization_displacement_mm",
         "digitization_point_count": int(len(points)),
+        "tie_candidates": sorted(tied), "tie_tolerance_mm": 1e-6,
+        "rationale": "Measured actual-run medoid includes translation and rotation of head geometry; no cHPI trajectory is available.",
+        "references": ["PIPELINE_SPEC_basic.md#03_a-maxwell-filtering", "https://mne.tools/1.10/generated/mne.preprocessing.maxwell_filter.html"],
         "score_by_run_mm": {
             f"run{run:02d}": score_mm[run] for run in sorted(score_mm)
         },
@@ -418,161 +457,6 @@ def select_bad_channels_by_policy(
 # -----------------------------------------------------------------------------
 
 
-def _save_detection_qc_figure(
-    *,
-    record: AcquisitionRunRecord,
-    raw: mne.io.BaseRaw,
-    detected_bads: list[str],
-    output_path: Path,
-    show: bool,
-) -> Path:
-    """
-    Save a compact first-two-minute PSD and bad-channel summary for one run.
-
-    The cropped PSD avoids loading the full recording solely for visualization.
-    Magnetometers and gradiometers are plotted separately because their units
-    differ.
-    """
-    duration = min(120.0, max(0.0, float(raw.times[-1])))
-    preview = raw.copy().crop(tmin=0.0, tmax=duration).load_data()
-    fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-    for axis, channel_type, color in (
-        (axes[0], "mag", "tab:blue"),
-        (axes[1], "grad", "tab:orange"),
-    ):
-        picks = mne.pick_types(
-            preview.info,
-            meg=channel_type,
-            eeg=False,
-            eog=False,
-            stim=False,
-            misc=False,
-            exclude=[],
-        )
-        if len(picks) == 0:
-            axis.text(0.5, 0.5, f"No {channel_type} channels", ha="center")
-            continue
-        spectrum = preview.compute_psd(
-            method="welch",
-            fmin=1.0,
-            fmax=60.0,
-            picks=picks,
-            n_fft=min(2000, preview.n_times),
-            n_overlap=min(1000, max(0, preview.n_times // 2)),
-            verbose="ERROR",
-        )
-        data, frequencies = spectrum.get_data(return_freqs=True)
-        mean_psd = np.mean(data, axis=0)
-        axis.plot(
-            frequencies,
-            10.0 * np.log10(np.maximum(mean_psd, np.finfo(float).tiny)),
-            color=color,
-        )
-        axis.set_ylabel(f"{channel_type} PSD (dB)")
-        axis.grid(alpha=0.25)
-    axes[-1].set_xlabel("Frequency (Hz)")
-    fig.suptitle(
-        f"{record.source_filename}\n"
-        f"Detected bads ({len(detected_bads)}): {detected_bads}"
-    )
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    if show:
-        plt.show(block=True)
-    plt.close(fig)
-    return output_path
-
-
-def _save_before_after_qc_figure(
-    *,
-    record: AcquisitionRunRecord,
-    raw_path: Path,
-    filtered_path: Path,
-    applied_bads: list[str],
-    output_path: Path,
-    show: bool,
-) -> Path:
-    """
-    Plot matched first-two-minute PSDs before and after Maxwell filtering.
-
-    The exact same non-bad MEG channel names are used on both sides. This keeps
-    differences attributable to Maxwell filtering rather than channel
-    selection or differing time windows.
-    """
-    raw = mne.io.read_raw_fif(raw_path, preload=False, verbose="ERROR")
-    filtered = mne.io.read_raw_fif(
-        filtered_path,
-        preload=False,
-        verbose="ERROR",
-    )
-    raw.info["bads"] = list(applied_bads)
-    duration = min(
-        120.0,
-        max(0.0, float(raw.times[-1])),
-        max(0.0, float(filtered.times[-1])),
-    )
-    raw_preview = raw.copy().crop(tmin=0.0, tmax=duration).load_data()
-    filtered_preview = (
-        filtered.copy().crop(tmin=0.0, tmax=duration).load_data()
-    )
-
-    fig, axes = plt.subplots(2, 1, figsize=(11, 7), sharex=True)
-    for axis, channel_type in zip(axes, ("mag", "grad"), strict=True):
-        raw_picks = mne.pick_types(
-            raw_preview.info,
-            meg=channel_type,
-            eeg=False,
-            eog=False,
-            stim=False,
-            misc=False,
-            exclude="bads",
-        )
-        channel_names = [raw_preview.ch_names[index] for index in raw_picks]
-        channel_names = [
-            name for name in channel_names if name in filtered_preview.ch_names
-        ]
-        if not channel_names:
-            axis.text(0.5, 0.5, f"No usable {channel_type} channels", ha="center")
-            continue
-        for preview, label, color in (
-            (raw_preview, "Raw", "0.45"),
-            (filtered_preview, "Maxwell filtered", "tab:blue"),
-        ):
-            spectrum = preview.compute_psd(
-                method="welch",
-                fmin=1.0,
-                fmax=60.0,
-                picks=channel_names,
-                n_fft=min(2000, preview.n_times),
-                n_overlap=min(1000, max(0, preview.n_times // 2)),
-                verbose="ERROR",
-            )
-            data, frequencies = spectrum.get_data(return_freqs=True)
-            mean_psd = np.mean(data, axis=0)
-            axis.plot(
-                frequencies,
-                10.0 * np.log10(
-                    np.maximum(mean_psd, np.finfo(float).tiny)
-                ),
-                color=color,
-                label=label,
-            )
-        axis.set_ylabel(f"{channel_type} PSD (dB)")
-        axis.grid(alpha=0.25)
-        axis.legend(loc="best")
-    axes[-1].set_xlabel("Frequency (Hz)")
-    fig.suptitle(
-        f"{record.source_filename}\n"
-        f"Before/after Maxwell filtering; excluded bads: {applied_bads}"
-    )
-    fig.tight_layout()
-    fig.savefig(output_path, dpi=150, bbox_inches="tight")
-    if show:
-        plt.show(block=True)
-    plt.close(fig)
-    return output_path
-
-
 def _parse_channel_prompt(text: str) -> list[str]:
     """Parse comma/space separated channel names from an interactive prompt."""
     return _deduplicate(
@@ -675,7 +559,7 @@ def _detect_bad_channels(
         origin=find_cfg["origin"],
         source_filename=record.source_filename,
     )
-    noisy, flat, _scores = mne.preprocessing.find_bad_channels_maxwell(
+    noisy, flat, scores = mne.preprocessing.find_bad_channels_maxwell(
         detection_raw,
         limit=float(find_cfg["limit"]),
         duration=float(find_cfg["duration_sec"]),
@@ -696,9 +580,24 @@ def _detect_bad_channels(
             "auto_flat_channels": list(flat),
             "detected_bad_channels": detected,
             "digitization_points": dig_summary,
+            "scores": scores,
         },
         raw,
     )
+
+
+def maxwell_signature(record, cfg, calibration_file, crosstalk_file, destination_fingerprint, applied_bads):
+    """Bind SSS to source stat, resource contents and all operative decisions."""
+    settings = dict(cfg["maxwell_filter"])
+    settings.pop("calibration_file", None)
+    settings.pop("crosstalk_file", None)
+    payload = {"source": file_stamp(record.source_path), "settings": settings,
+                   "calibration": file_hash(calibration_file), "crosstalk": file_hash(crosstalk_file),
+                   "destination": destination_fingerprint, "bads": applied_bads}
+    action = squid_run_action(cfg, record.source_filename)
+    if action["intervals"] or action["bad_channels"]:
+        payload["squid_jumps"] = action
+    return digest(payload)
 
 
 def _maxwell_filter_one_run(
@@ -727,6 +626,7 @@ def _maxwell_filter_one_run(
             f"{missing}"
         )
     raw.info["bads"] = list(applied_bads)
+    attach_intervals(raw, squid_run_action(cfg, record.source_filename)["intervals"])
     raw.fix_mag_coil_types()
     filter_cfg = cfg["maxwell_filter"]["filter"]
     validate_auto_origin_digitization(
@@ -734,7 +634,7 @@ def _maxwell_filter_one_run(
         origin=filter_cfg["origin"],
         source_filename=record.source_filename,
     )
-    filtered = mne.preprocessing.maxwell_filter(
+    filtered = maxwell_filter_with_jumps(
         raw,
         origin=filter_cfg["origin"],
         calibration=str(calibration_file),
@@ -742,6 +642,7 @@ def _maxwell_filter_one_run(
         st_duration=filter_cfg.get("st_duration_sec"),
         st_correlation=float(filter_cfg["st_correlation"]),
         destination=destination_transform,
+        skip_by_annotation=("edge", "bad_acq_skip", SQUID_LABEL),
         verbose="WARNING",
     )
     # Maxwell filtering may rewrite Info; reattach the explicit applied policy.
@@ -752,6 +653,10 @@ def _maxwell_filter_one_run(
         f"stage=03_A_MaxFilt; destination_run={destination_run}; "
         f"destination_transform_sha256={destination_fingerprint}"
     )
+    signature = maxwell_signature(record, cfg, calibration_file, crosstalk_file,
+                                  destination_fingerprint, applied_bads)
+    filtered.info["description"] += f"; stage4_input_sha256={signature}"
+    check_preservation(raw, filtered)
     filtered.save(output_path, overwrite=overwrite, verbose="WARNING")
 
 
@@ -764,6 +669,8 @@ def _validate_resumable_output(
     destination_transform: Any,
     destination_fingerprint: str,
     raw_root: str | Path,
+    expected_signature: str | None = None,
+    squid_intervals: list | None = None,
 ) -> dict[str, Any]:
     """
     Validate an existing Maxwell derivative before resume skips computation.
@@ -783,6 +690,29 @@ def _validate_resumable_output(
         raise RuntimeError(
             f"Cannot resume from unreadable Maxwell derivative {resolved}: {exc}"
         ) from exc
+    if expected_signature is not None:
+        if f"stage4_input_sha256={expected_signature}" not in str(existing.info.get("description")):
+            raise RuntimeError("Cannot resume SSS: upstream source/settings/resources changed.")
+        source = mne.io.read_raw_fif(record.source_path, preload=False, verbose="ERROR")
+        source.info["bads"] = list(applied_bads)
+        if squid_intervals:
+            # FIF stores annotation endpoints at float32 precision. Compare new
+            # SQUID endpoints on the native sample grid, while every original
+            # non-SQUID annotation still passes the existing exact contract.
+            expected = source.copy()
+            attach_intervals(expected, squid_intervals)
+            def squid_samples(raw):
+                return sorted((round(a["onset"]*raw.info["sfreq"]),
+                    round((a["onset"]+a["duration"])*raw.info["sfreq"]))
+                    for a in raw.annotations if a["description"] == SQUID_LABEL)
+            if squid_samples(expected) != squid_samples(existing):
+                raise RuntimeError("Cannot resume SSS: reviewed SQUID intervals changed native samples.")
+            compared = existing.copy()
+            for raw in (source, compared):
+                raw.annotations.delete(np.flatnonzero(raw.annotations.description == SQUID_LABEL))
+            check_preservation(source, compared)
+        else:
+            check_preservation(source, existing)
     description = str(existing.info.get("description") or "")
     required_tokens = (
         f"source={record.source_filename}",
@@ -853,6 +783,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Accepted interactive choices YAML; defaults in the report directory.",
     )
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--squid-prepare-only", action="store_true",
+        help="Prepare native SQUID candidates from accepted channels; never run SSS or change 4B files.")
     parser.add_argument(
         "--resume",
         action="store_true",
@@ -863,6 +795,30 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--print-summary", action="store_true")
     return parser
+
+
+def archive_squid_rebuild(cfg, *, output_path=None):
+    """Preserve old 4A evidence and changed SSS before explicit replacement.
+
+    Small report/score artifacts are copied once under their content hash.
+    A changed large SSS file is moved within the derivative filesystem. Manual
+    annotations/tuning are never outputs here and retain their original bytes.
+    """
+    report_dir = Path(cfg["resolved_paths"]["derivatives_reports_dir"])
+    report = report_dir / "03_A_MaxFilt_review_report.json"
+    if not report.exists():
+        return
+    archive = ensure_output_directory(report_dir / "history" / "squid_jumps" / file_hash(report),
+                                      cfg["resolved_paths"]["data_root"])
+    for path in report_dir.glob("03_A_MaxFilt_*"):
+        target = guarded_path(archive / path.name, cfg["resolved_paths"]["data_root"])
+        if path.is_file() and not target.exists():
+            shutil.copy2(path, target)
+    if output_path is not None and Path(output_path).exists():
+        target = guarded_path(archive / Path(output_path).name, cfg["resolved_paths"]["data_root"])
+        if target.exists():
+            raise RuntimeError(f"Archived SSS already exists; reconcile before replacement: {target}")
+        Path(output_path).replace(target)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -877,10 +833,22 @@ def main(argv: list[str] | None = None) -> int:
             required_sections=("maxwell_filter",),
         )
         raw_root = cfg["resolved_paths"]["data_root"]
+        squid_cfg = squid_parameters(cfg)
+        if args.squid_prepare_only:
+            # This branch deliberately precedes every scientific-output write.
+            from review_squid_jumps import channel_lists
+            records = discover_raw_run_records(cfg)
+            channels = channel_lists(cfg, records)
+            for record in records:
+                path, proposal = prepare_squid(cfg, record, channels[record.source_filename])
+                print(f"{record.source_filename}: {len(proposal['candidates'])} SQUID candidates: {path}")
+            return 0
         overwrite = bool(args.overwrite or cfg["runtime"]["overwrite_existing"])
         if args.resume and overwrite:
             raise ValueError("--resume and --overwrite are mutually exclusive.")
         maxwell_cfg = cfg["maxwell_filter"]
+        if maxwell_cfg["filter"].get("st_duration_sec") is not None:
+            raise ValueError("DAD Stage 4 uses SSS only: st_duration_sec must be null.")
         if not maxwell_cfg["enabled"]:
             raise RuntimeError("Maxwell filtering is disabled in configuration.")
 
@@ -908,42 +876,58 @@ def main(argv: list[str] | None = None) -> int:
         )
         records = discover_raw_run_records(cfg)
 
+        # Reuse already accepted channel detection and scores. Do not rerun or
+        # overwrite accepted evidence just to investigate intermittent jumps.
+        accepted = None
+        accepted_current = False
+        if (squid_cfg["enabled"] or squid_application(cfg)) and cfg.get("stage4_review", {}).get("03_A_MaxFilt", {}).get("status") == "accepted":
+            try:
+                accepted = accepted_report(cfg)
+                accepted_current = True
+            except RuntimeError:
+                # A rebuilt SSS can await reconciliation while its original
+                # accepted channel basis is still usable for SQUID iteration.
+                accepted = read_channel_basis(cfg, records).get("accepted_channel_report")
+                if accepted is None:
+                    raise RuntimeError("Accepted channel evidence unavailable; reconcile Stage 4A first.")
+        accepted_rows = {r["source_filename"]: r for r in accepted["runs"]} if accepted else {}
+
         detected_by_run: dict[int, list[str]] = {}
         detection_details: dict[int, dict[str, Any]] = {}
         raw_headers_by_run: dict[int, mne.io.BaseRaw] = {}
         dev_head_t_by_run: dict[int, Any] = {}
-        qc_images: list[Path] = []
         for record in records:
-            detected, details, raw_header = _detect_bad_channels(
-                record,
-                cfg=cfg,
-                calibration_file=calibration_file,
-                crosstalk_file=crosstalk_file,
-            )
+            if accepted:
+                row = accepted_rows[record.source_filename]
+                raw_header = mne.io.read_raw_fif(record.source_path, preload=False, verbose="ERROR")
+                detected = list(row["detected_bad_channels"])
+                details = {key: row[key] for key in ("input_header_bads", "auto_noisy_channels",
+                    "auto_flat_channels", "detected_bad_channels", "digitization_points", "bad_channel_scores_path")}
+                # Score paths are mount-portable by exact basename.
+                details["bad_channel_scores_path"] = str(report_dir / Path(details["bad_channel_scores_path"]).name)
+            else:
+                detected, details, raw_header = _detect_bad_channels(
+                    record, cfg=cfg, calibration_file=calibration_file, crosstalk_file=crosstalk_file)
             detected_by_run[record.acquisition_run_label] = detected
             raw_headers_by_run[record.acquisition_run_label] = raw_header
             dev_head_t_by_run[record.acquisition_run_label] = (
                 raw_header.info.get("dev_head_t")
             )
+            if accepted:
+                scores_path = Path(details["bad_channel_scores_path"])
+            else:
+                scores_path = prepare_output_path(report_dir / f"03_A_MaxFilt_{args.processing_pass}_{record.source_stem}_bad_channel_scores.npz",
+                                                  raw_root=raw_root, overwrite=True)
+                np.savez_compressed(scores_path, **details.pop("scores"))
+            details["bad_channel_scores_path"] = str(scores_path)
             detection_details[record.acquisition_run_label] = details
-            image_path = prepare_output_path(
-                figure_dir
-                / (
-                    f"03_A_MaxFilt_{args.processing_pass}_"
-                    f"{record.source_stem}_detection_psd.png"
-                ),
-                raw_root=raw_root,
-                overwrite=True,
-            )
-            qc_images.append(
-                _save_detection_qc_figure(
-                    record=record,
-                    raw=raw_header,
-                    detected_bads=detected,
-                    output_path=image_path,
-                    show=bool(args.interactive and not args.no_display),
-                )
-            )
+            # Interactive choices can use the recorded detector scores before
+            # harmonization. Final report plots are rebuilt with applied labels.
+            if args.interactive and not accepted:
+                save_heatmaps(scores=load_scores(scores_path), source_filename=record.source_filename,
+                    detected_bads=detected, applied_bads=None,
+                    prefix=figure_dir / f"03_A_MaxFilt_{args.processing_pass}_{record.source_stem}",
+                    raw_root=raw_root, show=not args.no_display)
 
         first_run = min(raw_headers_by_run)
         destination_run, destination_transform, destination_details = (
@@ -967,7 +951,7 @@ def main(argv: list[str] | None = None) -> int:
         policy = str(maxwell_cfg["bad_channel_policy"])
         reference_run = maxwell_cfg["reference_acquisition_run"]
         manual_cfg = dict(maxwell_cfg["manual_bad_channels"])
-        if args.interactive:
+        if args.interactive and not accepted:
             policy, reference_run, manual_cfg = interactive_bad_channel_review(
                 detected_by_run=detected_by_run,
                 default_policy=policy,
@@ -987,6 +971,8 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
 
+        cfg["maxwell_filter"].update(bad_channel_policy=policy, reference_acquisition_run=reference_run,
+                                     manual_bad_channels=manual_cfg)
         selected_by_run, resolved_reference = select_bad_channels_by_policy(
             detected_by_run,
             policy=policy,
@@ -994,8 +980,58 @@ def main(argv: list[str] | None = None) -> int:
             manual_cfg=manual_cfg,
         )
 
+        # All reviews are validated before any SSS output can be replaced.
+        # Proposals and fresh channel evidence live outside accepted reports.
+        squid_reviews, screening_by_run = {}, {r: list(chs) for r, chs in selected_by_run.items()}
+        if squid_cfg["enabled"] or squid_application(cfg):
+            unknown = set(cfg.get("squid_jumps", {}).get("reviews", {})) - {r.source_filename for r in records}
+            if unknown:
+                raise RuntimeError(f"SQUID reviews contain unconfigured sources: {sorted(unknown)}")
+            if accepted:
+                screening_by_run = {r.acquisition_run_label: list(accepted_rows[r.source_filename]
+                    .get("squid_jumps", {}).get("screening_bad_channels",
+                    accepted_rows[r.source_filename]["applied_bad_channels"])) for r in records}
+            remember_channel_basis(cfg, records,
+                {r.source_filename: screening_by_run[r.acquisition_run_label] for r in records},
+                reviewed=bool(accepted or args.interactive), report=accepted)
+            pending = []
+            for record in records:
+                excluded = screening_by_run[record.acquisition_run_label]
+                prepare_squid(cfg, record, excluded)
+                try:
+                    squid_reviews[record.source_filename] = load_squid_review(cfg, record, excluded)
+                except (RuntimeError, FileNotFoundError) as exc:
+                    pending.append(str(exc))
+            if pending:
+                raise RuntimeError("SQUID review required before SSS. Use review_squid_jumps.py --mode review "
+                                   "with the existing tuning file. " + " | ".join(pending))
+            for record in records:
+                run = record.acquisition_run_label
+                additions = squid_run_action(cfg, record.source_filename)["bad_channels"]
+                selected_by_run[run] = _deduplicate([*screening_by_run[run], *additions])
+            # Reviewed zero (or unchanged operative decisions) must not replace
+            # accepted reports, SSS stamps or existing manual-eye bindings.
+            compatible = bool(accepted_current)
+            for record in (records if compatible else []):
+                path = derivative_path_for_run(record, sss_dir, OUTPUT_SUFFIX)
+                header = mne.io.read_raw_fif(path, preload=False, verbose="ERROR")
+                expected = maxwell_signature(record, cfg, calibration_file, crosstalk_file,
+                    destination_fingerprint, selected_by_run[record.acquisition_run_label])
+                compatible = compatible and f"stage4_input_sha256={expected}" in str(header.info.get("description"))
+            if compatible:
+                summary = {"status": "reviewed_unchanged_sss", "reviews": cfg["squid_jumps"].get("reviews", {}),
+                           "application": squid_application(cfg)}
+                path = squid_root(cfg) / f"{digest(summary)}-review-summary.json"
+                if not path.exists():
+                    write_json(path, summary, raw_root=raw_root)
+                print("SQUID review complete; operative SSS unchanged. Accepted 4A and all 4B manual reviews retained.")
+                return 0
+            if accepted:
+                archive_squid_rebuild(cfg)
+
         lineage_records: list[dict[str, Any]] = []
         run_reports: list[dict[str, Any]] = []
+        plot_runs: list[dict[str, Any]] = []
         reference_set = set(detected_by_run[resolved_reference])
         for record in records:
             run = record.acquisition_run_label
@@ -1006,11 +1042,20 @@ def main(argv: list[str] | None = None) -> int:
             )
             execution_status = "completed"
             resume_validation = None
-            if args.resume and requested_output.exists():
+            expected = maxwell_signature(record, cfg, calibration_file, crosstalk_file,
+                                         destination_fingerprint, selected_by_run[run])
+            unchanged = False
+            if squid_reviews and requested_output.exists():
+                header = mne.io.read_raw_fif(requested_output, preload=False, verbose="ERROR")
+                unchanged = f"stage4_input_sha256={expected}" in str(header.info.get("description"))
+            if (args.resume or unchanged) and requested_output.exists():
                 resume_validation = _validate_resumable_output(
                     path=requested_output,
                     record=record,
                     applied_bads=selected_by_run[run],
+                    expected_signature=maxwell_signature(record, cfg, calibration_file, crosstalk_file,
+                                                         destination_fingerprint, selected_by_run[run]),
+                    squid_intervals=squid_run_action(cfg, record.source_filename)["intervals"],
                     destination_run=destination_run,
                     destination_transform=destination_transform,
                     destination_fingerprint=destination_fingerprint,
@@ -1019,6 +1064,8 @@ def main(argv: list[str] | None = None) -> int:
                 output_path = requested_output.resolve()
                 execution_status = "resumed_existing"
             else:
+                if squid_reviews and requested_output.exists() and overwrite:
+                    archive_squid_rebuild(cfg, output_path=requested_output)
                 output_path = prepare_output_path(
                     requested_output,
                     raw_root=raw_root,
@@ -1036,25 +1083,17 @@ def main(argv: list[str] | None = None) -> int:
                     destination_fingerprint=destination_fingerprint,
                     overwrite=overwrite,
                 )
-            comparison_path = prepare_output_path(
-                figure_dir
-                / (
-                    f"03_A_MaxFilt_{args.processing_pass}_"
-                    f"{record.source_stem}_before_after_psd.png"
-                ),
-                raw_root=raw_root,
-                overwrite=True,
+            comparison_path = figure_dir / (
+                f"03_A_MaxFilt_{args.processing_pass}_{record.source_stem}_before_after_psd.png"
             )
-            qc_images.append(
-                _save_before_after_qc_figure(
-                    record=record,
-                    raw_path=Path(record.source_path),
-                    filtered_path=output_path,
-                    applied_bads=selected_by_run[run],
-                    output_path=comparison_path,
-                    show=bool(args.interactive and not args.no_display),
-                )
-            )
+            # Scores cover the whole run; raw trace inspection reads only one
+            # reproducible 20-second window, including the detected channels.
+            scores_path = detection_details[run]["bad_channel_scores_path"]
+            plot_runs.append(build_run_qc(raw=raw_headers_by_run[run], source_path=record.source_path, sss_path=output_path,
+                scores=load_scores(scores_path), scores_path=scores_path,
+                detected_bads=detected_by_run[run], applied_bads=selected_by_run[run],
+                prefix=figure_dir / f"03_A_MaxFilt_{args.processing_pass}_{record.source_stem}",
+                raw_root=raw_root, show=bool(args.interactive and not args.no_display)))
             detected_set = set(detected_by_run[run])
             run_report = {
                 "source_filename": record.source_filename,
@@ -1065,6 +1104,9 @@ def main(argv: list[str] | None = None) -> int:
                 "missing_vs_reference": sorted(reference_set - detected_set),
                 "extra_vs_reference": sorted(detected_set - reference_set),
                 "applied_bad_channels": selected_by_run[run],
+                "squid_jumps": {"screening_bad_channels": screening_by_run[run],
+                    "review": squid_reviews.get(record.source_filename),
+                    "application": squid_run_action(cfg, record.source_filename)},
                 "destination_acquisition_run": destination_run,
                 "destination_transform_sha256": destination_fingerprint,
                 "before_after_qc_path": str(comparison_path),
@@ -1098,6 +1140,7 @@ def main(argv: list[str] | None = None) -> int:
             "subject_bids_id": cfg["layout"]["subject_bids_id"],
             "warnings": warnings,
             "status": "completed",
+            "scientific_acceptance": "separate_explicit_stage4_review",
             "mne_version": mne.__version__,
             "calibration_file": str(calibration_file),
             "crosstalk_file": str(crosstalk_file),
@@ -1107,48 +1150,33 @@ def main(argv: list[str] | None = None) -> int:
             "destination": destination_details,
             "runs": run_reports,
         }
+        highpass = cfg["preprocessing"].get("highpass_hz")
+        report_payload["final_filter_design"] = filter_design(1000., highpass) if highpass is not None else None
+        report_payload["source_files"] = [{"relative_path": r.raw_relative_path, "stamp": file_stamp(r.source_path)} for r in records]
+        report_payload["configuration_sha256"] = stage_configuration(cfg, "03_A_MaxFilt", include_edge=False)
+        bind_report(report_payload, [r["output_path"] for r in run_reports],
+                    {"signatures": [maxwell_signature(r, cfg, calibration_file, crosstalk_file, destination_fingerprint, selected_by_run[r.acquisition_run_label]) for r in records],
+                     "sss_configuration_sha256": stage_configuration(cfg, "03_A_MaxFilt")}, report_dir, cfg["resolved_paths"]["derivatives_root"])
         report_json = write_json(
             report_dir
             / f"03_A_MaxFilt_{args.processing_pass}_report.json",
             report_payload,
             raw_root=raw_root,
         )
-        summary_lines = [
-            f"status: completed",
-            f"processing_pass: {args.processing_pass}",
-            f"subject: {cfg['layout']['subject_bids_id']}",
-            f"bad_channel_policy: {policy}",
-            f"reference_acquisition_run: {resolved_reference}",
-            f"destination_acquisition_run: {destination_run}",
-            f"destination_centrality: "
-            f"{destination_details['score_by_run_mm']}",
-            f"calibration_file: {calibration_file}",
-            f"crosstalk_file: {crosstalk_file}",
-            "",
-            "Per-run detections and applied bads:",
-        ]
-        summary_lines.extend(
-            (
-                f"run{item['acquisition_run_label']:02d} "
-                f"{item['source_filename']}: "
-                f"execution={item['execution_status']}; "
-                f"detected={item['detected_bad_channels']}; "
-                f"missing_vs_reference={item['missing_vs_reference']}; "
-                f"extra_vs_reference={item['extra_vs_reference']}; "
-                f"applied={item['applied_bad_channels']}"
-            )
-            for item in run_reports
-        )
-        report_html = write_simple_html_report(
-            report_dir
-            / f"03_A_MaxFilt_{args.processing_pass}_report.html",
-            title=(
-                f"{cfg['layout']['subject_bids_id']} | 03_A Maxwell "
-                f"({args.processing_pass})"
-            ),
-            summary_lines=summary_lines,
-            image_paths=qc_images,
+        # Plot-only metadata binds these displays to the exact saved decisions;
+        # it does not introduce a second scientific configuration/acceptance.
+        write_json(report_dir / f"03_A_MaxFilt_{args.processing_pass}_plot_metadata.json",
+                   {"stage_report_sha256": file_hash(report_json), "runs": plot_runs}, raw_root=raw_root)
+        # Render saved JSON/PNGs into the primary self-contained report. This
+        # presentation step opens no FIFs and makes no scientific decisions.
+        report_html = render_stage_report(
+            derivatives_root=Path(cfg["resolved_paths"]["derivatives_root"]),
             raw_root=raw_root,
+            subject_id=cfg["layout"]["subject_bids_id"],
+            processing_pass=args.processing_pass,
+            stage_name=STAGE_NAME,
+            overwrite=True,
+            primary_report=True,
         )
         manifest_status = update_source_manifest_stage(
             manifest_path=args.source_manifest,

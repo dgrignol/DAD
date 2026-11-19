@@ -35,6 +35,12 @@ configuration or JSON snapshot.
 
 Configuration layers are merged in this order: default, machine/site paths,
 subject selector, then reviewed tuning decisions.
+Final continuous preprocessing accepts highpass_hz: null (the approved default).
+Only disposable ICA-fit copies use the separate 1-40 Hz/200 Hz settings.
+The optional artifact_annotation.eye_movement_auto block validates independent
+duration-aid parameters. Older configurations may omit it; it never changes the
+blink detector/ICA fit contract or migrates a source's saved review receipt.
+
 Current cohort contract
 The working analysis cohort excludes P15 under the 2026-11-07 coverage decision.
 Historical source profiles and accepted 36-participant Stage 2/3 validation stay
@@ -380,6 +386,20 @@ def validate_config(
     layout = sections["layout"]
     data_discovery = sections["data_discovery"]
     runtime = sections["runtime"]
+
+    # Validate final temporal settings without requiring this section for old
+    # trigger-only configurations. Null means omit the additional high-pass;
+    # it never disables independent spectrum-fit or changes acquisition limits.
+    if "preprocessing" in cfg:
+        temporal = _require_mapping(cfg, "preprocessing", errors)
+        if temporal is not None:
+            cutoff = temporal.get("highpass_hz")
+            if cutoff is not None and (type(cutoff) not in (int, float)
+                    or not math.isfinite(cutoff) or cutoff <= 0):
+                errors.append("`preprocessing.highpass_hz` must be null or a finite positive frequency.")
+            for key in ("lowpass_hz", "resample_sfreq_hz"):
+                if temporal.get(key) is not None:
+                    errors.append(f"`preprocessing.{key}` must be null for native continuous recordings.")
 
     _require_keys(subject, "subject", ("id",), errors)
     _require_keys(
@@ -1111,6 +1131,19 @@ def validate_config(
             )
 
     if "maxwell_filter" in requested:
+        # Detector settings live outside operative SSS identities. Validate them
+        # without migrating existing Stage 4A/4B reviews or injecting defaults.
+        squid = cfg.get("squid_jumps", {})
+        if not isinstance(squid, Mapping):
+            errors.append("`squid_jumps` must be a mapping.")
+        else:
+            from squid_jumps import parameters as squid_parameters
+            try:
+                squid_parameters(cfg)
+                if not isinstance(squid.get("reviews", {}), Mapping):
+                    errors.append("`squid_jumps.reviews` must be a mapping.")
+            except ValueError as exc:
+                errors.append(str(exc))
         maxwell = sections["maxwell_filter"]
         _require_keys(
             maxwell,
@@ -1203,6 +1236,43 @@ def validate_config(
 
     if "artifact_annotation" in requested:
         artifact = sections["artifact_annotation"]
+        blink = artifact.get("blink_auto", {})
+        if not isinstance(blink, Mapping):
+            errors.append("artifact_annotation.blink_auto must be a mapping.")
+        elif blink:
+            count = blink.get("n_components")
+            if isinstance(count, bool) or not isinstance(count, int) or not 2 <= count <= 10:
+                errors.append("blink_auto.n_components must be an integer from 2 through 10.")
+            for name in ("threshold_std", "min_peak_distance_sec", "tmax_sec", "long_peak_width_sec"):
+                value = blink.get(name)
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+                    errors.append(f"blink_auto.{name} must be finite and positive.")
+            value = blink.get("tmin_sec")
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value >= 0:
+                errors.append("blink_auto.tmin_sec must be finite and negative.")
+        # Eye proposals share the cached sources, never the blink fit/detector
+        # contract. Older configurations may omit this optional settings block.
+        eye = artifact.get("eye_movement_auto", {})
+        if not isinstance(eye, Mapping):
+            errors.append("artifact_annotation.eye_movement_auto must be a mapping.")
+        else:
+            for name, value in eye.items():
+                positive = name in ("median_window_sec", "threshold_std", "min_duration_sec")
+                if name not in ("median_window_sec", "threshold_std", "min_duration_sec", "merge_gap_sec", "padding_sec"):
+                    errors.append(f"Unknown eye_movement_auto setting: {name}.")
+                elif (isinstance(value, bool) or not isinstance(value, (int, float)) or
+                      not math.isfinite(value) or value < 0 or (positive and value == 0)):
+                    errors.append(f"eye_movement_auto.{name} must be finite and {'positive' if positive else 'nonnegative'}.")
+        guidance = artifact.get("edf_blink_candidates", {})
+        if not isinstance(guidance, Mapping):
+            errors.append("artifact_annotation.edf_blink_candidates must be a mapping.")
+        elif guidance:
+            if not isinstance(guidance.get("enabled"), bool):
+                errors.append("edf_blink_candidates.enabled must be boolean.")
+            for name in ("long_event_sec", "marker_tolerance_sec"):
+                value = guidance.get(name)
+                if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                    errors.append(f"edf_blink_candidates.{name} must be finite and positive.")
         _require_keys(
             artifact,
             "artifact_annotation",
