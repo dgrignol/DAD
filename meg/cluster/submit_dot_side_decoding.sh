@@ -3,31 +3,29 @@
 # submit_dot_side_decoding.sh
 #
 # Purpose
-# Run the optional dot-side decoding sanity check on the CIMeC cluster as one
-# Sun Grid Engine array task per participant x decoder sensor group. Each task
+# Run the optional dot-side decoding sanity check on the DIPSEN cluster as one
+# SLURM array task per participant x decoder sensor group. Each task
 # runs the four standard neural-condition/model-source analyses sequentially
 # for one Stage-07 sensor group. This wrapper consumes completed Stage-04
 # epochs and the recorded Stage-04 source manifest; it never reruns epoching,
 # dRSA export, or MATLAB dRSA.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub -t 1-28 meg/cluster/submit_dot_side_decoding.sh
-#
+#   sbatch --array=1-144%4 meg/cluster/submit_dot_side_decoding.sh
 # Rebuild existing sanity-check outputs intentionally:
-#   qsub -v DAD_REBUILD=1 -t 1-28 \
+#   DAD_REBUILD=1 sbatch --array=1-144%4 \
 #     meg/cluster/submit_dot_side_decoding.sh
-#
-# Run only selected analysis keys and change decoding settings:
-#   export DAD_DOT_SIDE_ANALYSES="occluded_deviant_observed,occluded_deviant_predicted"
-#   qsub -v DAD_DOT_SIDE_ANALYSES,DAD_DECODE_WINDOW_SAMPLES=15,DAD_TRIALS_PER_AVERAGE=2,DAD_RANDOM_SEED=97 \
-#     -t 1-28 meg/cluster/submit_dot_side_decoding.sh
-#
-# Validate inputs only, without decoding or writing outputs:
-#   qsub -v DAD_VALIDATE_ONLY=1 -t 1,4 \
+# Run selected analyses with changed decoding settings:
+#   DAD_DOT_SIDE_ANALYSES=occluded_deviant_observed,occluded_deviant_predicted \
+#   DAD_DECODE_WINDOW_SAMPLES=15 DAD_TRIALS_PER_AVERAGE=2 DAD_RANDOM_SEED=97 \
+#     sbatch --array=1-144%4 meg/cluster/submit_dot_side_decoding.sh
+# Validate representative tasks without decoding or writing outputs:
+#   DAD_VALIDATE_ONLY=1 sbatch --array=1,4 \
 #     meg/cluster/submit_dot_side_decoding.sh
-#
+# Request more CPU and memory for each task:
+#   sbatch --cpus-per-task=8 --mem=32G --array=1-144%4 \
+#     meg/cluster/submit_dot_side_decoding.sh
 # Inputs
 # - Completed Stage-04 epochs FIF under derivatives/analysis/sub-XX/ses-01/meg.
 # - source_manifest.json with completed Stage-04 epoching lineage.
@@ -59,17 +57,18 @@
 # - DAD_RANDOM_SEED: deterministic shuffle/CV seed.
 # - DAD_N_SPLITS: stratified CV folds.
 # - DAD_DOT_SIDE_OUT_DIR: optional explicit output directory.
-# Resource settings use standard qsub overrides, for example
-#   qsub -pe smp 8 -l h_vmem=32G -t 1-28 meg/cluster/submit_dot_side_decoding.sh
+# Resource settings can be overridden with standard SLURM options, for example
+#   sbatch --cpus-per-task=8 --mem=32G --array=1-144%4 \
+#     meg/cluster/submit_dot_side_decoding.sh
 
-#$ -N DAD_dot_side
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.$TASK_ID.log
-#$ -j y
-#$ -pe smp 4
-#$ -l h_vmem=24G
-#$ -t 1-28
+#SBATCH --job-name=DAD_dot_side
+#SBATCH --output=cluster_logs/%x.%A_%a.log
+#SBATCH --error=cluster_logs/%x.%A_%a.err
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=24G
+#SBATCH --time=1-00:00:00
+#SBATCH --export=ALL
+#SBATCH --array=1-144%4
 
 set -euo pipefail
 
@@ -82,7 +81,7 @@ PROJECT_ROOT="${DAD_PROJECT_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Att
 DERIVATIVES_ROOT="${DAD_DERIVATIVES_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/derivatives}"
 MAMBA_ENV="${DAD_MAMBA_ENV:-dad-meg}"
 MAMBA_BIN="${MICROMAMBA_BIN:-$HOME/bin/micromamba}"
-TASK_ID="${SGE_TASK_ID:?SGE_TASK_ID is required; submit this as an SGE array job.}"
+TASK_ID="${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required; submit this as an SLURM array job.}"
 REBUILD="${DAD_REBUILD:-0}"
 VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 DECODE_TMIN="${DAD_DECODE_TMIN:-0.0}"
@@ -155,15 +154,16 @@ case "$DECODER_SENSOR_TYPE" in
         ;;
 esac
 
-N_SUBJECTS=7
+# The array axis is subject x sensor group; index 1 corresponds to P04.
+N_SUBJECTS=36
 N_SENSOR_GROUPS="${#SENSOR_GROUPS[@]}"
 MAX_TASKS=$((N_SUBJECTS * N_SENSOR_GROUPS))
 if (( TASK_ID < 1 )); then
-    echo "ERROR: SGE_TASK_ID must be at least 1; got ${TASK_ID}." >&2
+    echo "ERROR: SLURM_ARRAY_TASK_ID must be at least 1; got ${TASK_ID}." >&2
     exit 2
 fi
 if (( TASK_ID > MAX_TASKS )); then
-    echo ">>> SGE_TASK_ID ${TASK_ID} exceeds requested subject x sensor-group count (${MAX_TASKS}); exiting without work."
+    echo ">>> SLURM_ARRAY_TASK_ID ${TASK_ID} exceeds requested subject x sensor-group count (${MAX_TASKS}); exiting without work."
     exit 0
 fi
 if [[ "$REBUILD" != "0" && "$REBUILD" != "1" ]]; then
@@ -181,7 +181,7 @@ fi
 
 SUBJECT_INDEX=$(( (TASK_ID - 1) / N_SENSOR_GROUPS + 1 ))
 SENSOR_INDEX=$(( (TASK_ID - 1) % N_SENSOR_GROUPS ))
-SUBJECT_ID="$(printf "%02d" "$SUBJECT_INDEX")"
+SUBJECT_ID="$(printf "%02d" "$((SUBJECT_INDEX + 3))")"
 SUBJECT_LABEL="sub-${SUBJECT_ID}"
 SENSOR_GROUP="${SENSOR_GROUPS[$SENSOR_INDEX]}"
 DEFAULT_CONFIG="$PROJECT_ROOT/meg/params/pipeline_default.yaml"
@@ -209,12 +209,12 @@ export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
 export MNE_BROWSER_BACKEND=matplotlib
-export OMP_NUM_THREADS="${NSLOTS:-4}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-4}"
-export MKL_NUM_THREADS="${NSLOTS:-4}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-4}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_${JOB_ID:-manual}_${TASK_ID}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_${SLURM_JOB_ID:-manual}_${TASK_ID}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -258,7 +258,7 @@ echo ">>> Decode window samples: $DECODE_WINDOW_SAMPLES"
 echo ">>> Trials per average: $TRIALS_PER_AVERAGE"
 echo ">>> Random seed: $RANDOM_SEED"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 for analysis_spec in "${ANALYSES[@]}"; do
     MODEL_SOURCE="${analysis_spec##*_}"

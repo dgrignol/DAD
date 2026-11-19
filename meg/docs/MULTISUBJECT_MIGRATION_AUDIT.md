@@ -333,7 +333,7 @@ of reconstructing paths or assuming V28/20 identities.
 `run_pipeline.py` registers `matlab_drsa` as an optional downstream stage. It
 inherits resume/overwrite/dry-run behavior and remains independent from
 epoching and neural export. `meg/cluster/submit_drsa_analysis.sh` submits one
-subject per SGE array task. `meg/cluster/deploy_review_to_cluster.sh` now
+subject per SLURM array task. `meg/cluster/deploy_review_to_cluster.sh` now
 deploys `meg/code/analysis/`, `07_run_matlab_drsa.py`, the Stage-07 wrapper,
 and `simulations/functions/`.
 
@@ -399,7 +399,7 @@ refactored into import-safe configuration-driven CLIs.
 - Machine paths can be supplied through a distinct site-config layer. The
   merge order is default, site, subject, then tuning.
 - `meg/cluster/submit_preprocessing_review.sh` runs one noninteractive review
-  job per subject under Sun Grid Engine and never invokes automatic ICA.
+  job per subject as a SLURM array and never invokes automatic ICA.
 - `render_stage03_mne_reports.py` converts completed stage JSON and PNG
   artifacts into portable, self-contained MNE reports without reopening FIF
   files or rerunning scientific processing. When available,
@@ -578,7 +578,7 @@ whether decoding is fully or partially well-defined. At group level, time
 points with any subject-level NaN are excluded from the statistic and left as
 plot gaps so cluster tests do not bridge skipped windows.
 
-`meg/cluster/submit_dot_side_decoding.sh` runs one subject per SGE array task
+`meg/cluster/submit_dot_side_decoding.sh` runs one subject per SLURM array task
 and executes all four standard analyses sequentially by default. It reuses the
 cluster conventions for `pipeline_cluster.yaml`, micromamba activation,
 headless matplotlib/MNE settings, `cluster_logs`, validation, and resume/rebuild
@@ -636,7 +636,7 @@ Final verification on June 16, 2026:
 - Cluster-site `pipeline_config.py --site-config
   meg/params/pipeline_cluster.yaml --validate-only` could not complete on the
   laptop because `/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/data`
-  is not mounted locally. Run this validation on the CIMeC cluster before
+  is not mounted locally. Run this validation on DIPSEN before
   participant array submission.
 - A full local sub05 `always_visible` run completed with 201 source trials,
   201 decoder trials, 320 decoded windows, 10-sample sliding windows, no

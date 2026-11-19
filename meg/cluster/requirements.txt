@@ -2,12 +2,11 @@
 #
 # Purpose:
 #   Provide a binary-wheel-only fallback for the headless dependencies required
-#   by the CIMeC first-pass MEG preprocessing review job. The supported cluster
+#   by the DAD MEG preprocessing and analysis jobs. The supported cluster
 #   setup uses environment.yml and conda-forge instead, because unrestricted
-#   pip resolution may select a NumPy source release that cannot be compiled by
-#   the cluster's GCC 4.8.5.
+#   pip resolution may select source releases that require a compiler build.
 #
-# Fallback usage on a compute node:
+# Fallback usage inside a SLURM compute allocation:
 #   python -m pip install --only-binary=:all: \
 #     -r meg/cluster/requirements.txt
 #
@@ -21,3 +20,4 @@ mne==1.10.2
 matplotlib==3.8.4
 pandas==2.2.3
 scikit-learn==1.5.2
+eyelinkio==0.3.0

@@ -1,6 +1,16 @@
-### *CIMeC cluster*
+### *Legacy notes: CIMeC SGE cluster*
 
-This section explains how to (1) access the cluster, (2) submit parallel jobs using qsub and (3) run code on individual nodes. A small, fully commented .sh submission script is provided at the end.
+> **Status:** This guide describes the previous CIMeC cluster and its Sun Grid
+> Engine (`qsub`) scheduler. For current access, connect to
+> `hpc.dipsen.unitn.it`; the DAD project directory remains
+> `/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD` for now. The old
+> host, direct compute-node SSH, and `qsub` instructions below are historical
+> and must not be used on DIPSEN. See the [current DIPSEN HPC documentation](https://hpc.dipsen.unitn.it/)
+> for login and SLURM instructions.
+
+The remaining sections are historical examples for accessing the old cluster,
+submitting parallel jobs with `qsub`, and running code on individual nodes.
+A commented submission script is provided at the end for reference only.
 
 ---
 

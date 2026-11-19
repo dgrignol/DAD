@@ -1,3 +1,198 @@
+# 19 Nov 2026 17:27
+
+## feat(cluster): migrate cohort workflows to SLURM on DIPSEN
+
+### `.gitignore`
+
+- Keep binary participant/generated files ignored while allowing the one exact facility crosstalk calibration FIF after the general *.fif rule.
+
+### `CIMeC_cluster_docs.md`
+
+- > **Status:** This guide describes the previous CIMeC cluster and its Sun Grid > Engine (`qsub`) scheduler. For current access, connect to > `hpc.dipsen.unitn.it`; the DAD project directory remains > `/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD` for now. The old > host, direct compute-node SSH, and `qsub` instructions below are historical > and must not be used on DIPSEN. See the [current DIPSEN HPC documentation](https://hpc.dipsen.unitn.it/) > for login and SLURM instructions.
+- Document *Legacy notes: CIMeC SGE cluster*; *1\. Access the Cluster*; **1.1 Connect to the VPN (if outside UNITN network)**; **1.2 Open a Terminal**; *2\. Running Code Directly on a Compute Node (useful for debugging)*; **2.1 Activate your virtual environment**.
+
+### `meg/cluster/README.md`
+
+- This runbook covers DAD's SLURM submission wrappers on the DIPSEN cluster. The wrappers read raw MEG data from `/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/data` and write derivatives under `/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/derivatives`. The raw tree is read-only and must never be used as an output location.
+- Document DAD MEG Pipeline on DIPSEN HPC; Current epoch/export retry (2026-11-17); Current executable route (2026-11-12); Earlier Stage 4 handoff: current masks, then final ICA; Parallel participant execution; Access and deployment.
+
+### `meg/cluster/README_SGE_legacy.md`
+
+- > **Historical reference only:** this file preserves the former SGE `qsub` > workflow. The active wrappers now use SLURM; do not run the commands in > this archive. See [`README.md`](README.md) for current DIPSEN instructions.
+- Document Archived DAD MEG Pipeline SGE Workflow; Purpose; Files; Current DIPSEN connection; One-Time Deployment; Legacy SGE job workflow: sources and triggers.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+
+- Deploy the files required to run Stage 2 trial accounting, Stage 3 timing, preprocessing review/apply, downstream epoching/export, MATLAB dRSA, optional dRSA post-processing, and optional sanity checks on the DIPSEN HPC cluster. This script runs on the local computer, creates the remote DAD directory outside the raw tree, and preserves the required ``meg/...`` layout with rsync.
+- Include the new stage modules, reports, subject selectors and calibration resources in the explicit deployment payload; this commit does not run deployment.
+
+### `meg/cluster/environment.yml`
+
+- Define the reproducible MEG runtime environment and its pinned EDF reader; retain separate local and headless cluster environments.
+
+### `meg/cluster/requirements.txt`
+
+- PyYAML==6.0.3 numpy==1.26.4 scipy==1.13.1 h5py==3.11.0 mne==1.10.2 matplotlib==3.8.4 pandas==2.2.3 scikit-learn==1.5.2 eyelinkio==0.3.0
+- Document requirements.txt; ; Purpose:; Provide a binary-wheel-only fallback for the headless dependencies required; by the DAD MEG preprocessing and analysis jobs. The supported cluster; setup uses environment.yml and conda-forge instead, because unrestricted.
+
+### `meg/cluster/submit_annotation_retention_report.sh`
+
+- Render embedded HTML retention books, optionally recounting revised annotations.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_annotation_triage.sh`
+
+- Import completed component choices and count preliminary annotation retention.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_dot_erf_analysis.sh`
+
+- Run the optional group dot-condition ERF sanity-check analysis on the DIPSEN cluster. This wrapper executes ``meg/code/sanity_checks/05_dot_erf_analysis.py`` as one SLURM array task per Stage-07 sensor group. Each task uses the same requested subject group, but writes only one sensor-group-specific set of subject/group ERF sanity-check outputs plus linked/embedded HTML reports.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_dot_side_decoding.sh`
+
+- Run the optional dot-side decoding sanity check on the DIPSEN cluster as one SLURM array task per participant x decoder sensor group. Each task runs the four standard neural-condition/model-source analyses sequentially for one Stage-07 sensor group. This wrapper consumes completed Stage-04 epochs and the recorded Stage-04 source manifest; it never reruns epoching, dRSA export, or MATLAB dRSA.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_dot_side_group_report.sh`
+
+- Build combined group-level dot-side decoding sanity-check reports on the DIPSEN cluster after the per-subject dot-side array jobs have completed. This is a one-task aggregation job that loops over the requested decoder sensor groups; it does not rerun participant decoding. Each report places all group analyses before participant-specific figures.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_dot_side_time_generalization.sh`
+
+- submit_dot_side_time_generalization.sh
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_dot_side_time_generalization_group_report.sh`
+
+- submit_dot_side_time_generalization_group_report.sh
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_drsa_analysis.sh`
+
+- Run the optional Stage-07 MATLAB dRSA analysis layer on the DIPSEN cluster. One SLURM array task processes one participant. This stage consumes completed Stage-06 identity-averaged neural exports and writes MATLAB dRSA PNG/MAT outputs plus JSON/HTML reports. The guarded Stage-07 CLI runs directly, preserving earlier Stage-1 inventory and resolved-configuration snapshots instead of re-entering orchestration.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_drsa_group_average.sh`
+
+- Build the optional Stage-07 numeric group-average dRSA report on the DIPSEN cluster from existing subject-level Stage-07 MATLAB result MAT files. This is a one-task aggregation job; it does not run MATLAB and does not rerun Stage 04, Stage 06, or the subject-level Stage 07 dRSA jobs.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_drsa_line_summaries.sh`
+
+- Build the optional Stage-08 group dRSA line-summary report on the DIPSEN cluster from existing Stage-07 result MAT files. This is a one-task group aggregation job; it does not run MATLAB and does not rerun Stage 04, Stage 06, or Stage 07 dRSA.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_drsa_stats.sh`
+
+- Build the optional Stage-10 group dRSA statistical report on the DIPSEN cluster from existing subject-level Stage-07 result MAT files. This is a one-task group aggregation job; it does not run MATLAB and does not rerun Stage 04, Stage 06, Stage 07, Stage 08, or Stage 09.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_epoch_export.sh`
+
+- Run production Stage 04 epoching followed by Stage 06 dRSA neural export on the DIPSEN cluster. One SLURM array task processes one participant. The two guarded stage CLIs run sequentially, so export starts only after epoching succeeds. This preserves earlier Stage 1 inventory/config snapshots. Accepted subject tuning and the hash-bound s3-v002 review are passed explicitly; DAD_TIMING_REVIEW_DIR can select another already accepted review directory.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_final_ica_reports.sh`
+
+- Rebuild FINAL ICA review figures/HTML from exact existing models; NEVER refit.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_ica_application_qc.sh`
+
+- Audit the whole selected cohort after ICA application, with disjoint workers.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_ocular_component_reports.sh`
+
+- Build ONE offline ocular-component HTML report per participant.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_apply.sh`
+
+- Apply the exact reviewed final ICA model per P04-P39 participant, reusing accepted 4A/4B outputs. Never rebuild those upstream inputs after ICA review.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_review.sh`
+
+- Run one explicitly selected Stage 4 review step per participant P04-P39. Default: 4A only (maxwell_filter). 4B requires accepted 4A; 4C requires accepted 4A and 4B. Jobs never infer scientific acceptance.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_stage1.sh`
+
+- Run the first cohort review gate: source preflight, session-note and FIF header inventory, STI101 trigger extraction/alignment, and the full deep trigger report for every participant. Visual timing, including P24 timing, is deferred to the cohort-wide visual-timing gate. The job stops before Maxwell filtering, artifact decisions, ICA, epoching, or visual-time correction application.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_stage2.sh`
+
+- Purpose: Stage 2 trial accounting for P04-P39, before epoch creation. Usage from the deployed DAD root: mkdir -p cluster_logs stage2_job=$(sbatch --parsable --array=4-39 meg/cluster/submit_preprocessing_stage2.sh) sbatch --dependency="afterok:${stage2_job}" meg/cluster/submit_preprocessing_stage2_summary.sh Inputs: accepted Stage 1 derivatives, read-only raw FIF headers, configuration, and PREPROCESSING_DECISIONS.md. Outputs: dedicated trial_preparation bundles. Data flow: array task -> participant selector -> trial_preparation.py ledger/QC. No runner/preflight regeneration, timing...
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_stage2_summary.sh`
+
+- Purpose: summarize all 36 completed Stage 2 participant bundles. Usage from the deployed DAD root, after submitting the participant array: sbatch --dependency="afterok:${stage2_job}" meg/cluster/submit_preprocessing_stage2_summary.sh Inputs: P04-P39 Stage 2 bundles and their unchanged Stage 1 evidence. Outputs: reports/group/trial_preparation cohort MD/JSON and count CSVs. Data flow: single SLURM job -> shared environment wrapper -> cohort aggregator. Missing, stale, or altered bundles stop aggregation. This job never submits another job. Explicit DAD_STAGE2_OVERWRITE=1 affects only summary...
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_stage3.sh`
+
+- Purpose: user-submitted Stage 3 visual timing, P04-P39; no cleaning/epoching. Usage from the deployed DAD root: DAD_STAGE3_VERSION=s3-pilot-v001 DAD_STAGE3_PILOT=1 \ sbatch --array=8,9,11,24 meg/cluster/submit_preprocessing_stage3.sh DAD_STAGE3_VERSION=s3-v001 sbatch --array=4-39 \ meg/cluster/submit_preprocessing_stage3.sh Inputs: accepted Stage 1/2, raw FIFs (read-only), saved Conf, candidate method. Outputs: derivatives/visual_timing/VERSION/sub-XX/ses-01 immutable proposals. Data flow: array participant -> standalone timing CLI -> explicit later review. DAD_STAGE3_VALIDATE_ONLY=1 checks...
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_preprocessing_stage3_summary.sh`
+
+- Purpose: aggregate 36 intact Stage 3 proposals without accepting their science. Usage after a successful participant array, from the deployed DAD root: DAD_STAGE3_VERSION=s3-v001 sbatch --dependency="afterok:${stage3_job}" \ meg/cluster/submit_preprocessing_stage3_summary.sh Inputs: full P04-P39 proposals, current accepted Stage 2 evidence and method. Outputs: immutable derivatives/visual_timing/VERSION/group cohort report. Data flow: single job -> shared Stage 3 environment wrapper -> aggregation. Pilot/missing/stale/edited bundles stop this job. No signals/epochs are read. This wrapper...
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/cluster/submit_stage4b_adoption.sh`
+
+- Adopt/reconcile current BAD masks under the explicit 2026-11-07 policy.
+- Use SLURM submission with explicit job/log/resource settings and participant task selection; execution remains user-controlled.
+
+### `meg/docs/MULTISUBJECT_MIGRATION_AUDIT.md`
+
+- This audit records the implemented configuration, discovery, provenance, and orchestration foundation for the external seven-subject dataset.
+- Document Multisubject Migration Audit; Scope; Implemented Foundation; Configuration; Discovery; Durable Source Manifest.
+
+### `meg/docs/MULTISUBJECT_REFACTOR_PROMPTS.md`
+
+- Use the chats in order. Paste the Common Context followed by the prompt for the selected stage.
+- Document Multisubject MEG Refactor Prompts; Common Context; DONE -> Chat 1: External Dataset Profiles And Run Manifest; DONE -> Chat 2: Trigger Extraction Across Experiment Versions; DONE (implementation; participant review/apply must satisfy the gate above) -> Chat 3: Maxwell Filtering, Artefacts And ICA; DONE (implementation; participant epoch/export execution remains separate) -> Chat 4: Epoching, Export And Sanity Checks.
+
+### `meg/environment-macos-dRSA-lock.yml`
+
+- Record the resolved local macOS numerical/MEG/EDF environment for reproducible installation; omit the machine-specific installation prefix.
+
+### `meg/environment-macos-dRSA.yml`
+
+- Define the reproducible MEG runtime environment and its pinned EDF reader; retain separate local and headless cluster environments.
+
+### `meg/meg_calibration_files/fwmegmaxfilter/ct_sparse_triux2.fif`
+
+- Add the 26,124-byte facility crosstalk calibration matrix as an intentional static instrument input, not a participant recording.
+- Use a single exact .gitignore exception so other raw/generated FIF files remain excluded.
+
+### `meg/meg_calibration_files/fwmegmaxfilter/sss_cal_3182_250410.dat`
+
+- Version the facility sensor calibration table used with the matching crosstalk matrix for Maxwell filtering.
+
+### `meg/params/pipeline_cluster.yaml`
+
+- Resolve facility calibration and crosstalk from meg/meg_calibration_files/fwmegmaxfilter while retaining the cluster's project/data locations.
+
+### `meg/params/pipeline_default.yaml`
+
+- Move the calibration/crosstalk resource paths to the dedicated facility-input directory.
+
+### `meg/tests/test_cluster_wrappers.py`
+
+- Validate the SLURM submission wrappers without submitting jobs or running scientific preprocessing. Verify that the apply wrapper delegates through DAD_PROJECT_ROOT and that P24 Stage 1 stops after the digital trigger stage with the deep report enabled; timing adapters belong to a later cohort gate.
+- Exercise Dispatch only requested counting/rendering stages and stop on failure; Verify ordered cohort dispatch and fail-closed behavior without data/jobs; Dispatch through harmless runtimes; no scheduler/scientific command may run; Test user command construction with harmless runtimes; submit no jobs; Run the actual wrapper against harmless environment/Python stubs.
+
+Suggested commit message:
+`feat(cluster): migrate cohort workflows to SLURM on DIPSEN`
+
 # 19 Nov 2026 17:26
 
 ## feat(meg): add isolated inline epoch runs and participant recovery variants

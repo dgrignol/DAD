@@ -3,27 +3,21 @@
 # submit_drsa_stats.sh
 #
 # Purpose
-# Build the optional Stage-10 group dRSA statistical report on the CIMeC
+# Build the optional Stage-10 group dRSA statistical report on the DIPSEN
 # cluster from existing subject-level Stage-07 result MAT files. This is a
 # one-task group aggregation job; it does not run MATLAB and does not rerun
 # Stage 04, Stage 06, Stage 07, Stage 08, or Stage 09.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub meg/cluster/submit_drsa_stats.sh
-#
-# Rebuild existing Stage-10 stats outputs:
-#   qsub -v DAD_REBUILD=1 meg/cluster/submit_drsa_stats.sh
-#
-# Restrict to occipital A_dRSA_alt line-summary stats:
-#   qsub -v DAD_DRSA_STATS_TARGETS=line-summaries,DAD_DRSA_STATS_ANALYSIS_FAMILIES=A_dRSA_alt,DAD_DRSA_STATS_SENSOR_GROUPS=occipital \
-#     meg/cluster/submit_drsa_stats.sh
-#
-# Include display-smoothed inputs as explicitly labeled additional tests:
-#   qsub -v DAD_REBUILD=1,DAD_DRSA_STATS_INCLUDE_SMOOTHED=1 \
-#     meg/cluster/submit_drsa_stats.sh
-#
+#   sbatch meg/cluster/submit_drsa_stats.sh
+# Rebuild existing Stage-10 statistical outputs:
+#   DAD_REBUILD=1 sbatch meg/cluster/submit_drsa_stats.sh
+# Restrict to occipital A_dRSA_alt line-summary statistics:
+#   DAD_DRSA_STATS_TARGETS=line-summaries \
+#   DAD_DRSA_STATS_ANALYSIS_FAMILIES=A_dRSA_alt \
+#   DAD_DRSA_STATS_SENSOR_GROUPS=occipital \
+#     sbatch meg/cluster/submit_drsa_stats.sh
 # Inputs
 # - Existing Stage-07 result MAT files below
 #   derivatives/analysis/sub-XX/ses-01/drsa/.
@@ -37,7 +31,7 @@
 # Environment variables
 # - DAD_PROJECT_ROOT: cluster DAD root.
 # - DAD_MAMBA_ENV, MICROMAMBA_BIN: Python environment selection.
-# - DAD_DRSA_STATS_SUBJECTS: comma-separated subjects, default 01..07.
+# - DAD_DRSA_STATS_SUBJECTS: comma-separated subjects, default 04..39.
 # - DAD_DRSA_STATS_CONDITIONS: optional comma-separated condition filter.
 # - DAD_DRSA_STATS_MODELS: optional comma-separated model/feature selectors.
 # - DAD_DRSA_STATS_MODEL_SOURCES: optional comma-separated model-source filter.
@@ -60,13 +54,13 @@
 # - DAD_DRSA_STATS_REPORT_CLUSTER_TABLES: significant, all, or none.
 # - DAD_REBUILD: 1 overwrites existing outputs; 0 resumes existing outputs.
 
-#$ -N DAD_drsa_stats
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.log
-#$ -j y
-#$ -pe smp 4
-#$ -l h_vmem=16G
+#SBATCH --job-name=DAD_drsa_stats
+#SBATCH --output=cluster_logs/%x.%j.log
+#SBATCH --error=cluster_logs/%x.%j.err
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=2-00:00:00
+#SBATCH --export=ALL
 
 set -euo pipefail
 
@@ -79,7 +73,7 @@ PROJECT_ROOT="${DAD_PROJECT_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Att
 MAMBA_ENV="${DAD_MAMBA_ENV:-dad-meg}"
 MAMBA_BIN="${MICROMAMBA_BIN:-$HOME/bin/micromamba}"
 REBUILD="${DAD_REBUILD:-0}"
-SUBJECTS_CSV="${DAD_DRSA_STATS_SUBJECTS:-01,02,03,04,05,06,07}"
+SUBJECTS_CSV="${DAD_DRSA_STATS_SUBJECTS:-04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}"
 CONDITIONS_CSV="${DAD_DRSA_STATS_CONDITIONS:-}"
 MODELS_CSV="${DAD_DRSA_STATS_MODELS:-}"
 MODEL_SOURCES_CSV="${DAD_DRSA_STATS_MODEL_SOURCES:-}"
@@ -166,12 +160,12 @@ micromamba activate "$MAMBA_ENV"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
-export OMP_NUM_THREADS="${NSLOTS:-4}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-4}"
-export MKL_NUM_THREADS="${NSLOTS:-4}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-4}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_drsa_stats_${JOB_ID:-manual}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_drsa_stats_${SLURM_JOB_ID:-manual}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -289,7 +283,7 @@ echo ">>> Significance alpha: $SIGNIFICANCE_ALPHA"
 echo ">>> Tail: $TAIL"
 echo ">>> Backend: $STATS_BACKEND"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '>>> Command:'
 printf ' %q' "${COMMAND[@]}"

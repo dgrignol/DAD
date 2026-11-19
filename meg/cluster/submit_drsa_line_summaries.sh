@@ -3,36 +3,23 @@
 # submit_drsa_line_summaries.sh
 #
 # Purpose
-# Build the optional Stage-08 group dRSA line-summary report on the CIMeC
+# Build the optional Stage-08 group dRSA line-summary report on the DIPSEN
 # cluster from existing Stage-07 result MAT files. This is a one-task group
 # aggregation job; it does not run MATLAB and does not rerun Stage 04, Stage 06,
 # or Stage 07 dRSA.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub meg/cluster/submit_drsa_line_summaries.sh
-#
-# Rebuild existing Stage-08 group line-summary outputs:
-#   qsub -v DAD_REBUILD=1 meg/cluster/submit_drsa_line_summaries.sh
-#
-# Rebuild with descriptive within-subject diagonal-SD shading instead of the
-# default across-subject SEM shading:
-#   qsub -v DAD_REBUILD=1,DAD_DRSA_LINE_SHADING=within-subject-diagonal-sd \
-#     meg/cluster/submit_drsa_line_summaries.sh
-#
-# Rebuild with no interval lag-curve shading:
-#   qsub -v DAD_REBUILD=1,DAD_DRSA_LINE_SHADING=none \
-#     meg/cluster/submit_drsa_line_summaries.sh
-#
-# Rebuild with strict same-interval square support for interval lag curves:
-#   qsub -v DAD_REBUILD=1,DAD_DRSA_LINE_INTERVAL_LAG_MODE=same-interval-square \
-#     meg/cluster/submit_drsa_line_summaries.sh
-#
-# Restrict to occipital Stage-07 result files and use a +/-0.5 s lag window:
-#   qsub -v DAD_DRSA_LINE_SENSOR_GROUPS=occipital,DAD_DRSA_LINE_LAG_WINDOW_SEC=0.5 \
-#     meg/cluster/submit_drsa_line_summaries.sh
-#
+#   sbatch meg/cluster/submit_drsa_line_summaries.sh
+# Rebuild with within-subject diagonal-SD shading:
+#   DAD_REBUILD=1 DAD_DRSA_LINE_SHADING=within-subject-diagonal-sd \
+#     sbatch meg/cluster/submit_drsa_line_summaries.sh
+# Rebuild with strict same-interval square support:
+#   DAD_REBUILD=1 DAD_DRSA_LINE_INTERVAL_LAG_MODE=same-interval-square \
+#     sbatch meg/cluster/submit_drsa_line_summaries.sh
+# Restrict to occipital results and use a +/-0.5 s lag window:
+#   DAD_DRSA_LINE_SENSOR_GROUPS=occipital DAD_DRSA_LINE_LAG_WINDOW_SEC=0.5 \
+#     sbatch meg/cluster/submit_drsa_line_summaries.sh
 # Inputs
 # - Existing Stage-07 result MAT files below
 #   derivatives/analysis/sub-XX/ses-01/drsa/.
@@ -46,7 +33,7 @@
 # Environment variables
 # - DAD_PROJECT_ROOT: cluster DAD root.
 # - DAD_MAMBA_ENV, MICROMAMBA_BIN: Python environment selection.
-# - DAD_DRSA_LINE_SUBJECTS: comma-separated subjects, default 01..07.
+# - DAD_DRSA_LINE_SUBJECTS: comma-separated subjects, default 04..39.
 # - DAD_DRSA_LINE_CONDITIONS: optional comma-separated condition filter.
 # - DAD_DRSA_LINE_SENSOR_GROUPS: optional comma-separated sensor-group filter.
 # - DAD_DRSA_LINE_LAG_WINDOW_SEC: lag search half-window, default 1.0.
@@ -57,13 +44,13 @@
 # - DAD_DRSA_LINE_INTERVAL_LAG_MODE: model-anchored or same-interval-square.
 # - DAD_REBUILD: 1 overwrites existing outputs; 0 resumes existing outputs.
 
-#$ -N DAD_drsa_lines
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.log
-#$ -j y
-#$ -pe smp 2
-#$ -l h_vmem=12G
+#SBATCH --job-name=DAD_drsa_lines
+#SBATCH --output=cluster_logs/%x.%j.log
+#SBATCH --error=cluster_logs/%x.%j.err
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=12G
+#SBATCH --time=12:00:00
+#SBATCH --export=ALL
 
 set -euo pipefail
 
@@ -76,7 +63,7 @@ PROJECT_ROOT="${DAD_PROJECT_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Att
 MAMBA_ENV="${DAD_MAMBA_ENV:-dad-meg}"
 MAMBA_BIN="${MICROMAMBA_BIN:-$HOME/bin/micromamba}"
 REBUILD="${DAD_REBUILD:-0}"
-SUBJECTS_CSV="${DAD_DRSA_LINE_SUBJECTS:-01,02,03,04,05,06,07}"
+SUBJECTS_CSV="${DAD_DRSA_LINE_SUBJECTS:-04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}"
 CONDITIONS_CSV="${DAD_DRSA_LINE_CONDITIONS:-}"
 SENSOR_GROUPS_CSV="${DAD_DRSA_LINE_SENSOR_GROUPS:-}"
 LAG_WINDOW_SEC="${DAD_DRSA_LINE_LAG_WINDOW_SEC:-1.0}"
@@ -132,12 +119,12 @@ micromamba activate "$MAMBA_ENV"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
-export OMP_NUM_THREADS="${NSLOTS:-2}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-2}"
-export MKL_NUM_THREADS="${NSLOTS:-2}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-2}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_drsa_lines_${JOB_ID:-manual}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_drsa_lines_${SLURM_JOB_ID:-manual}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -216,7 +203,7 @@ echo ">>> Interval lag-curve shading: $SHADING"
 echo ">>> Interval lag-curve mode: $INTERVAL_LAG_MODE"
 echo ">>> Lag window sec: $LAG_WINDOW_SEC"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '>>> Command:'
 printf ' %q' "${COMMAND[@]}"

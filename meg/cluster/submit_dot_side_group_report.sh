@@ -4,24 +4,19 @@
 #
 # Purpose
 # Build combined group-level dot-side decoding sanity-check reports on the
-# CIMeC cluster after the per-subject dot-side array jobs have completed. This
+# DIPSEN cluster after the per-subject dot-side array jobs have completed. This
 # is a one-task aggregation job that loops over the requested decoder sensor
 # groups; it does not rerun participant decoding. Each report places all group
 # analyses before participant-specific figures.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub meg/cluster/submit_dot_side_group_report.sh
-#
+#   sbatch meg/cluster/submit_dot_side_group_report.sh
 # Build only selected Stage-07 groups:
-#   qsub -v DAD_DOT_SIDE_SENSOR_GROUPS=occipital,temporal \
-#     meg/cluster/submit_dot_side_group_report.sh
-#
+#   DAD_DOT_SIDE_SENSOR_GROUPS=occipital,temporal \
+#     sbatch meg/cluster/submit_dot_side_group_report.sh
 # Validate inputs without writing outputs:
-#   qsub -v DAD_VALIDATE_ONLY=1 \
-#     meg/cluster/submit_dot_side_group_report.sh
-#
+#   DAD_VALIDATE_ONLY=1 sbatch meg/cluster/submit_dot_side_group_report.sh
 # Inputs
 # - Completed subject-level dot-side summary JSON, scores CSV, and PNG outputs
 #   for every requested subject.
@@ -42,7 +37,7 @@
 #   occluded_deviant_observed, and occluded_deviant_predicted.
 # - DAD_DOT_SIDE_SENSOR_GROUPS: comma-separated groups, default
 #   occipital,parietal,frontal,temporal. Add wholebrain explicitly if needed.
-# - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 01..07.
+# - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 04..39.
 # - DAD_DOT_SIDE_METRIC: scores CSV metric column, default balanced accuracy.
 # - DAD_DOT_SIDE_INTERVAL: ci95 or sem; default sem for poster-readable bands.
 # - DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES: optional Gaussian smoothing sigma in
@@ -56,13 +51,13 @@
 # - DAD_ALLOW_MISSING: 1 builds from available subjects and lists missing ones.
 # - DAD_REBUILD: 1 overwrites existing group outputs; 0 resumes existing outputs.
 
-#$ -N DAD_dot_side_group
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.log
-#$ -j y
-#$ -pe smp 2
-#$ -l h_vmem=8G
+#SBATCH --job-name=DAD_dot_side_group
+#SBATCH --output=cluster_logs/%x.%j.log
+#SBATCH --error=cluster_logs/%x.%j.err
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=12:00:00
+#SBATCH --export=ALL
 
 set -euo pipefail
 
@@ -79,7 +74,7 @@ REBUILD="${DAD_REBUILD:-0}"
 VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 ALLOW_MISSING="${DAD_ALLOW_MISSING:-0}"
 ANALYSES_CSV="${DAD_DOT_SIDE_ANALYSES:-all}"
-SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
+SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}"
 SENSOR_GROUPS_CSV="${DAD_DOT_SIDE_SENSOR_GROUPS:-occipital,parietal,frontal,temporal}"
 METRIC="${DAD_DOT_SIDE_METRIC:-accuracy_balanced_undersampled_sets}"
 INTERVAL="${DAD_DOT_SIDE_INTERVAL:-sem}"
@@ -105,7 +100,7 @@ fi
 
 DEFAULT_CONFIG="$PROJECT_ROOT/meg/params/pipeline_default.yaml"
 SITE_CONFIG="$PROJECT_ROOT/meg/params/pipeline_cluster.yaml"
-SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/sub-01.yaml"
+SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/sub-04.yaml"
 SCRIPT="$PROJECT_ROOT/meg/code/sanity_checks/02_dot_side_group_report.py"
 IFS=',' read -r -a SUBJECTS <<< "$SUBJECTS_CSV"
 IFS=',' read -r -a ANALYSES <<< "$ANALYSES_CSV"
@@ -143,12 +138,12 @@ micromamba activate "$MAMBA_ENV"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
-export OMP_NUM_THREADS="${NSLOTS:-2}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-2}"
-export MKL_NUM_THREADS="${NSLOTS:-2}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-2}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_group_${JOB_ID:-manual}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_group_${SLURM_JOB_ID:-manual}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -185,7 +180,7 @@ echo ">>> Cluster-forming p: $CLUSTER_FORMING_P"
 echo ">>> Cluster alpha: $CLUSTER_ALPHA"
 echo ">>> Tail: $CLUSTER_TAIL"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 for sensor_group in "${SENSOR_GROUPS[@]}"; do

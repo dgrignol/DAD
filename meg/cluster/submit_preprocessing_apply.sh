@@ -3,49 +3,31 @@
 # submit_preprocessing_apply.sh
 #
 # Purpose
-# Submit the reviewed DAD stage-03 apply pass as one Sun Grid Engine array task
-# per participant. This wrapper requires each subject's
-# ``03_tuning_choices.yaml`` and intentionally overwrites review scientific
-# derivatives with common-destination Maxwell outputs, reviewed artifact
-# thresholds, and manual-ICA-cleaned FIF files.
+# Apply the exact reviewed final ICA model per P04-P39 participant, reusing
+# accepted 4A/4B outputs. Never rebuild those upstream inputs after ICA review.
 #
-# Usage
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
-#   mkdir -p cluster_logs
-#   qsub -t 1-7 meg/cluster/submit_preprocessing_apply.sh
+# Usage from remote DAD root after accepted component/filter decisions
+#   sbatch --array=4-14,16-39 meg/cluster/submit_preprocessing_apply.sh
+#   sbatch --array=4,7,24 meg/cluster/submit_preprocessing_apply.sh
+# Requires 03_tuning_choices.yaml, accepted 4A/4B/4C evidence, model-bound
+# exclusions (explicit [] is valid), and reviewed final spectrum-fit evidence.
+# No FIR exposure margin is needed with the selected null high-pass. P38 run 1
+# also receives spectrum-fit; its historical exception protects a future HP only.
+# Data flow: accepted native annotated runs + exact prefit model -> native
+# ICA correction -> ICA-only comparisons -> final temporal filtering -> guarded
+# continuous outputs/QC. Raw data and Stage 1-3 evidence remain unchanged.
+# Existing selected final outputs are explicitly overwritten. For interruption
+# recovery use run_pipeline.py --stages ica_manual --processing-pass apply
+# --resume instead; upstream outputs must remain identical.
 #
-# Select only specific participants:
-#   qsub -t 2,4,7 meg/cluster/submit_preprocessing_apply.sh
-#
-# Inputs
-# - The same raw/configuration inputs as submit_preprocessing_review.sh.
-# - A reviewed 03_tuning_choices.yaml for every submitted participant.
-# - ``ica.manual_exclude`` must be a list; ``[]`` is valid and means reviewed
-#   with no component rejection.
-#
-# Outputs
-# - Rebuilt *_raw_sss.fif and *_ann.fif derivatives.
-# - Final manual-ICA-cleaned *_ica.fif derivatives and apply reports.
-#
-# Safety
-# Raw data remain read-only. The delegated runner uses the shared raw-tree
-# guard. Overwrite is explicit because apply must replace review scientific
-# derivatives rather than resume outputs created with different decisions.
-#
-# Grid Engine execution detail
-# SGE copies the submitted script into a per-job spool directory before
-# execution, so BASH_SOURCE points to that temporary copy. The shared review
-# wrapper must therefore be resolved from DAD_PROJECT_ROOT rather than from
-# the apply script's runtime directory.
-
-#$ -N DAD_meg_apply
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.$TASK_ID.log
-#$ -j y
-#$ -pe smp 4
-#$ -l h_vmem=24G
-#$ -t 1-7
+#SBATCH --job-name=DAD_meg_apply
+#SBATCH --output=cluster_logs/%x.%A_%a.log
+#SBATCH --error=cluster_logs/%x.%A_%a.err
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=24G
+#SBATCH --time=2-00:00:00
+#SBATCH --export=ALL
+#SBATCH --array=4-14,16-39
 
 set -euo pipefail
 
@@ -63,6 +45,13 @@ if [[ ! -x "$REVIEW_WRAPPER" ]]; then
     exit 2
 fi
 
+# Final application reuses accepted SSS/annotation outputs and the exact reviewed
+# model. It must never rebuild 4A/4B after component indices have been chosen.
+export DAD_STAGES="${DAD_STAGES:-ica_manual}"
+if [[ "$DAD_STAGES" != "ica_manual" ]]; then
+    echo "ERROR: final apply selects ica_manual only; rerun upstream review explicitly." >&2
+    exit 2
+fi
 export DAD_PROCESSING_PASS="apply"
 export DAD_REBUILD="1"
 

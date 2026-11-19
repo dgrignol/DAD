@@ -31,8 +31,8 @@ project:
   params_root: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/params"
 
 maxwell_filter:
-  crosstalk_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
-  calibration_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"
+  crosstalk_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/meg_calibration_files/fwmegmaxfilter/ct_sparse_triux2.fif"
+  calibration_file: "/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD/meg/meg_calibration_files/fwmegmaxfilter/sss_cal_3182_250410.dat"
 
 matlab_drsa:
   # Override this with DAD_MATLAB_BIN if the cluster MATLAB installation lives

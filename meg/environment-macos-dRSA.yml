@@ -1,0 +1,42 @@
+# macOS Apple-Silicon environment for DAD MEG and eye-tracking exploration.
+#
+# Create it on a new machine with:
+#   conda env create --file meg/environment-macos-dRSA.yml
+#
+# Update the existing, project-specific dRSA environment with:
+#   conda env update --file meg/environment-macos-dRSA.yml
+#
+# This specification intentionally keeps the repository's MNE version at
+# 1.11.0. The separate cluster environment is not modified by this file.
+name: dRSA
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.11.11
+  - numpy>=2,<3
+  - scipy>=1.15,<2
+  - pandas>=2.2,<3
+  - matplotlib>=3.8,<4
+  - scikit-learn>=1.4,<2
+  - statsmodels>=0.14,<1
+  - joblib>=1.4,<2
+  - tqdm>=4.66,<5
+  - h5py>=3.10,<4
+  - pyarrow>=15,<30
+  - openpyxl>=3.1,<4
+  - mne=1.11.0
+  - mne-bids>=0.16,<1
+  - mne-qt-browser>=0.7,<1
+  - pyqt6>=6.7,<7
+  - pyyaml>=6,<7
+  - ipython>=8,<10
+  - ipykernel>=6.29,<8
+  - ipywidgets>=8,<9
+  - jupyterlab>=4,<5
+  - debugpy>=1.8,<2
+  - pytest>=8,<10
+  - pytest-cov>=5,<8
+  - pip
+  - pip:
+      - eyelinkio==0.3.0

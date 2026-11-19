@@ -879,8 +879,8 @@ squid_jumps:
 
 maxwell_filter:
   enabled: true
-  crosstalk_file: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/fwmegmaxfilter/ct_sparse_triux2.fif"
-  calibration_file: "/Users/damiano/Documents/UniTn/Dynamo/Attention/DAD/meg/data/fwmegmaxfilter/sss_cal_3182_250410.dat"
+  crosstalk_file: "/Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/meg_calibration_files/fwmegmaxfilter/ct_sparse_triux2.fif"
+  calibration_file: "/Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/meg_calibration_files/fwmegmaxfilter/sss_cal_3182_250410.dat"
   bad_channel_policy: "union"
   reference_acquisition_run: null
   manual_bad_channels:

@@ -62,13 +62,16 @@ triggers_check/__pycache__/
 
 # Commit hygiene: generated/binary artifacts are ignored by default.
 # If a file is intentionally versioned, add an explicit negation rule
-# above these globs (or use: git add -f <path>).
+# after these globs (or use: git add -f <path>).
 *.mat
 *.png
 *.pptx
 *.csv
 *.html
 *.fif
+
+# Static instrument calibration; all other raw/generated FIF files stay ignored.
+!/meg/meg_calibration_files/fwmegmaxfilter/ct_sparse_triux2.fif
 
 # Generated paper and poster derivatives
 /paper/poster/

@@ -1,12 +1,12 @@
 # environment.yml
 #
 # Purpose
-# Define the headless Python environment used by the CIMeC first-pass MEG
-# preprocessing review job. Packages come from conda-forge as compiled
-# binaries, avoiding source builds against the cluster's old system compiler.
+# Define the headless Python environment used by DAD MEG jobs on DIPSEN.
+# Core packages come from conda-forge binaries. The pinned EDF reader uses a
+# wheel with its bundled EDFAPI library; no source/compiler build is needed.
 # GUI backends and deprecated automatic-ICA dependencies are excluded.
 #
-# Create a new environment on a compute node:
+# Create a new environment inside a short SLURM interactive allocation:
 #   micromamba create -y -f meg/cluster/environment.yml
 #
 # The conservative version pins form a mutually compatible Python 3.11 stack
@@ -28,3 +28,7 @@ dependencies:
   - matplotlib=3.8
   - pandas=2.2
   - scikit-learn=1.5
+  # Same EDF reader as the existing exploration, including its native EDFAPI.
+  - pip
+  - pip:
+      - eyelinkio==0.3.0

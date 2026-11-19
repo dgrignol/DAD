@@ -4,28 +4,23 @@
 #
 # Purpose
 # Build the combined group-level dot-side time-generalization report on the
-# CIMeC cluster after participant time-generalization array jobs finish. This
+# DIPSEN cluster after participant time-generalization array jobs finish. This
 # is a one-task aggregation job; it does not rerun participant decoding. The
 # report places all group matrices before participant sections. Detailed 2D
 # cluster tables are hidden by default and can be enabled explicitly.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub meg/cluster/submit_dot_side_time_generalization_group_report.sh
-#
+#   sbatch meg/cluster/submit_dot_side_time_generalization_group_report.sh
 # Validate inputs without writing outputs:
-#   qsub -v DAD_VALIDATE_ONLY=1 \
+#   DAD_VALIDATE_ONLY=1 sbatch \
 #     meg/cluster/submit_dot_side_time_generalization_group_report.sh
-#
-# Change the cluster-forming threshold or run a two-sided test:
-#   qsub -v DAD_CLUSTER_FORMING_P=0.01,DAD_CLUSTER_TAIL=two-sided \
-#     meg/cluster/submit_dot_side_time_generalization_group_report.sh
-#
-# Include the detailed 2D cluster tables in the HTML report:
-#   qsub -v DAD_REBUILD=1,DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE=1 \
-#     meg/cluster/submit_dot_side_time_generalization_group_report.sh
-#
+# Change the cluster-forming threshold and tail:
+#   DAD_CLUSTER_FORMING_P=0.01 DAD_CLUSTER_TAIL=two-sided \
+#     sbatch meg/cluster/submit_dot_side_time_generalization_group_report.sh
+# Include detailed 2D cluster tables:
+#   DAD_REBUILD=1 DAD_DOT_SIDE_TG_INCLUDE_CLUSTER_TABLE=1 \
+#     sbatch meg/cluster/submit_dot_side_time_generalization_group_report.sh
 # Inputs
 # - Completed subject-level dot-side time-generalization summary JSON, matrix
 #   NPZ, and heatmap PNG for every requested subject.
@@ -41,7 +36,7 @@
 # - DAD_MAMBA_ENV, MICROMAMBA_BIN: Python environment selection.
 # - DAD_DOT_SIDE_TG_ANALYSES: comma-separated analysis keys, default all.
 #   DAD_DOT_SIDE_ANALYSES is accepted as a fallback.
-# - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 01..07.
+# - DAD_DOT_SIDE_GROUP_SUBJECTS: comma-separated subjects, default 04..39.
 # - DAD_DOT_SIDE_TG_METRIC: matrix metric, default balanced accuracy.
 # - DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES: optional isotropic Gaussian smoothing
 #   sigma in train/test samples before group statistics. If unset, falls back
@@ -57,13 +52,13 @@
 # - DAD_ALLOW_MISSING: 1 builds from available subjects and lists missing ones.
 # - DAD_REBUILD: 1 overwrites existing group outputs; 0 resumes existing outputs.
 
-#$ -N DAD_dot_side_tg_group
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.log
-#$ -j y
-#$ -pe smp 2
-#$ -l h_vmem=16G
+#SBATCH --job-name=DAD_dot_side_tg_group
+#SBATCH --output=cluster_logs/%x.%j.log
+#SBATCH --error=cluster_logs/%x.%j.err
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=16G
+#SBATCH --time=1-00:00:00
+#SBATCH --export=ALL
 
 set -euo pipefail
 
@@ -80,7 +75,7 @@ REBUILD="${DAD_REBUILD:-0}"
 VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 ALLOW_MISSING="${DAD_ALLOW_MISSING:-0}"
 ANALYSES_CSV="${DAD_DOT_SIDE_TG_ANALYSES:-${DAD_DOT_SIDE_ANALYSES:-all}}"
-SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
+SUBJECTS_CSV="${DAD_DOT_SIDE_GROUP_SUBJECTS:-04,05,06,07,08,09,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}"
 METRIC="${DAD_DOT_SIDE_TG_METRIC:-accuracy_balanced_undersampled_sets}"
 SMOOTH_SIGMA_SAMPLES="${DAD_DOT_SIDE_TG_SMOOTH_SIGMA_SAMPLES:-${DAD_DOT_SIDE_SMOOTH_SIGMA_SAMPLES:-0.0}}"
 CLUSTER_FORMING_P="${DAD_CLUSTER_FORMING_P:-0.05}"
@@ -109,7 +104,7 @@ fi
 
 DEFAULT_CONFIG="$PROJECT_ROOT/meg/params/pipeline_default.yaml"
 SITE_CONFIG="$PROJECT_ROOT/meg/params/pipeline_cluster.yaml"
-SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/sub-01.yaml"
+SUBJECT_CONFIG="$PROJECT_ROOT/meg/params/sub-04.yaml"
 SCRIPT="$PROJECT_ROOT/meg/code/sanity_checks/04_dot_side_time_generalization_group_report.py"
 IFS=',' read -r -a SUBJECTS <<< "$SUBJECTS_CSV"
 IFS=',' read -r -a ANALYSES <<< "$ANALYSES_CSV"
@@ -131,12 +126,12 @@ micromamba activate "$MAMBA_ENV"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
-export OMP_NUM_THREADS="${NSLOTS:-2}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-2}"
-export MKL_NUM_THREADS="${NSLOTS:-2}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-2}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-2}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_tg_group_${JOB_ID:-manual}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_tg_group_${SLURM_JOB_ID:-manual}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -210,7 +205,7 @@ echo ">>> Cluster alpha: $CLUSTER_ALPHA"
 echo ">>> Tail: $CLUSTER_TAIL"
 echo ">>> Include 2D cluster table: $INCLUDE_CLUSTER_TABLE"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '>>> Command:'
 printf ' %q' "${COMMAND[@]}"

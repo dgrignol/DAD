@@ -379,12 +379,12 @@ Do not modify raw data, do not modify Stage-04 epochs, do not modify dRSA
 exports, and do not register this as a required run_pipeline.py stage unless
 there is a clear infrastructure reason.
 
-Port meg/code/sanity_checks/01_dot_side_decoding.py to the CIMeC cluster for
+Port meg/code/sanity_checks/01_dot_side_decoding.py to the DIPSEN cluster for
 one-subject-per-array-task execution across subjects 01-07. Reuse the existing
 cluster conventions in meg/cluster: pipeline_cluster.yaml for site paths,
 headless matplotlib/MNE settings, micromamba environment activation, guarded
 raw-tree output checks, cluster_logs, and explicit per-subject validation.
-Create a thin SGE wrapper, for example meg/cluster/submit_dot_side_decoding.sh,
+Create a thin SLURM wrapper, for example meg/cluster/submit_dot_side_decoding.sh,
 that runs the sanity check for one subject per task and exposes condition,
 decoder window, trial averaging, random seed, resume/rebuild behavior, and
 resource settings through documented environment variables. Keep the wrapper
@@ -458,6 +458,6 @@ for sanity-check helpers and cluster wrappers; bash -n for all cluster
 wrappers; pipeline_config.py --validate-only with pipeline_cluster.yaml for
 subjects 01-07; and at least one local or dry-run invocation that validates the
 dot-side sanity-check inputs for a 20-identity and a 40-identity subject
-without running all participants. Document the exact qsub command for running
+without running all participants. Document the exact sbatch command for running
 subjects 01-07 once the wrapper is ready.
 ```

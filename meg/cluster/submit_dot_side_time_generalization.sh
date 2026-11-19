@@ -3,31 +3,29 @@
 # submit_dot_side_time_generalization.sh
 #
 # Purpose
-# Run the optional dot-side time-generalization sanity check on the CIMeC
-# cluster as one Sun Grid Engine array task per participant. Each task runs
+# Run the optional dot-side time-generalization sanity check on the DIPSEN
+# cluster as one SLURM array task per participant. Each task runs
 # the four standard neural-condition/model-source analyses sequentially. This
 # wrapper consumes completed Stage-04 epochs and the recorded Stage-04 source
 # manifest; it never reruns epoching, dRSA export, MATLAB dRSA, or
 # preprocessing.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh
-#
+#   sbatch --array=4-39%4 meg/cluster/submit_dot_side_time_generalization.sh
 # Rebuild existing time-generalization outputs intentionally:
-#   qsub -v DAD_REBUILD=1 -t 1-7 \
+#   DAD_REBUILD=1 sbatch --array=4-39%4 \
 #     meg/cluster/submit_dot_side_time_generalization.sh
-#
-# Run only selected analyses and use identity-level pseudo-trials:
-#   export DAD_DOT_SIDE_TG_ANALYSES="occluded_deviant_observed,occluded_deviant_predicted"
-#   qsub -v DAD_DOT_SIDE_TG_ANALYSES,DAD_TRIALS_PER_AVERAGE=all_trials_per_identity \
-#     -t 1-7 meg/cluster/submit_dot_side_time_generalization.sh
-#
-# Validate inputs only, without decoding or writing outputs:
-#   qsub -v DAD_VALIDATE_ONLY=1 -t 1,4 \
+# Run selected analyses with identity-level pseudo-trials:
+#   DAD_DOT_SIDE_TG_ANALYSES=occluded_deviant_observed,occluded_deviant_predicted \
+#   DAD_TRIALS_PER_AVERAGE=all_trials_per_identity \
+#     sbatch --array=4-39%4 meg/cluster/submit_dot_side_time_generalization.sh
+# Validate representative inputs only:
+#   DAD_VALIDATE_ONLY=1 sbatch --array=1,4 \
 #     meg/cluster/submit_dot_side_time_generalization.sh
-#
+# Request more CPU and memory for each task:
+#   sbatch --cpus-per-task=8 --mem=48G --array=4-39%4 \
+#     meg/cluster/submit_dot_side_time_generalization.sh
 # Inputs
 # - Completed Stage-04 epochs FIF under derivatives/analysis/sub-XX/ses-01/meg.
 # - source_manifest.json with completed Stage-04 epoching lineage.
@@ -53,17 +51,17 @@
 # - DAD_N_SPLITS: stratified CV folds.
 # - DAD_DOT_SIDE_TG_OUT_DIR: optional explicit output root.
 # Resource override example:
-#   qsub -pe smp 8 -l h_vmem=48G -t 1-7 \
+#   sbatch --cpus-per-task=8 --mem=48G --array=4-39%4 \
 #     meg/cluster/submit_dot_side_time_generalization.sh
 
-#$ -N DAD_dot_side_tg
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.$TASK_ID.log
-#$ -j y
-#$ -pe smp 4
-#$ -l h_vmem=32G
-#$ -t 1-7
+#SBATCH --job-name=DAD_dot_side_tg
+#SBATCH --output=cluster_logs/%x.%A_%a.log
+#SBATCH --error=cluster_logs/%x.%A_%a.err
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=32G
+#SBATCH --time=2-00:00:00
+#SBATCH --export=ALL
+#SBATCH --array=4-39%4
 
 set -euo pipefail
 
@@ -76,7 +74,7 @@ PROJECT_ROOT="${DAD_PROJECT_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Att
 DERIVATIVES_ROOT="${DAD_DERIVATIVES_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/derivatives}"
 MAMBA_ENV="${DAD_MAMBA_ENV:-dad-meg}"
 MAMBA_BIN="${MICROMAMBA_BIN:-$HOME/bin/micromamba}"
-TASK_ID="${SGE_TASK_ID:?SGE_TASK_ID is required; submit this as an SGE array job.}"
+TASK_ID="${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required; submit this as an SLURM array job.}"
 REBUILD="${DAD_REBUILD:-0}"
 VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 DECODE_TMIN="${DAD_DECODE_TMIN:-0.0}"
@@ -121,8 +119,8 @@ for analysis_spec in "${ANALYSES[@]}"; do
     esac
 done
 
-if (( TASK_ID < 1 || TASK_ID > 7 )); then
-    echo "ERROR: SGE_TASK_ID must be between 1 and 7; got ${TASK_ID}." >&2
+if (( TASK_ID < 4 || TASK_ID > 39 )); then
+    echo "ERROR: SLURM_ARRAY_TASK_ID must be between 4 and 39; got ${TASK_ID}." >&2
     exit 2
 fi
 if [[ "$REBUILD" != "0" && "$REBUILD" != "1" ]]; then
@@ -165,12 +163,12 @@ export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
 export MNE_BROWSER_BACKEND=matplotlib
-export OMP_NUM_THREADS="${NSLOTS:-4}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-4}"
-export MKL_NUM_THREADS="${NSLOTS:-4}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-4}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_tg_${JOB_ID:-manual}_${TASK_ID}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_dot_side_tg_${SLURM_JOB_ID:-manual}_${TASK_ID}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -206,7 +204,7 @@ echo ">>> Decode window samples: $DECODE_WINDOW_SAMPLES"
 echo ">>> Trials per average: $TRIALS_PER_AVERAGE"
 echo ">>> Random seed: $RANDOM_SEED"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 for analysis_spec in "${ANALYSES[@]}"; do

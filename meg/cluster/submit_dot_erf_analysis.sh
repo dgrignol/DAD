@@ -3,39 +3,24 @@
 # submit_dot_erf_analysis.sh
 #
 # Purpose
-# Run the optional group dot-condition ERF sanity-check analysis on the CIMeC
+# Run the optional group dot-condition ERF sanity-check analysis on the DIPSEN
 # cluster. This wrapper executes ``meg/code/sanity_checks/05_dot_erf_analysis.py``
-# as one Sun Grid Engine array task per Stage-07 sensor group. Each task uses
+# as one SLURM array task per Stage-07 sensor group. Each task uses
 # the same requested subject group, but writes only one sensor-group-specific
 # set of subject/group ERF sanity-check outputs plus linked/embedded HTML
 # reports.
 #
-# Submission examples (run from the cluster head node)
-#   cd /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+# Submission examples (run from the DAD root on the DIPSEN login node)
 #   mkdir -p cluster_logs
-#   qsub -v DAD_REBUILD=1 meg/cluster/submit_dot_erf_analysis.sh
-#
-# The script header requests array tasks 1-4, which map by default to:
-#   1 occipital
-#   2 parietal
-#   3 frontal
-#   4 temporal
-#
+#   sbatch --array=1-4%4 meg/cluster/submit_dot_erf_analysis.sh
 # Validate inputs without writing outputs:
-#   qsub -v DAD_VALIDATE_ONLY=1 meg/cluster/submit_dot_erf_analysis.sh
-#
+#   DAD_VALIDATE_ONLY=1 sbatch meg/cluster/submit_dot_erf_analysis.sh
 # Restrict to occipital magnetometers:
-#   qsub -t 1 -v DAD_REBUILD=1,DAD_DOT_ERF_SENSOR_GROUPS=occipital \
-#     meg/cluster/submit_dot_erf_analysis.sh
-#
-# Change the analysis window or baseline. Use ':' rather than ',' for
-# multi-value variables passed through qsub -v, because SGE uses commas to
-# separate environment assignments. The current Stage-04 epochs contain only
-# -0.5..2.667 s, so DAD_DOT_ERF_TMIN lower than -0.5 requires regenerating
-# Stage-04 epochs first:
-#   qsub -v DAD_REBUILD=1,DAD_DOT_ERF_TMIN=-0.5,DAD_DOT_ERF_BASELINE=-0.300:-0.100 \
-#     meg/cluster/submit_dot_erf_analysis.sh
-#
+#   DAD_REBUILD=1 DAD_DOT_ERF_SENSOR_GROUPS=occipital \
+#     sbatch --array=1 meg/cluster/submit_dot_erf_analysis.sh
+# Change the analysis window or baseline (quote comma-separated values):
+#   DAD_REBUILD=1 DAD_DOT_ERF_TMIN=-0.5 DAD_DOT_ERF_BASELINE='-0.300,-0.100' \
+#     sbatch meg/cluster/submit_dot_erf_analysis.sh
 # Inputs
 # - Completed Stage-04 epoch FIF files under:
 #   derivatives/analysis/sub-XX/ses-01/meg/
@@ -53,27 +38,24 @@
 # Environment variables
 # - DAD_PROJECT_ROOT: cluster DAD root.
 # - DAD_MAMBA_ENV, MICROMAMBA_BIN: Python environment selection.
-# - DAD_DOT_ERF_GROUP_SUBJECTS: subjects separated by ':' for qsub overrides
-#   or by ',' in normal shell exports; default 01..07.
+# - DAD_DOT_ERF_GROUP_SUBJECTS: comma-separated subjects; default P04-P14/P16-P39.
 # - DAD_DOT_ERF_SENSOR_TYPE: mag or grad; default mag.
-# - DAD_DOT_ERF_SENSOR_GROUPS: Stage-07 groups separated by ':' for qsub
-#   overrides or by ',' in normal shell exports; default is all regional
-#   groups except wholebrain: occipital,parietal,frontal,temporal. SGE_TASK_ID
-#   selects the Nth group from this list. If you override this list with a
-#   different length, also submit with the matching qsub -t range.
-# - DAD_DOT_ERF_BASELINE: baseline start,end in seconds, separated by ':' for
-#   qsub overrides or by ',' in normal shell exports;
+# - DAD_DOT_ERF_SENSOR_GROUPS: comma-separated Stage-07 groups; default is
+#   occipital,parietal,frontal,temporal. SLURM_ARRAY_TASK_ID selects the Nth
+#   group. When the list length changes, pass a matching --array range.
+# - DAD_DOT_ERF_BASELINE: comma-separated baseline start,end in seconds;
 #   default -0.300,-0.100.
 # - DAD_DOT_ERF_TMIN, DAD_DOT_ERF_TMAX: analysis window in seconds. Defaults
 #   -0.5..2.667 to match the existing Stage-04 epoch derivatives.
 # - DAD_DOT_ERF_ANALYSIS_SFREQ: ERF/statistics sampling rate, default 200.
-# - DAD_DOT_ERF_TOPOMAP_TIMES: optional topomap latencies separated by ':' for
-#   qsub overrides or by ',' in normal shell exports.
+# - DAD_DOT_ERF_TOPOMAP_TIMES: optional comma-separated topomap latencies.
 # - DAD_DOT_ERF_GROUP_OVERLAY_BAND: sem, std, or none; default sem.
 # - DAD_CLUSTER_FORMING_P: pointwise p for cluster formation; default 0.05.
 # - DAD_CLUSTER_ALPHA: cluster-level significance alpha; default 0.05.
 # - DAD_CLUSTER_TAIL: two-sided, greater, or less; default two-sided.
-# - DAD_N_PERMUTATIONS: all or positive integer; default all.
+# - DAD_N_PERMUTATIONS: all or positive integer; default 10000 (user approved).
+# - Export DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN as in epoching to
+#   select the matching isolated epochs/ERF outputs.
 # - DAD_RANDOM_SEED: deterministic permutation/equalization seed; default 42.
 # - DAD_DOT_ERF_INCLUDE_CLUSTER_TABLE: 1 includes verbose cluster tables.
 # - DAD_DOT_ERF_LOCAL_EPOCH_CACHE_DIR: optional node-visible local epoch cache.
@@ -81,14 +63,14 @@
 # - DAD_ALLOW_MISSING: 1 builds from available subjects and lists skipped ones.
 # - DAD_REBUILD: 1 overwrites existing ERF outputs; 0 resumes/reuses outputs.
 
-#$ -N DAD_dot_erf
-#$ -S /bin/bash
-#$ -cwd
-#$ -o cluster_logs/$JOB_NAME.$JOB_ID.$TASK_ID.log
-#$ -j y
-#$ -pe smp 4
-#$ -l h_vmem=16G
-#$ -t 1-4
+#SBATCH --job-name=DAD_dot_erf
+#SBATCH --output=cluster_logs/%x.%A_%a.log
+#SBATCH --error=cluster_logs/%x.%A_%a.err
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=2-00:00:00
+#SBATCH --export=ALL
+#SBATCH --array=1-4%4
 
 set -euo pipefail
 
@@ -101,11 +83,11 @@ PROJECT_ROOT="${DAD_PROJECT_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Att
 DERIVATIVES_ROOT="${DAD_DERIVATIVES_ROOT:-/mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/derivatives}"
 MAMBA_ENV="${DAD_MAMBA_ENV:-dad-meg}"
 MAMBA_BIN="${MICROMAMBA_BIN:-$HOME/bin/micromamba}"
-TASK_ID="${SGE_TASK_ID:?SGE_TASK_ID is required; submit this as an SGE array job.}"
+TASK_ID="${SLURM_ARRAY_TASK_ID:?SLURM_ARRAY_TASK_ID is required; submit this as an SLURM array job.}"
 REBUILD="${DAD_REBUILD:-0}"
 VALIDATE_ONLY="${DAD_VALIDATE_ONLY:-0}"
 ALLOW_MISSING="${DAD_ALLOW_MISSING:-0}"
-SUBJECTS_CSV="${DAD_DOT_ERF_GROUP_SUBJECTS:-01,02,03,04,05,06,07}"
+SUBJECTS_CSV="${DAD_DOT_ERF_GROUP_SUBJECTS:-04,05,06,07,08,09,10,11,12,13,14,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39}"
 SENSOR_TYPE="${DAD_DOT_ERF_SENSOR_TYPE:-mag}"
 SENSOR_GROUPS_CSV="${DAD_DOT_ERF_SENSOR_GROUPS:-occipital,parietal,frontal,temporal}"
 BASELINE_CSV="${DAD_DOT_ERF_BASELINE:--0.300,-0.100}"
@@ -117,7 +99,7 @@ GROUP_OVERLAY_BAND="${DAD_DOT_ERF_GROUP_OVERLAY_BAND:-sem}"
 CLUSTER_FORMING_P="${DAD_CLUSTER_FORMING_P:-0.05}"
 CLUSTER_ALPHA="${DAD_CLUSTER_ALPHA:-0.05}"
 CLUSTER_TAIL="${DAD_CLUSTER_TAIL:-two-sided}"
-N_PERMUTATIONS="${DAD_N_PERMUTATIONS:-all}"
+N_PERMUTATIONS="${DAD_N_PERMUTATIONS:-10000}"
 RANDOM_SEED="${DAD_RANDOM_SEED:-42}"
 INCLUDE_CLUSTER_TABLE="${DAD_DOT_ERF_INCLUDE_CLUSTER_TABLE:-0}"
 LOCAL_EPOCH_CACHE_DIR="${DAD_DOT_ERF_LOCAL_EPOCH_CACHE_DIR:-}"
@@ -167,7 +149,7 @@ DEFAULT_CONFIG="$PROJECT_ROOT/meg/params/pipeline_default.yaml"
 SITE_CONFIG="$PROJECT_ROOT/meg/params/pipeline_cluster.yaml"
 SCRIPT="$PROJECT_ROOT/meg/code/sanity_checks/05_dot_erf_analysis.py"
 # Multi-value settings accept comma-separated defaults inside this script and
-# colon-separated qsub overrides, because qsub itself treats commas as the
+# colon-separated sbatch overrides, because sbatch itself treats commas as the
 # boundary between separate environment assignments.
 if [[ "$SUBJECTS_CSV" == *:* ]]; then
     IFS=':' read -r -a SUBJECTS <<< "$SUBJECTS_CSV"
@@ -195,8 +177,8 @@ if (( ${#SENSOR_GROUPS[@]} == 0 )); then
     exit 2
 fi
 if (( TASK_ID < 1 || TASK_ID > ${#SENSOR_GROUPS[@]} )); then
-    echo "ERROR: SGE_TASK_ID ${TASK_ID} does not map to DAD_DOT_ERF_SENSOR_GROUPS=${SENSOR_GROUPS_CSV}." >&2
-    echo "Submit with qsub -t 1-${#SENSOR_GROUPS[@]} when overriding the sensor-group list." >&2
+    echo "ERROR: SLURM_ARRAY_TASK_ID ${TASK_ID} does not map to DAD_DOT_ERF_SENSOR_GROUPS=${SENSOR_GROUPS_CSV}." >&2
+    echo "Submit with --array=1-${#SENSOR_GROUPS[@]} when overriding the sensor-group list." >&2
     exit 2
 fi
 if [[ "${#BASELINE_VALUES[@]}" -ne 2 ]]; then
@@ -223,12 +205,12 @@ micromamba activate "$MAMBA_ENV"
 export PYTHONNOUSERSITE=1
 export PYTHONDONTWRITEBYTECODE=1
 export MPLBACKEND=Agg
-export OMP_NUM_THREADS="${NSLOTS:-4}"
-export OPENBLAS_NUM_THREADS="${NSLOTS:-4}"
-export MKL_NUM_THREADS="${NSLOTS:-4}"
-export NUMEXPR_NUM_THREADS="${NSLOTS:-4}"
+export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export OPENBLAS_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
+export NUMEXPR_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}"
 
-JOB_TMP="${TMPDIR:-/tmp}/dad_dot_erf_${JOB_ID:-manual}_${TASK_ID}"
+JOB_TMP="${TMPDIR:-/tmp}/dad_dot_erf_${SLURM_JOB_ID:-manual}_${TASK_ID}"
 mkdir -p "$JOB_TMP/matplotlib" "$JOB_TMP/cache"
 export MPLCONFIGDIR="$JOB_TMP/matplotlib"
 export XDG_CACHE_HOME="$JOB_TMP/cache"
@@ -271,7 +253,7 @@ COMMAND=(
     --tail "$CLUSTER_TAIL"
     --n-permutations "$N_PERMUTATIONS"
     --random-seed "$RANDOM_SEED"
-    --n-jobs "${NSLOTS:-4}"
+    --n-jobs "${SLURM_CPUS_PER_TASK:-4}"
     --print-summary
 )
 
@@ -314,7 +296,7 @@ echo ">>> N permutations: $N_PERMUTATIONS"
 echo ">>> Include cluster table: $INCLUDE_CLUSTER_TABLE"
 echo ">>> Local epoch cache: ${LOCAL_EPOCH_CACHE_DIR:-none}"
 echo ">>> Host: $(hostname)"
-echo ">>> Slots: ${NSLOTS:-unknown}"
+echo ">>> Allocated CPUs: ${SLURM_CPUS_PER_TASK:-unknown}"
 echo ">>> Started UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 printf '>>> Command:'
 printf ' %q' "${COMMAND[@]}"
