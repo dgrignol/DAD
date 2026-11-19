@@ -1382,7 +1382,7 @@ def validate_config(
             _expect_type(ica["method"], str, "ica.method", errors)
             _expect_type(
                 ica["n_components"],
-                (int, float),
+                (int, float, type(None)),
                 "ica.n_components",
                 errors,
             )

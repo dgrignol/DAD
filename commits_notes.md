@@ -1,5 +1,138 @@
 # 19 Nov 2026 17:25
 
+## feat(meg): add final ICA review and convergence reconciliation
+
+### `meg/code/preprocessing_basic/03_C_ICA.py`
+
+- Stage 4C: fit, review and apply source-bound manual ICA.
+- Behavior and boundaries: Build a deterministic cache fingerprint from inputs and fit parameters; Return whether an ICA cache matches across local/cluster mount paths; Build protected per-source fit stretches, then concatenate compatible data; Load a compatible cache or fit a new ICA model.
+
+### `meg/code/preprocessing_basic/audit_final_ica_readiness.py`
+
+- Join current final-ICA report readiness and exact diagnostic trial retention.
+- Behavior and boundaries: Check current model/report panels plus exact operative native trial rows; Validate cohort/receipts, parallelize participant reads, publish after join.
+
+### `meg/code/preprocessing_basic/audit_ica_task_diagnostics.py`
+
+- Audit diagnostic IC epochs against the accepted operative trial footprint.
+- Behavior and boundaries: Hash a model or small manifest, never an entire cohort's raw signals; Use the accepted plan's path-independent timing-gate convention; Return exact diagnostic-retention agreement for one disjoint participant; Audit the entire working cohort with explicit resources and immutable label.
+
+### `meg/code/preprocessing_basic/diagnose_ica_convergence.py`
+
+- Inspect FastICA cycling/contrast without refitting or changing a final model.
+- Behavior and boundaries: Reconstruct its stored PCA-whitened samples without mutating either input; Separate sign changes, label permutations and actual direction changes; Estimate diagnostic spectra using windows wholly inside retained pieces; Describe recurrence and contrast strength; establish no scientific acceptance.
+
+### `meg/code/preprocessing_basic/final_ica_native_diagnostics.py`
+
+- Default continuous AND task-locked diagnostics for an existing final ICA.
+- Behavior and boundaries: Return transient IC epochs/windows without changing native files or choices; Plot condition-specific native trial images and means; preserve exact times; Show one deterministic native continuous example per run, with BAD labels; Render every final IC's continuous/task views from a single native pass.
+
+### `meg/code/preprocessing_basic/final_ica_review_book.py`
+
+- Build a compact, offline component navigator for one FINAL ICA model.
+- Behavior and boundaries: Explain the human component-review procedure inside the offline book; Return diagnostic completeness while writing one participant's review book; Use native PNGs so offline review needs no server or remote assets.
+
+### `meg/code/preprocessing_basic/ica_optimizer_checkpoint.py`
+
+- Preserve an ICA optimizer result before shared-source revalidation.
+- Behavior and boundaries: Read the actual optimizer cap, including MNE's FIF read-back behavior; Return exact optimizer/accounting fields that must survive MNE I/O; Write a NEW unvalidated checkpoint outside operative derivative outputs; Load matching actual weights; this does not validate current sources.
+
+### `meg/code/preprocessing_basic/ica_review_plots.py`
+
+- Shared display helpers for final ICA review; never fit or persist ICA decisions.
+- Behavior and boundaries: Attach acquisition-time annotations once, optionally projecting sensor BADs globally; Return one RawArray with every input sample and the exact original joins; Label non-task segments and return actual plotted sample/segment counts; Choose the first ocular interval, or a requested BAD label, without ranking ICs.
+
+### `meg/code/preprocessing_basic/pipeline_config.py`
+
+- Allow the full-rank final ICA default and its protected fit-copy parameters; preserve distinct fit and final continuous settings.
+
+### `meg/code/preprocessing_basic/prepare_ica_restart_candidate.py`
+
+- Validate a completed deterministic FastICA restart against rebuilt fit data.
+- Behavior and boundaries: Compare exact interval maps across the documented cluster/Mac roots; Create immutable, fully source-validated evidence for one restart.
+
+### `meg/code/preprocessing_basic/probe_ica_curvature_restart.py`
+
+- Test a deterministic restart of a cycling FastICA optimizer, never publish.
+- Behavior and boundaries: Rotate the saved complete basis into its symmetric update eigenvectors; Run real parallel/logcosh FastICA; observation hooks alter no update; Pack actual optimizer output in the unchanged original MNE PCA basis; Probe one exact current model and preserve all actual numerical evidence.
+
+### `meg/code/preprocessing_basic/publish_ica_convergence_candidate.py`
+
+- Publish a validated numerical ICA repair and regenerate its unreviewed evidence.
+- Behavior and boundaries: Recheck numeric gates and the exact model hash/rank before publication; Archive, publish and fully revalidate one authorized unreviewed repair; Run ordered validation/archive/publication under optional verified reads.
+
+### `meg/code/preprocessing_basic/reconcile_ica_convergence.py`
+
+- Evaluate an isolated longer FastICA fit without overwriting a production model.
+- Behavior and boundaries: Measure one parallel/logcosh FastICA update in the fitted PCA basis; Quantify changed maps/activations without transferring exclusion indices; Fit/evaluate one candidate; never promote or accept it implicitly.
+
+### `meg/code/preprocessing_basic/record_provisional_ica_choices.py`
+
+- Validate a frozen cohort authorization, then record guarded provisional ICA choices.
+- Behavior and boundaries: Raise a persistent guard (also when Python assertions are disabled); Check exact cohort, null/empty semantics and adjacent table agreement; Require complete zero-based coverage and exact exclude/defer agreement; Return a small auditable result and preserve failures without aborting peers.
+
+### `meg/code/preprocessing_basic/review_final_ica.py`
+
+- Independently plot, explain or refresh existing FINAL ICA review evidence.
+- Behavior and boundaries: Require positive, stable generated-file stamps before binding shared evidence; Load existing plot/fit-copy helpers without calling the production entry point; Return current config/report/paths after validating source and model bindings; Reconstruct full fit display or exactly the first legacy fit stretch, read-only.
+
+### `meg/code/preprocessing_basic/verified_read_cache.py`
+
+- Stage byte-verified, read-only FIF copies to accelerate slow shared-drive reads.
+- Behavior and boundaries: Return a JSON certificate for NEW verified local copies of source FIFs; Temporarily route certified MNE FIF opens to byte-identical local copies.
+
+### `meg/docs/FINAL_ICA_COMPONENT_REVIEW_GUIDE.md`
+
+- Updated 2026-11-10. This is the human review guide for the 35-participant working cohort P04-P14/P16-P39. P15 remains excluded by the participant-specific coverage decision; preserve its data. P10 remains in processing with its slow-contamination concern open. Authoritative choices remain in [PREPROCESSING_DECISIONS.md](/Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/docs/PREPROCESSING_DECISIONS.md).
+- Document Final ICA: participant-by-participant component review; Which report to open; Precise references and how to use each view; P19 numerical reconciliation; What the property panel actually represents; Four different time coordinates.
+
+### `meg/docs/FINAL_ICA_REVIEW_CHAT_PROMPT.txt`
+
+- Continue the DAD Stage 4C FINAL ICA component review, one participant at a time. Start with P04 (replace this participant when continuing a later review).
+
+### `meg/docs/ICA_APPLICATION_HANDOFF_20261112.md`
+
+- The component choices are **provisional**. Damiano has not manually inspected the proposals and needs to return to inspect them. Keep this reminder in ICA review documents and receipts; downstream outputs need no repeated labels. Component authorization, application QC and final scientific acceptance remain separate. Deferred ICs remain retained, with their questions open.
+- Document ICA review status - 2026-11-12.
+
+### `meg/docs/P19_ICA_NUMERICAL_RECONCILIATION.md`
+
+- Date: 2026-11-11. This records numerical evidence and optimizer provenance, not human component decisions or cleaned-data acceptance. Damiano requested autonomous investigation and repair of the nonconvergence warning. No participant exclusion, mask edit, rank reduction or tolerance relaxation is used.
+- Document P19 final ICA numerical reconciliation; Evidence and cause; Repair and exact interpretation; Auditable artifacts and publication gate; Next human decision.
+
+### `meg/params/pipeline_default.yaml`
+
+- Allow the full-rank final ICA default and its protected fit-copy parameters; preserve distinct fit and final continuous settings.
+
+### `meg/tests/test_final_ica_review.py`
+
+- Verify final ICA display scope, exact commands and non-persistent review tools.
+- Exercise display copy preserves all source samples and joins without refit; property panel uses all segments and restores numeric ticks; native window names every BAD and preserves original time and signals; every book image has pinned commands and explicit legacy scope; task diagnostic uses accepted onsets and configured window.
+
+### `meg/tests/test_ica_convergence_reconciliation.py`
+
+- Numerical checks for an isolated ICA-convergence candidate, not acceptance.
+- Exercise fixed point check uses the fitted whitening and leaves data unchanged; fit summary portability keeps every native interval and filter field; model comparison matches identical components without exclusion choices; fixed point check refuses a different optimizer; direction diagnosis distinguishes label exchange from rotation.
+
+### `meg/tests/test_pipeline_config.py`
+
+- Cover the matching staged configuration contracts using synthetic profiles and temporary paths; no participant dataset is used.
+
+### `meg/tests/test_provisional_ica_workflow.py`
+
+- Check provisional ICA import boundaries without accessing DAD recordings.
+- Exercise An unresolved table cannot acquire processing permission from an empty list; Missing/duplicated indices or new exclusions never inherit authorization; The full table must join successfully before the first production mutation; All three signal views use identical accepted absolute sample windows; A missing/failed timing gate must never dispatch epoch creation or export.
+
+### `meg/tests/test_verified_read_cache.py`
+
+- Check that local read acceleration preserves bytes and source validation.
+- Exercise verified cache preserves samples annotations and original stamp; verified cache refuses changed original and modified cache; verified cache rechecks source during reads and restores reader.
+
+Suggested commit message:
+`feat(meg): add final ICA review and convergence reconciliation`
+
+# 19 Nov 2026 17:25
+
 ## feat(meg): add guarded continuous cleaning and ocular review workflows
 
 ### `meg/code/preprocessing_basic/03_A_MaxFilt.py`

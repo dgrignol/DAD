@@ -1,0 +1,55 @@
+Continue the DAD Stage 4C FINAL ICA component review, one participant at a time.
+Start with P04 (replace this participant when continuing a later review).
+
+Workspace: /Users/damiano/Documents/UniTn/Dynamo/Attention/DAD
+Shared derivatives: /Volumes/MORWUR/Projects/DAMIANO/Attention/derivatives
+Cluster project: /mnt/storage/tier2/morwur/Projects/DAMIANO/Attention/DAD
+
+Read AGENTS.md, the authoritative decisions at
+/Volumes/MORWUR/Projects/DAMIANO/Attention/DAD/meg/docs/PREPROCESSING_DECISIONS.md,
+meg/docs/FINAL_ICA_COMPONENT_REVIEW_GUIDE.md, and
+meg/docs/P19_ICA_NUMERICAL_RECONCILIATION.md. Check the joined readiness snapshot:
+derivatives/reports/ica_review_updates/final-ica-readiness-20261111-v1/summary.json.
+Require its successful existence and revalidate the selected participant's
+CURRENT model/report/source bindings before interpreting or recording decisions.
+Do not infer scientific acceptance from that software audit.
+
+Use reports/sub-04/ses-01/03_C_ICA_review_components.html as the component book
+and 03_C_ICA_review_report.html for processing evidence. Substitute the selected
+participant. Verify exact model SHA-256, convergence, all fitted/mapped samples
+and complete figures. Use commands printed beneath each plot, including native
+scrollable sources, frontal/MISC context and independent diagnostic commands.
+
+Review every zero-based CURRENT final IC. Inspect maps, spectra, BOTH default
+native continuous traces and task-locked trial images/condition means, repeated
+labelled BAD examples and ordinary controls across runs. The arbitrary 2 s fit
+segments are not task epochs/ERFs. TASK zero is the accepted Stage 3 corrected
+motion onset, with -0.5/+2.667 s and accepted Stage 2 eligibility/BAD rejection.
+These are pre-cleaning diagnostic projections, not final Stage 5 data. Task
+locking alone identifies neither neural activity nor artifacts. Preserve mixed
+or uncertain cases as deferred and account for unusable reference channels.
+
+Maintain an evidence table: IC index, keep/exclude/defer, source hypothesis,
+confidence, plot/run/native time, and unresolved questions. Explain findings in
+small review batches. Propose the participant-level exclusion list for my
+explicit decision; only then record exact-model-bound choices. Transfer no
+preliminary frontal-ICA or old-model indices. P19 uses a documented deterministic
+restart of its original seed-97 fit; its 114 iterations describe the restart
+phase. All 69 of its NEW ICs require review.
+
+Working cohort: P04-P14 and P16-P39, 35 participants. P15 remains excluded only
+for its participant-specific coverage decision; retain all data/provenance.
+Preserve genuine saved manual annotations/deletions and distinct automatic-mask
+adoption. Defer exhaustive interval reinspection. Reuse accepted SSS; no new
+EDF/SQUID proposals. Preserve 1-40 Hz/200 Hz/FastICA/n_components=None/seed-97 fit
+settings and exclusion of every operative BAD category. Do not refit an unchanged
+model. Preserve native coordinates/boundaries/STI101/MISC and accepted timing.
+No additional final high-pass or 40 Hz low-pass; retain spectrum-fit 50/100 Hz,
+including P38 run 1. P10 stays in the cohort with its approximately 0.33 Hz
+concern open for native before/after ICA QC.
+
+Application QC, explicit cleaned-output acceptance and epoching prerequisites
+remain later gates. I submit cluster jobs. Independent participant computation
+must use bounded parallel processes/arrays, limit library threads, print progress
+and join results before shared publication. Preserve immutable earlier evidence
+and unrelated working-tree changes. Do not ask me to reconfirm existing policy.

@@ -53,6 +53,22 @@ def test_invalid_final_highpass_cannot_masquerade_as_omitted(tmp_path, cutoff):
     assert any("preprocessing.highpass_hz" in error for error in errors)
 
 
+def test_approved_defaults_keep_spectrum_fit_and_native_continuous_data():
+    """Site paths must not override the approved final/fit separation."""
+    import yaml
+    params = Path(__file__).resolve().parents[1] / "params"
+    cfg = yaml.safe_load((params / "pipeline_default.yaml").read_text())
+    site = yaml.safe_load((params / "pipeline_cluster.yaml").read_text())
+    cfg = pipeline_config.deep_merge_dicts(cfg, site)
+    assert cfg["preprocessing"]["highpass_hz"] is None
+    assert cfg["preprocessing"]["lowpass_hz"] is None
+    assert cfg["preprocessing"]["resample_sfreq_hz"] is None
+    assert cfg["preprocessing"]["notch_freqs_hz"] == [50., 100.]
+    assert cfg["preprocessing"]["spectrum_fit_window"] == "10s"
+    assert cfg["ica"]["n_components"] is None
+    assert [cfg["ica"][key] for key in ("fit_l_freq_hz", "fit_h_freq_hz", "fit_resample_sfreq_hz")] == [1., 40., 200.]
+
+
 def _minimal_config(tmp_path: Path) -> dict:
     """
     Build a valid multisubject core config with isolated raw/output roots.
