@@ -101,3 +101,25 @@ The control directory preserves the failed submission record and the final
 single-job ID, resource settings, code revision and phase progress. This is a
 scheduler/resource change only; inputs, matrices, normalization, summaries and
 output paths are identical to the array workflow.
+
+## Group report presentation policy
+
+The user approved group-only Stage-07 reports on 19 November in the chat
+[Optimize group dRSA statistics](codex://threads/01a1f428-bd27-73d3-aeb6-6bfcf43122db).
+The reviewed fix was `c2a3a60` in dad-cluster-analysis. The MNN implementation
+started from the older separate DAD checkout and initially omitted this renderer
+fix. Its raw report consequently embedded participant Stage-07, Stage-08 and
+Stage-09 PNGs found by recursive discovery: 4,555 images rather than 55.
+
+The fix is now carried into this branch. Group linked and embedded reports
+render only group-average images, with visible clickable file paths and
+portable relative image links. Participant inventories remain in machine JSON;
+individual images stay in their participant reports. Regression tests cover
+normal group generation, HTML-only regeneration, portable paths, and validation
+of all source images before any published HTML is replaced.
+
+Use `07_run_matlab_drsa.py --group-html-only` with the usual run/normalization
+selection to regenerate the four group HTML files from saved JSON and PNGs.
+This mode does not dispatch participant jobs or recompute means/statistics.
+Frozen numerical deployments retain their original hashes; a separate report
+maintenance snapshot records the corrected renderer and before/after audit.

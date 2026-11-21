@@ -417,7 +417,7 @@ def test_group_average_report_averages_result_mats(tmp_path):
         encoding="utf-8"
     )
     assert "actual visible position" in raw_html.read_text(encoding="utf-8")
-    assert "A_dRSA_alt_always_visible_corr_occipital.png" in raw_html.read_text(
+    assert "A_dRSA_alt_always_visible_corr_occipital.png" not in raw_html.read_text(
         encoding="utf-8"
     )
     assert "data:image/png;base64," in raw_embedded_html.read_text(encoding="utf-8")
@@ -431,7 +431,7 @@ def test_group_average_report_averages_result_mats(tmp_path):
     assert "group smoothed display | always_visible" in smoothed_html.read_text(
         encoding="utf-8"
     )
-    assert "A_dRSA_alt_always_visible_corr_occipital_smoothed.png" in smoothed_html.read_text(
+    assert "A_dRSA_alt_always_visible_corr_occipital_smoothed.png" not in smoothed_html.read_text(
         encoding="utf-8"
     )
     assert report["report_files"]["raw_html"] == str(raw_html)
