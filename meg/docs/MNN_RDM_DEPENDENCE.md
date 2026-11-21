@@ -79,3 +79,25 @@ model code. Model self-correlations agree with the original reference within
 within 3.8e-8 (the public MNE baseline-read path). All five ROI axes and MNN
 metadata pass validation. These are implementation checks, not significance
 or mechanistic claims from descriptive correlation panels.
+
+## Submission-limit fallback used on 21 November
+
+The scheduler accepted preflight 13080, then rejected the participant array
+because the account had reached its 200 submitted-task limit. That pending
+preflight had done no work. Only this own pending preflight is replaced; no
+existing producer, decoding, ERF, summary or statistics job is altered.
+
+`run_mnn_rdm_allocation.py` runs the complete diagnostic workflow within one
+allocation, dependent on the entire producer array 13012. Request 60 CPUs,
+192 GB and four hours: validate with four workers, compute all 30 participants
+with 30 independent processes and two threads each, then join and render with
+four group workers. The measured approximately 4-GB participant footprint
+budgets about 120 GB before headroom; 192 GB is an aggregate allocation rather
+than 30 separate MATLAB startup limits. Each pool worker has private MATLAB
+and plotting caches. All eligible participants enter the pool together.
+Shared publication remains ordered after all participant processes complete.
+
+The control directory preserves the failed submission record and the final
+single-job ID, resource settings, code revision and phase progress. This is a
+scheduler/resource change only; inputs, matrices, normalization, summaries and
+output paths are identical to the array workflow.

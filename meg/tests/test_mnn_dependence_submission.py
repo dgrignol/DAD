@@ -32,3 +32,22 @@ def test_submit_joins_complete_cohort_after_producer(tmp_path,monkeypatch):
     launch=json.loads((args.run_dir/'launch.json').read_text())
     assert '--subject-config-dir' in launch['common']
     assert not any(x.startswith('--array=') for x in calls[2])
+
+
+def test_single_allocation_keeps_whole_cohort_parallel_and_group_ordered(tmp_path,monkeypatch):
+    """The QoS fallback uses 30 independent workers rather than a serial loop."""
+    import sys
+    directory=Path(__file__).resolve().parents[1]/'cluster'
+    monkeypatch.syspath_prepend(str(directory))
+    spec=importlib.util.spec_from_file_location('mnn_rdm_allocation',directory/'run_mnn_rdm_allocation.py')
+    module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+    monkeypatch.setenv('SLURM_CPUS_PER_TASK','60')
+    calls=[];monkeypatch.setattr(module.subprocess,'run',lambda command,**kwargs:calls.append(command))
+    (tmp_path/'launch.json').write_text(json.dumps({'subjects':module.COHORT,'common':['python','runner.py']}))
+    args=argparse.Namespace(run_dir=tmp_path,participant_workers=30,participant_threads=2,validation_workers=4,group_workers=4)
+    module.run_allocation(args)
+    assert [c[c.index('--mode')+1] for c in calls]==['validate','participants','group']
+    assert calls[1][calls[1].index('--workers')+1]=='30'
+    assert calls[1][calls[1].index('--threads')+1]=='2'
+    assert calls[1][calls[1].index('--subjects')+1:]==module.COHORT
+    assert calls[2][calls[2].index('--workers')+1]=='4'

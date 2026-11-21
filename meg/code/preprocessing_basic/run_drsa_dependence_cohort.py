@@ -35,6 +35,12 @@ GROUPS = "frontal,temporal,parietal,occipital,wholebrain"
 
 def execute(subject, options, mode):
     """Resolve reviewed tuning, validate the source run and execute one action."""
+    # Pool workers must not share MATLAB preferences or plotting caches.
+    cache = Path(os.environ.get("TMPDIR", "/tmp")) / f"dad_mnn_rdm_{os.environ.get('SLURM_JOB_ID', 'local')}_{subject}_{os.getpid()}"
+    for folder in ("matlab", "matplotlib", "cache"):
+        (cache / folder).mkdir(parents=True, exist_ok=True)
+    os.environ.update(MATLAB_PREFDIR=str(cache / "matlab"), MPLCONFIGDIR=str(cache / "matplotlib"),
+                      XDG_CACHE_HOME=str(cache / "cache"), MPLBACKEND="Agg")
     stage = importlib.import_module("07_run_matlab_drsa")
     project = Path(__file__).resolve().parents[3]
     params = project / "meg/params"
