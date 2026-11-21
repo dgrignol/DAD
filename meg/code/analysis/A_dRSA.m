@@ -39,6 +39,7 @@
 %
 % Data flow:
 %   handoff JSON -> Stage-06 neural tensors -> common non-NaN channel mask ->
+%   fixed whole-head MNN (or explicit none) -> Pearson neural RDMs +
 %   sorted observed/expected trajectory tensors -> dRSA matrices -> PNG/MAT.
 %
 % Scientific assumptions:
@@ -169,6 +170,8 @@ for i_cond = 1:numel(conditions)
     cond = conditions{i_cond};
     field = matlab.lang.makeValidName(cond);
     neural_tensor = drsa_input.(field).neural;
+    [neural_tensor, normalized_labels, normalization_info] = ...
+        drsa_stage_utils.apply_noise_normalization(neural_tensor, kept_channel_labels, handoff, 'real', 'wholebrain');
     observed_position = model_input.(field).observed_position;
     observed_direction = model_input.(field).observed_direction;
 
@@ -310,7 +313,7 @@ for i_cond = 1:numel(conditions)
     % Result arrays are small enough for MATLAB v7 and remain readable from
     % Python scipy for numeric group averaging.
     save(results_file, 'dRSA_neural_correlation', 'model_names', ...
-        'model_axis_labels', 'model_source_conditions', 'model_dist', 'params', 'handoff', ...
+        'model_axis_labels', 'model_source_conditions', 'model_dist', 'params', 'handoff', 'normalization_info', 'normalized_labels', ...
         'identity_values', 'time_axis_sec', ...
         'kept_channel_labels', 'removed_channel_labels', 'trigger_opt', ...
         'fig_file', 'fig_file_smoothed', 'doSmoothingPlots', ...

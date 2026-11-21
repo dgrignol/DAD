@@ -65,6 +65,7 @@ def _fake_cfg(tmp_path: Path) -> dict:
             "subject_input_files_dir": str(input_dir),
         },
         "matlab_drsa": {
+            "neural_normalization": "none",
             "occlusion_timing": {
                 "frame_frequency_hz": 120.0,
                 "first_complete_occlusion_frame": 130,
@@ -436,3 +437,15 @@ def test_group_average_report_averages_result_mats(tmp_path):
     assert report["report_files"]["raw_html"] == str(raw_html)
     assert report["report_files"]["smoothed_html"] == str(smoothed_html)
     assert len(report["participant_figures"]) == 4
+
+
+def test_variant_manifest_accepts_handoff_strings_and_preserves_source(tmp_path):
+    """The completed-result provenance step must not mutate input ancestry."""
+    source=tmp_path/'accepted'/'source_manifest.json';source.parent.mkdir()
+    source.write_text(json.dumps({'derivative_lineage':{'stages':{'export_drsa':{'status':'completed'}}}}))
+    before=source.read_bytes();target=tmp_path/'new'/'source_manifest.json'
+    cfg={'drsa_input_resolved_paths':{},'drsa_analysis_label':'mnn-v1'}
+    handoff={'source_manifest':str(source),'neural_normalization':{'mode':'mnn'}}
+    result=STAGE07._completed_analysis_manifest(cfg,{'source_manifest':target},handoff,tmp_path/'raw',str(source))
+    assert result==target and source.read_bytes()==before
+    assert json.loads(target.read_text())['drsa_analysis']['normalization']['mode']=='mnn'

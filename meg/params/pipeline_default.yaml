@@ -1019,6 +1019,8 @@ export:
   include_epochs_metadata: true
 
 matlab_drsa:
+  # Fixed pooled-baseline MNN is applied at Stage 07; none reproduces legacy geometry.
+  neural_normalization: "mnn"
   enabled: true
   matlab_bin: "/Applications/MATLAB_R2020a.app/bin/matlab"
   use_arch_x86_64: false

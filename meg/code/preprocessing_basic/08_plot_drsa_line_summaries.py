@@ -2,6 +2,10 @@
 """
 08_plot_drsa_line_summaries.py
 
+Normalization
+--neural-normalization mnn is the default; none selects the legacy metric.
+Outputs use a separate analysis namespace; Stage-04/06 inputs remain immutable.
+
 Purpose
 Generate optional exploratory line-plot summaries from existing Stage-07 dRSA
 result MAT files. This stage does not run MATLAB and does not recompute dRSA.
@@ -90,6 +94,8 @@ Safety and assumptions
 
 from __future__ import annotations
 
+from drsa_analysis_variant import assert_result_normalization, add_analysis_arguments, load_drsa_config as load_and_resolve_config, source_config
+
 import argparse
 import html
 import json
@@ -128,7 +134,6 @@ from drsa_result_utils import (
     utc_now,
     write_embedded_html_copy,
 )
-from pipeline_config import load_and_resolve_config
 from preprocessing_stage_utils import guarded_path
 
 
@@ -181,6 +186,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate optional line summaries from existing dRSA MAT files."
     )
+    add_analysis_arguments(parser)
     parser.add_argument("--config", required=True)
     parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
@@ -279,6 +285,7 @@ def _load_cfg(
         subject_config,
         args.tuning_config,
         site_config_path=args.site_config,
+        neural_normalization=getattr(args, "neural_normalization", None),
         required_sections=("export", "matlab_drsa"),
     )
     if warnings and args.print_summary:
@@ -395,6 +402,8 @@ def _read_subject_records(
                 }
             )
             continue
+        if analysis_family != "simulations":
+            assert_result_normalization(result_metadata, cfg)
         if not matrices:
             skipped.append(
                 {

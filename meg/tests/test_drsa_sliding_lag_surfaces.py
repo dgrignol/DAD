@@ -323,6 +323,7 @@ def test_cli_builds_group_report_with_all_three_plot_types(tmp_path):
         [
             sys.executable,
             str(CODE_DIR / "09_plot_drsa_sliding_lag_surfaces.py"),
+            "--neural-normalization", "none",
             "--config",
             str(REPO_ROOT / "meg" / "params" / "pipeline_default.yaml"),
             "--site-config",

@@ -7,6 +7,10 @@ Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for
 Stage 04. Analysis/reports use the matching processing_runs/LABEL directory.
 Labelled resume verifies input/settings contracts and artifact bindings.
 
+Normalization
+--neural-normalization mnn is the default; none selects the legacy metric.
+Outputs use a separate analysis namespace; Stage-04/06 inputs remain immutable.
+
 Purpose
 Run the optional MATLAB dRSA analysis layer from the same resolved
 configuration and lineage contracts used by the Python MEG pipeline. This
@@ -97,6 +101,8 @@ Safety and assumptions
 
 from __future__ import annotations
 
+from drsa_analysis_variant import add_analysis_arguments, load_drsa_config as load_and_resolve_config, source_config
+
 import argparse
 import base64
 import html
@@ -112,6 +118,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from drsa_noise_normalization import prepare_noise
 from downstream_stage_utils import discover_trajectory_models
 from continuous_cleaning import digest, file_hash, file_stamp
 from epoch_input_preparation import processing_manifest, verify_export_artifacts
@@ -124,7 +131,6 @@ from drsa_result_utils import (
 )
 from pipeline_config import (
     assert_output_path_outside_raw,
-    load_and_resolve_config,
 )
 from preprocessing_stage_utils import (
     guarded_path,
@@ -165,6 +171,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run optional MATLAB dRSA from Stage-06 neural exports."
     )
+    add_analysis_arguments(parser)
     parser.add_argument("--config", required=True)
     parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
@@ -621,10 +628,12 @@ def build_handoff(
     subject trajectory discovery -> handoff JSON consumed by MATLAB.
     """
     paths = _analysis_paths(cfg)
+    input_cfg = source_config(cfg)
+    input_paths = _analysis_paths(input_cfg)
     raw_root = Path(cfg["resolved_paths"]["data_root"])
-    manifest_path = processing_manifest(cfg, source_manifest)
+    manifest_path = processing_manifest(input_cfg, source_manifest)
     if cfg.get("epoching", {}).get("processing_run"):
-        verify_export_artifacts(cfg)
+        verify_export_artifacts(source_config(cfg))
     manifest = _load_json(manifest_path)
     export_lineage = (
         manifest.get("derivative_lineage", {})
@@ -637,7 +646,7 @@ def build_handoff(
             "MATLAB dRSA can run."
         )
 
-    export_report = _load_json(paths["export_report_json"])
+    export_report = _load_json(input_paths["export_report_json"])
     if export_report.get("status") != "completed":
         raise RuntimeError(
             f"Stage-06 export report is not completed: {paths['export_report_json']}"
@@ -652,7 +661,7 @@ def build_handoff(
     for condition in CONDITIONS:
         neural_mat, sidecar_json = _condition_output_paths(
             cfg,
-            paths["drsa_dir"],
+            input_paths["drsa_dir"],
             condition,
         )
         guarded_path(neural_mat, raw_root)
@@ -729,7 +738,7 @@ def build_handoff(
         "drsa_dir": str(paths["drsa_dir"]),
         "drsa_functions_dir": str(paths["drsa_functions_dir"]),
         "source_manifest": str(manifest_path),
-        "export_report_json": str(paths["export_report_json"]),
+        "export_report_json": str(input_paths["export_report_json"]),
         "trajectory_models": trajectory_models,
         "condition_outputs": condition_payloads,
         "identity_values": identity_values_ref,
@@ -2050,6 +2059,21 @@ def build_group_average_report(
     }
 
 
+def _completed_analysis_manifest(cfg, paths, handoff, raw_root, supplied_manifest):
+    """Record variant ancestry without modifying the accepted input manifest."""
+    if "drsa_input_resolved_paths" not in cfg:
+        return processing_manifest(cfg, supplied_manifest)
+    target = paths["source_manifest"]
+    if not target.exists():
+        source = Path(handoff["source_manifest"])
+        ancestry = _load_json(source)
+        ancestry["drsa_analysis"] = {"label": cfg["drsa_analysis_label"],
+            "source_manifest": str(source), "source_manifest_sha256": file_hash(source),
+            "normalization": handoff["neural_normalization"]}
+        write_json(target, ancestry, raw_root=raw_root, overwrite=False)
+    return target
+
+
 def run_stage(
     cfg: Mapping[str, Any],
     args: argparse.Namespace,
@@ -2142,16 +2166,25 @@ def run_stage(
             "handoff": handoff,
         }
 
+    mode = matlab_cfg.get("neural_normalization", "mnn")
+    handoff["neural_normalization"] = ({"mode": "none"} if mode == "none" else
+        prepare_noise(handoff, paths["analysis_dir"] / "noise_normalization", cfg))
     paths["reports_dir"].mkdir(parents=True, exist_ok=True)
     # Bind resume to the neural variant, requested settings and MATLAB sources.
     # Output MATs use file stamps; large raw recordings are never hashed here.
     analysis_contract = None
     previous = None
     if cfg.get("epoching", {}).get("processing_run"):
-        export_evidence = verify_export_artifacts(cfg)
+        export_evidence = verify_export_artifacts(source_config(cfg))
         analysis_contract = digest({"export": export_evidence["export_contract_sha256"],
             "settings": [analyses, conditions, sensor_groups, drsa_type, model_sources,
                 smoothing_plots, plot_smoothing_window, cfg.get("matlab_drsa", {})],
+            "normalization": handoff["neural_normalization"],
+            "helpers": {name: file_hash(paths["project_root"] / relative) for name, relative in {
+                "matlab_utils": "code/analysis/drsa_stage_utils.m",
+                "sensor_groups": "code/analysis/megin_sensor_groups.json",
+                "noise": "code/preprocessing_basic/drsa_noise_normalization.py",
+                "routing": "code/preprocessing_basic/drsa_analysis_variant.py"}.items()},
             "scripts": {key: file_hash(paths[key]) for key in ("real_script", "alt_script", "simulations_script")}})
         if paths["report_json"].is_file():
             previous = _load_json(paths["report_json"])
@@ -2258,8 +2291,9 @@ def run_stage(
             }
             for item in handoff["condition_outputs"]
         ]
+        variant_manifest = _completed_analysis_manifest(cfg, paths, handoff, raw_root, args.source_manifest)
         update_source_manifest_stage(
-            manifest_path=processing_manifest(cfg, args.source_manifest),
+            manifest_path=variant_manifest,
             raw_root=raw_root,
             stage_name="matlab_drsa",
             processing_pass="apply",
@@ -2298,6 +2332,7 @@ def main() -> int:
         args.subject_config,
         args.tuning_config,
         site_config_path=args.site_config,
+        neural_normalization=getattr(args, "neural_normalization", None),
         required_sections=("epoching", "export", "matlab_drsa"),
     )
     if warnings and args.print_summary:

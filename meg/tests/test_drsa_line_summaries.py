@@ -575,6 +575,7 @@ def test_cli_runs_on_tiny_fake_derivative_tree_and_embeds_report_images(tmp_path
         [
             sys.executable,
             str(CODE_DIR / "08_plot_drsa_line_summaries.py"),
+            "--neural-normalization", "none",
             "--config",
             str(REPO_ROOT / "meg" / "params" / "pipeline_default.yaml"),
             "--site-config",
@@ -652,6 +653,7 @@ def test_cli_with_within_subject_shading_reports_selected_mode(tmp_path):
         [
             sys.executable,
             str(CODE_DIR / "08_plot_drsa_line_summaries.py"),
+            "--neural-normalization", "none",
             "--config",
             str(REPO_ROOT / "meg" / "params" / "pipeline_default.yaml"),
             "--site-config",
