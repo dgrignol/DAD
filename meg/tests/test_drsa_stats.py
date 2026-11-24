@@ -447,6 +447,7 @@ def test_cli_runs_on_tiny_fake_derivative_tree_and_embeds_report(tmp_path):
         [
             sys.executable,
             str(CODE_DIR / "10_drsa_stats.py"),
+            "--neural-normalization", "none",
             "--config",
             str(REPO_ROOT / "meg" / "params" / "pipeline_default.yaml"),
             "--site-config",

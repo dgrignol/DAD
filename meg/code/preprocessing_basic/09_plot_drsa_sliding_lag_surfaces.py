@@ -2,6 +2,10 @@
 """
 09_plot_drsa_sliding_lag_surfaces.py
 
+Normalization
+--neural-normalization mnn is the default; none selects the legacy metric.
+Outputs use a separate analysis namespace; Stage-04/06 inputs remain immutable.
+
 Purpose
 Generate exploratory sliding-window lag summaries from existing Stage-07 dRSA
 result MAT files. This stage does not run MATLAB and does not recompute dRSA.
@@ -83,6 +87,8 @@ Safety and assumptions
 
 from __future__ import annotations
 
+from drsa_analysis_variant import assert_result_normalization, add_analysis_arguments, load_drsa_config as load_and_resolve_config, source_config
+
 import argparse
 import html
 import json
@@ -117,7 +123,6 @@ from drsa_result_utils import (
     utc_now,
     write_embedded_html_copy,
 )
-from pipeline_config import load_and_resolve_config
 from preprocessing_stage_utils import guarded_path
 
 
@@ -305,6 +310,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
             "interactive Plotly 3-D waterfalls from existing Stage-07 MAT files."
         )
     )
+    add_analysis_arguments(parser)
     parser.add_argument("--config", required=True)
     parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
@@ -425,17 +431,20 @@ def _analysis_paths(cfg: Mapping[str, Any]) -> dict[str, Path]:
     session = cfg["layout"]["session_bids_id"]
     group_analysis_dir = analysis_dir.parent.parent / "group" / session
     group_reports_dir = reports_dir.parent.parent / "group" / session
+    sensor = cfg.get("drsa_sliding_sensor_group", "occipital")
+    suffix = "" if sensor == "occipital" else "_" + sensor
+    subdir = Path("sliding_lag_surfaces") if sensor == "occipital" else Path("sliding_lag_surfaces") / sensor
     return {
         "analysis_dir": analysis_dir,
         "reports_dir": reports_dir,
         "drsa_dir": analysis_dir / "drsa",
-        "subject_surface_dir": analysis_dir / "drsa" / "sliding_lag_surfaces",
-        "subject_report_html": reports_dir / "09_drsa_sliding_lag_surfaces_report.html",
+        "subject_surface_dir": analysis_dir / "drsa" / subdir,
+        "subject_report_html": reports_dir / f"09_drsa_sliding_lag_surfaces_report{suffix}.html",
         "group_analysis_dir": group_analysis_dir,
         "group_reports_dir": group_reports_dir,
         "group_drsa_dir": group_analysis_dir / "drsa",
-        "group_surface_dir": group_analysis_dir / "drsa" / "sliding_lag_surfaces",
-        "group_report_html": group_reports_dir / "09_drsa_sliding_lag_surfaces_report.html",
+        "group_surface_dir": group_analysis_dir / "drsa" / subdir,
+        "group_report_html": group_reports_dir / f"09_drsa_sliding_lag_surfaces_report{suffix}.html",
     }
 
 
@@ -450,10 +459,12 @@ def _load_cfg(
         subject_config,
         args.tuning_config,
         site_config_path=args.site_config,
+        neural_normalization=getattr(args, "neural_normalization", None),
         required_sections=("export", "matlab_drsa"),
     )
     if warnings_list and args.print_summary:
         print(json.dumps({"configuration_warnings": warnings_list}, indent=2))
+    cfg["drsa_sliding_sensor_group"] = normalize_sensor_group(args.sensor_group)
     return cfg
 
 

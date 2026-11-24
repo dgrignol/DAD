@@ -7,6 +7,10 @@ Export the same DAD_EPOCH_PREPARATION and DAD_PROCESSING_RUN values used for
 Stage 04. Analysis/reports use the matching processing_runs/LABEL directory.
 Labelled resume verifies input/settings contracts and artifact bindings.
 
+Normalization
+--neural-normalization mnn is the default; none selects the legacy metric.
+Outputs use a separate analysis namespace; Stage-04/06 inputs remain immutable.
+
 Purpose
 Run the optional MATLAB dRSA analysis layer from the same resolved
 configuration and lineage contracts used by the Python MEG pipeline. This
@@ -82,7 +86,8 @@ Outputs
 - MATLAB PNG/MAT outputs below analysis/sub-XX/ses-01/drsa/
 - Optional group-average PNG/JSON/HTML outputs below analysis/group/ses-01/drsa/
   and reports/group/ses-01/. Group HTML reports also receive sibling
-  *_embedded.html copies with all image bytes inlined for sharing.
+  *_embedded.html copies with group images only. Participant figures remain
+  in their own reports. --group-html-only rebuilds HTML without any analysis.
 - export_drsa remains unchanged; this stage records matlab_drsa lineage only.
 
 Safety and assumptions
@@ -97,6 +102,8 @@ Safety and assumptions
 
 from __future__ import annotations
 
+from drsa_analysis_variant import add_analysis_arguments, load_drsa_config as load_and_resolve_config, source_config
+
 import argparse
 import base64
 import html
@@ -108,10 +115,13 @@ import shlex
 import subprocess
 import sys
 import textwrap
+import tempfile
+from urllib.parse import quote, unquote
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
+from drsa_noise_normalization import prepare_noise
 from downstream_stage_utils import discover_trajectory_models
 from continuous_cleaning import digest, file_hash, file_stamp
 from epoch_input_preparation import processing_manifest, verify_export_artifacts
@@ -124,7 +134,6 @@ from drsa_result_utils import (
 )
 from pipeline_config import (
     assert_output_path_outside_raw,
-    load_and_resolve_config,
 )
 from preprocessing_stage_utils import (
     guarded_path,
@@ -165,6 +174,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run optional MATLAB dRSA from Stage-06 neural exports."
     )
+    add_analysis_arguments(parser)
     parser.add_argument("--config", required=True)
     parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
@@ -263,6 +273,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Only build group-average dRSA figures/report from existing subject MAT outputs.",
     )
+    parser.add_argument("--group-html-only", action="store_true",
+                        help="Rebuild group-only linked/embedded HTML from saved JSON and PNGs.")
     parser.add_argument(
         "--group-subjects",
         nargs="+",
@@ -367,7 +379,7 @@ def write_embedded_html_copy(
 
     def replace_src(match: re.Match[str]) -> str:
         quote = match.group(1)
-        src = match.group(2)
+        src = unquote(html.unescape(match.group(2)))
         if src.startswith("data:"):
             return match.group(0)
         image_path = Path(src).expanduser()
@@ -621,10 +633,12 @@ def build_handoff(
     subject trajectory discovery -> handoff JSON consumed by MATLAB.
     """
     paths = _analysis_paths(cfg)
+    input_cfg = source_config(cfg)
+    input_paths = _analysis_paths(input_cfg)
     raw_root = Path(cfg["resolved_paths"]["data_root"])
-    manifest_path = processing_manifest(cfg, source_manifest)
+    manifest_path = processing_manifest(input_cfg, source_manifest)
     if cfg.get("epoching", {}).get("processing_run"):
-        verify_export_artifacts(cfg)
+        verify_export_artifacts(source_config(cfg))
     manifest = _load_json(manifest_path)
     export_lineage = (
         manifest.get("derivative_lineage", {})
@@ -637,7 +651,7 @@ def build_handoff(
             "MATLAB dRSA can run."
         )
 
-    export_report = _load_json(paths["export_report_json"])
+    export_report = _load_json(input_paths["export_report_json"])
     if export_report.get("status") != "completed":
         raise RuntimeError(
             f"Stage-06 export report is not completed: {paths['export_report_json']}"
@@ -652,7 +666,7 @@ def build_handoff(
     for condition in CONDITIONS:
         neural_mat, sidecar_json = _condition_output_paths(
             cfg,
-            paths["drsa_dir"],
+            input_paths["drsa_dir"],
             condition,
         )
         guarded_path(neural_mat, raw_root)
@@ -729,7 +743,7 @@ def build_handoff(
         "drsa_dir": str(paths["drsa_dir"]),
         "drsa_functions_dir": str(paths["drsa_functions_dir"]),
         "source_manifest": str(manifest_path),
-        "export_report_json": str(paths["export_report_json"]),
+        "export_report_json": str(input_paths["export_report_json"]),
         "trajectory_models": trajectory_models,
         "condition_outputs": condition_payloads,
         "identity_values": identity_values_ref,
@@ -1506,22 +1520,24 @@ def _html_id(value: str) -> str:
 
 
 def _image_href(report_path: Path, image_path: str | Path) -> str:
-    """Return an HTML image href relative to the report folder when possible."""
+    """Return a URL-encoded relative image path across the derivative tree."""
     resolved_image = Path(image_path).expanduser().resolve()
-    try:
-        return str(resolved_image.relative_to(report_path.parent))
-    except ValueError:
-        return str(resolved_image)
+    relative = os.path.relpath(resolved_image, report_path.resolve().parent)
+    return quote(relative, safe="/")
 
 
 def _figure_block(report_path: Path, item: Mapping[str, Any]) -> str:
-    """Build one HTML figure block with a portable image reference."""
+    """Show one group image, its scientific caption, and a visible file link."""
     href = _image_href(report_path, item["figure"])
+    figure_path = Path(item["figure"]).expanduser().resolve()
     caption = str(item.get("caption") or item.get("figure"))
     return (
         "<figure>"
         f"<img src=\"{html.escape(href)}\"/>"
-        f"<figcaption>{html.escape(caption)}</figcaption>"
+        f"<figcaption>{html.escape(caption)}"
+        "<div class=\"figure-path\">Figure file "
+        f"<a href=\"{html.escape(href)}\"><code>{html.escape(str(figure_path))}</code></a>"
+        "</div></figcaption>"
         "</figure>"
     )
 
@@ -1577,75 +1593,28 @@ def write_group_drsa_html_report(
     title: str,
     variant_label: str,
     summary_lines: Iterable[str],
-    subjects: Iterable[str],
     group_outputs: Iterable[Mapping[str, Any]],
-    participant_figures: Iterable[Mapping[str, Any]],
     skipped_inputs: Iterable[Mapping[str, str]],
     raw_root: Path,
 ) -> Path:
     """
-    Write a navigable group dRSA report with group and participant sections.
+    Write a group-only dRSA report and its self-contained embedded copy.
 
-    The report is intentionally static HTML rather than an MNE Report so it can
-    be opened from the cluster derivative folder without Python dependencies.
+    Inputs are group-average figure records with resolved local file paths.
+    Relative image/file links keep the linked report portable between the
+    cluster and a mounted derivative tree. Captions expose the full file path.
     """
     report_path = guarded_path(path, raw_root)
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    subject_list = list(subjects)
     group_items = [dict(item) for item in group_outputs]
-    participant_items = [dict(item) for item in participant_figures]
     skipped = list(skipped_inputs)
 
     for item in group_items:
         item["caption"] = _group_output_caption(item, variant_label)
 
-    participant_by_subject = {
-        subject: [
-            item for item in participant_items
-            if item.get("subject") == subject
-        ]
-        for subject in subject_list
-    }
-
-    toc_subject_links = "\n".join(
-        f"<li><a href=\"#{_html_id('subject-' + subject)}\">{html.escape(subject)}</a></li>"
-        for subject in subject_list
-    )
     group_blocks = _condition_grouped_figure_blocks(report_path, group_items)
     if not group_blocks:
         group_blocks = "<p>No group-average figures were available for this report variant.</p>"
-
-    subject_sections: list[str] = []
-    for subject in subject_list:
-        subject_id = _html_id("subject-" + subject)
-        condition_blocks: list[str] = []
-        subject_figures = participant_by_subject[subject]
-        for condition in CONDITIONS:
-            condition_figures = [
-                item for item in subject_figures
-                if item.get("condition") == condition
-            ]
-            blocks = "\n".join(
-                _figure_block(report_path, item) for item in condition_figures
-            ) or "<p>No figures for this condition.</p>"
-            condition_blocks.append(
-                f"<section><h3>{html.escape(condition)}</h3>{blocks}</section>"
-            )
-        unknown_figures = [
-            item for item in subject_figures
-            if item.get("condition") not in CONDITIONS
-        ]
-        if unknown_figures:
-            condition_blocks.append(
-                "<section><h3>unknown condition</h3>"
-                + "\n".join(_figure_block(report_path, item) for item in unknown_figures)
-                + "</section>"
-            )
-        subject_sections.append(
-            f"<section id=\"{subject_id}\"><h2>{html.escape(subject)}</h2>"
-            + "\n".join(condition_blocks)
-            + "</section>"
-        )
 
     skipped_block = ""
     if skipped:
@@ -1666,10 +1635,11 @@ def write_group_drsa_html_report(
             f"<title>{html.escape(title)}</title>",
             "<style>",
             "body{font-family:system-ui,sans-serif;max-width:1600px;margin:2rem auto;padding:0 1rem;}",
-            "nav,pre{background:#f5f5f5;padding:1rem;border-radius:6px;}",
+            "pre{background:#f5f5f5;padding:1rem;border-radius:6px;white-space:pre-wrap;}",
             "figure{margin:1.5rem 0;padding-bottom:1rem;border-bottom:1px solid #ddd;}",
             "img{max-width:100%;height:auto;border:1px solid #ddd;}",
             "figcaption{font-size:.9rem;color:#333;margin-top:.4rem;}",
+            ".figure-path{margin-top:.5rem;overflow-wrap:anywhere;}",
             "h2{margin-top:3rem;border-top:3px solid #222;padding-top:1rem;}",
             "h3{margin-top:2rem;color:#333;}",
             "</style>",
@@ -1677,15 +1647,9 @@ def write_group_drsa_html_report(
             f"<h1>{html.escape(title)}</h1>",
             f"<p><strong>Report variant:</strong> {html.escape(variant_label)}</p>",
             f"<pre>{html.escape(chr(10).join(summary_lines))}</pre>",
-            "<nav><strong>Subjects</strong><ul>",
-            toc_subject_links,
-            "</ul></nav>",
             skipped_block,
             "<section id=\"group-average\"><h2>Group average figures</h2>",
             group_blocks,
-            "</section>",
-            "<section id=\"participants\"><h2>Participant figures</h2>",
-            "\n".join(subject_sections),
             "</section>",
             "</body></html>",
         ]
@@ -1693,6 +1657,115 @@ def write_group_drsa_html_report(
     report_path.write_text(body, encoding="utf-8")
     write_embedded_html_copy(report_path, raw_root=raw_root)
     return report_path
+
+
+def _group_report_render_args(
+    metadata_path: Path,
+    metadata: Mapping[str, Any],
+    group_drsa_dir: Path,
+) -> dict[str, Any]:
+    """Validate saved group figures and prepare HTML arguments on this mount.
+
+    Saved JSON may name the cluster mount while the renderer runs locally.
+    Rebase figure paths relative to its recorded group directory and require
+    each resolved image to stay under the current group directory. Participant
+    inventory metadata remains available in JSON for historical consumers.
+    """
+    if metadata.get("stage") != "matlab_drsa_group_average" or metadata.get("status") != "completed":
+        raise ValueError(f"Expected a completed group report: {metadata_path}")
+    variant = metadata.get("variant")
+    kinds = {"raw": "raw_average", "smoothed": "average_of_smoothed"}
+    if variant not in kinds or not metadata.get("outputs"):
+        raise ValueError(f"Missing group figures or unsupported variant: {metadata_path}")
+
+    # Only group-average outputs enter the HTML, using this mount's paths.
+    saved_dir = Path(metadata["group_drsa_dir"])
+    current_dir = group_drsa_dir.resolve()
+    outputs: list[dict[str, Any]] = []
+    for record in metadata["outputs"]:
+        if record.get("kind") != kinds[variant]:
+            raise ValueError(f"Unexpected figure kind in {metadata_path}: {record.get('kind')}")
+        figure = Path(record["figure"])
+        relative = figure.relative_to(saved_dir) if figure.is_absolute() else figure
+        local = (current_dir / relative).resolve()
+        local.relative_to(current_dir)
+        if local.suffix.lower() != ".png" or not local.is_file() or local.stat().st_size == 0:
+            raise FileNotFoundError(f"Missing or empty group figure: {local}")
+        outputs.append({**record, "figure": str(local)})
+
+    variant_label = "raw / non-smoothed" if variant == "raw" else "smoothed display"
+    return {
+        "title": f"Group | {metadata['session_bids_id']} | 07 MATLAB dRSA averages | {variant}",
+        "variant_label": variant_label,
+        "summary_lines": [
+            "Stage status: completed",
+            f"Subjects requested: {', '.join(metadata['subjects_requested'])}",
+            f"Group-average figures: {len(outputs)}",
+            f"Plot smoothing window: {metadata['plot_smoothing_window']}",
+            f"Skipped inputs: {len(metadata.get('skipped_inputs', []))}",
+            f"Group dRSA directory: {current_dir}",
+            f"Machine report: {metadata_path.resolve()}",
+        ],
+        "group_outputs": outputs,
+        "skipped_inputs": metadata.get("skipped_inputs", []),
+    }
+
+
+def rebuild_group_html(cfg: Mapping[str, Any]) -> dict[str, Any]:
+    """Rebuild existing group HTML variants from saved JSON and PNG files.
+
+    All variants and images are validated before rendering. Complete linked
+    and embedded files are staged in their destination directory before any
+    published HTML is replaced. Scientific inputs, JSON inventories and PNGs
+    are consumed read-only. No participant work is dispatched in this mode.
+    """
+    paths = _analysis_paths(cfg)
+    raw_root = Path(cfg["resolved_paths"]["data_root"])
+    metadata_paths = [paths["group_report_json"]]
+    if paths["group_report_smoothed_json"].is_file():
+        metadata_paths.append(paths["group_report_smoothed_json"])
+
+    # Validate the full set before entering the shared HTML publication phase.
+    plans = []
+    for metadata_path in metadata_paths:
+        metadata = _load_json(metadata_path)
+        if metadata["session_bids_id"] != cfg["layout"]["session_bids_id"]:
+            raise ValueError(f"Session mismatch in {metadata_path}")
+        render_args = _group_report_render_args(metadata_path, metadata, paths["group_drsa_dir"])
+        destination = guarded_path(metadata_path.with_suffix(".html"), raw_root)
+        plans.append((destination, render_args))
+
+    # Staging in the same directory preserves each relative image reference.
+    staged: list[Path] = []
+    replacements: list[tuple[Path, Path]] = []
+    try:
+        for destination, render_args in plans:
+            with tempfile.NamedTemporaryFile(
+                dir=destination.parent, prefix=f".{destination.stem}_", suffix=".html", delete=False
+            ) as temporary:
+                linked = Path(temporary.name)
+            embedded = linked.with_name(f"{linked.stem}_embedded.html")
+            staged.extend((linked, embedded))
+            write_group_drsa_html_report(linked, raw_root=raw_root, **render_args)
+            replacements.extend((
+                (linked, destination),
+                (embedded, guarded_path(destination.with_name(f"{destination.stem}_embedded.html"), raw_root)),
+            ))
+        for source, destination in replacements:
+            # Preserve access permissions when replacing cached presentation files.
+            source.chmod(destination.stat().st_mode & 0o777 if destination.exists() else 0o644)
+            source.replace(destination)
+    finally:
+        for temporary in staged:
+            temporary.unlink(missing_ok=True)
+
+    return {
+        "stage": "matlab_drsa_group_html",
+        "status": "completed",
+        "group_drsa_dir": str(paths["group_drsa_dir"]),
+        "figure_count": sum(len(options["group_outputs"]) for _, options in plans),
+        "report_files": [str(destination) for _, destination in replacements],
+    }
 
 
 def build_group_average_report(
@@ -1920,7 +1993,7 @@ def build_group_average_report(
     common_summary = [
         f"Subjects requested: {', '.join(subjects)}",
         f"All group-average figure count: {len(outputs)}",
-        f"Participant figure count: {len(participant_figures)}",
+        f"Participant inventory (not rendered): {len(participant_figures)}",
         f"Smoothing plots requested: {smoothing_plots}",
         f"Plot smoothing window: {smoothing_window}",
         f"Skipped inputs: {len(skipped_inputs)}",
@@ -1952,12 +2025,10 @@ def build_group_average_report(
             "Stage status: completed",
             *common_summary,
             f"Raw group-average figures: {len(raw_group_outputs)}",
-            f"Raw participant figures: {len(raw_participant_figures)}",
+            f"Raw participant inventory retained separately: {len(raw_participant_figures)}",
             f"Machine report: {paths['group_report_json']}",
         ],
-        subjects=subjects,
         group_outputs=raw_group_outputs,
-        participant_figures=raw_participant_figures,
         skipped_inputs=skipped_inputs,
         raw_root=raw_root,
     )
@@ -2011,12 +2082,10 @@ def build_group_average_report(
                 "Stage status: completed",
                 *common_summary,
                 f"Smoothed group-average figures: {len(smoothed_group_outputs)}",
-                f"Smoothed participant figures: {len(smoothed_participant_figures)}",
+                f"Smoothed participant inventory retained separately: {len(smoothed_participant_figures)}",
                 f"Machine report: {paths['group_report_smoothed_json']}",
             ],
-            subjects=subjects,
             group_outputs=smoothed_group_outputs,
-            participant_figures=smoothed_participant_figures,
             skipped_inputs=skipped_inputs,
             raw_root=raw_root,
         )
@@ -2050,11 +2119,28 @@ def build_group_average_report(
     }
 
 
+def _completed_analysis_manifest(cfg, paths, handoff, raw_root, supplied_manifest):
+    """Record variant ancestry without modifying the accepted input manifest."""
+    if "drsa_input_resolved_paths" not in cfg:
+        return processing_manifest(cfg, supplied_manifest)
+    target = paths["source_manifest"]
+    if not target.exists():
+        source = Path(handoff["source_manifest"])
+        ancestry = _load_json(source)
+        ancestry["drsa_analysis"] = {"label": cfg["drsa_analysis_label"],
+            "source_manifest": str(source), "source_manifest_sha256": file_hash(source),
+            "normalization": handoff["neural_normalization"]}
+        write_json(target, ancestry, raw_root=raw_root, overwrite=False)
+    return target
+
+
 def run_stage(
     cfg: Mapping[str, Any],
     args: argparse.Namespace,
 ) -> dict[str, Any]:
     """Validate inputs, optionally launch MATLAB, and record outputs."""
+    if getattr(args, "group_html_only", False):
+        return rebuild_group_html(cfg)
     raw_root = Path(cfg["resolved_paths"]["data_root"])
     paths = _analysis_paths(cfg)
     matlab_cfg = cfg.get("matlab_drsa", {})
@@ -2142,16 +2228,25 @@ def run_stage(
             "handoff": handoff,
         }
 
+    mode = matlab_cfg.get("neural_normalization", "mnn")
+    handoff["neural_normalization"] = ({"mode": "none"} if mode == "none" else
+        prepare_noise(handoff, paths["analysis_dir"] / "noise_normalization", cfg))
     paths["reports_dir"].mkdir(parents=True, exist_ok=True)
     # Bind resume to the neural variant, requested settings and MATLAB sources.
     # Output MATs use file stamps; large raw recordings are never hashed here.
     analysis_contract = None
     previous = None
     if cfg.get("epoching", {}).get("processing_run"):
-        export_evidence = verify_export_artifacts(cfg)
+        export_evidence = verify_export_artifacts(source_config(cfg))
         analysis_contract = digest({"export": export_evidence["export_contract_sha256"],
             "settings": [analyses, conditions, sensor_groups, drsa_type, model_sources,
                 smoothing_plots, plot_smoothing_window, cfg.get("matlab_drsa", {})],
+            "normalization": handoff["neural_normalization"],
+            "helpers": {name: file_hash(paths["project_root"] / relative) for name, relative in {
+                "matlab_utils": "code/analysis/drsa_stage_utils.m",
+                "sensor_groups": "code/analysis/megin_sensor_groups.json",
+                "noise": "code/preprocessing_basic/drsa_noise_normalization.py",
+                "routing": "code/preprocessing_basic/drsa_analysis_variant.py"}.items()},
             "scripts": {key: file_hash(paths[key]) for key in ("real_script", "alt_script", "simulations_script")}})
         if paths["report_json"].is_file():
             previous = _load_json(paths["report_json"])
@@ -2258,8 +2353,9 @@ def run_stage(
             }
             for item in handoff["condition_outputs"]
         ]
+        variant_manifest = _completed_analysis_manifest(cfg, paths, handoff, raw_root, args.source_manifest)
         update_source_manifest_stage(
-            manifest_path=processing_manifest(cfg, args.source_manifest),
+            manifest_path=variant_manifest,
             raw_root=raw_root,
             stage_name="matlab_drsa",
             processing_pass="apply",
@@ -2298,6 +2394,7 @@ def main() -> int:
         args.subject_config,
         args.tuning_config,
         site_config_path=args.site_config,
+        neural_normalization=getattr(args, "neural_normalization", None),
         required_sections=("epoching", "export", "matlab_drsa"),
     )
     if warnings and args.print_summary:

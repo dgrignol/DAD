@@ -48,8 +48,9 @@
 %   first complete occlusion and first reappearance from the handoff timing.
 %
 % Data flow:
-%   handoff JSON -> one condition neural tensor -> NaN-channel cleanup ->
-%   sensor-group selection -> one trajectory position model -> dRSA PNG/MAT.
+%   handoff JSON -> neural tensor -> NaN cleanup -> temporal smoothing ->
+%   sensor-group selection -> fixed ROI MNN (or explicit none) -> Pearson RDM
+%   -> one trajectory position model -> dRSA PNG/MAT.
 %   Prediction-error runs build the model as observed occluded-deviant position
 %   minus expected/predicted occluded-nondeviant position before dRSA. New PE
 %   variants keep that legacy source unchanged and write distinct model-source
@@ -148,6 +149,8 @@ for i_cond = 1:numel(conditions_to_run)
         end
 
         neural_group = neural(:, selected_mask, :);
+        [neural_group, selected_channel_labels, normalization_info] = ...
+            drsa_stage_utils.apply_noise_normalization(neural_group, selected_channel_labels, handoff, 'alt', sensor_group_key);
         neural_concat = dRSA_concatenate(neural_group, [], 0, 'suppressDispText', 1);
         model_pos = dRSA_concatenate(model_position, [], 0, 'suppressDispText', 1);
         trial_len = size(neural_group, 3);
@@ -210,7 +213,7 @@ for i_cond = 1:numel(conditions_to_run)
             'condition_str', 'path_type', 'model_source', ...
             'model_source_condition', 'model_feature', ...
             'stimulus_model_label', 'model_axis_label', ...
-            'sensor_group_key', 'sensor_group_tag', 'selected_channel_labels', ...
+            'sensor_group_key', 'sensor_group_tag', 'selected_channel_labels', 'normalization_info', ...
             'removed_labels', 'trigger_opt', 'time_axis_sec', 'fig_file', ...
             'fig_file_smoothed', 'doSmoothingPlots', 'plotSmoothingWindow', '-v7');
 

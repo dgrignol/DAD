@@ -1,3 +1,28 @@
+# 24 Nov 2026 16:38
+
+## Complete MNN deployment and record integration validation
+
+### `AGENTS.md`
+
+- Persist parallel cohort execution and group-only report requirements in the actual deployed revision, without relying on a temporary worktree location.
+
+### `meg/cluster/deploy_review_to_cluster.sh`
+
+- Include the MNN/diagnostic runtime modules, launchers, documentation, regression tests and report policy in the explicit deployment payload; do not deploy as part of this commit.
+
+### `meg/docs/MNN_INTEGRATION_VALIDATION_20261124.md`
+
+- Record source feature commits, cross-repository reconciliation, Python and exact real-MATLAB checks, retained completed production results and integration limits.
+
+### `meg/docs/SENSOR_NOISE_MNN.md`
+
+- Document the fixed MNN/Pearson estimator, baseline, rank/shrinkage assumptions, physical units, immutable outputs, exact cohort and validation evidence.
+
+Validation: DAD 104 relevant Python checks; cluster 99 checks plus 20 affected rechecks. Fresh R2020a P04 MNN and none distances, observed model self and five neural self matrices match archived references exactly; all nine model builders match exactly. No deployment, job submission or production-output modification.
+
+Suggested commit message:
+`Complete MNN deployment and record integration validation`
+
 # 19 Nov 2026 17:28
 
 ## docs(meg): document staged preprocessing and archive legacy trigger context

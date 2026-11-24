@@ -2,6 +2,10 @@
 """
 10_drsa_stats.py
 
+Normalization
+--neural-normalization mnn is the default; none selects the legacy metric.
+Outputs use a separate analysis namespace; Stage-04/06 inputs remain immutable.
+
 Purpose
 Generate optional group-level statistical tests from existing Stage-07 dRSA
 result MAT files and Stage-08-compatible line summaries. This script does not
@@ -88,6 +92,8 @@ explicit historical inputs remain readable for provenance.
 
 from __future__ import annotations
 
+from drsa_analysis_variant import assert_result_normalization, add_analysis_arguments, load_drsa_config as load_and_resolve_config, source_config
+
 import argparse
 import csv
 import html
@@ -128,7 +134,7 @@ from drsa_result_utils import (
     utc_now,
     write_embedded_html_copy,
 )
-from pipeline_config import WORKING_SUBJECT_IDS, load_and_resolve_config
+from pipeline_config import WORKING_SUBJECT_IDS
 from preprocessing_stage_utils import guarded_path
 
 
@@ -238,6 +244,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Run optional group-level cluster stats on existing dRSA outputs."
     )
+    add_analysis_arguments(parser)
     parser.add_argument("--config", required=True)
     parser.add_argument("--site-config", default=None)
     parser.add_argument("--subject-config", default=None)
@@ -430,6 +437,7 @@ def _load_cfg(
         subject_config,
         args.tuning_config,
         site_config_path=args.site_config,
+        neural_normalization=getattr(args, "neural_normalization", None),
         required_sections=("export", "matlab_drsa"),
     )
     if warnings_list and args.print_summary:

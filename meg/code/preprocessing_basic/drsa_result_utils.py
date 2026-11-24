@@ -249,6 +249,7 @@ def _load_mat_arrays(path: Path) -> dict[str, Any]:
                 "time_axis_sec",
                 "model_names",
                 "model_dist",
+                "normalization_info",
             ],
             squeeze_me=True,
             struct_as_record=False,
@@ -377,6 +378,9 @@ def read_drsa_result_file(path: Path) -> tuple[dict[str, Any], Any | None, dict[
         "model_names": _normalize_text_values(payload.get("model_names")),
         "model_dist": _normalize_text_values(payload.get("model_dist")),
     }
+    if "normalization_info" in payload:
+        info = payload["normalization_info"]
+        metadata["neural_normalization"] = str(getattr(info, "mode", "none"))
     return matrices, time_axis, metadata
 
 
