@@ -49,7 +49,6 @@
   run without checking this policy. Preserve frozen numerical deployments.
 - This policy was approved in chat `01a1f428-bd27-73d3-aeb6-6bfcf43122db`
   (19 November 2026), implemented as `c2a3a60` in dad-cluster-analysis, and
-  restored in the MNN branch as `fc4aabf`. The current corrected MNN worktree
-  is `/Users/damiano/.codex/worktrees/mnn-drsa-default/DAD` on
-  `cdx/mnn-drsa-default`. The separate original DAD checkout is older; verify
-  or port the report fix before launching from it.
+  restored in the MNN branch as `fc4aabf`. Deploy a reviewed revision that
+  contains this policy and its regression tests; verify the actual checkout
+  before submitting jobs. Local worktree paths are not deployment guarantees.

@@ -95,3 +95,6 @@ sandbox to approximately 1.2e-12. The full cluster path through public MNE
 baseline reads agrees with the sandbox dRSA matrix within 3.3e-8. Full production cohort preflight must pass
 before submission. These checks validate implementation, not new scientific
 acceptance of other conditions or evidence for prediction from lag peaks.
+
+See [the integration validation record](MNN_INTEGRATION_VALIDATION_20261124.md)
+for the coordinated repository update and exact MATLAB comparisons.
